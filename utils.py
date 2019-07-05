@@ -1,3 +1,8 @@
+def get_nside(lmax):
+    nside = np.array([8,16,32,64,128,256,512,1024,2048,4096,8192,16384])
+    idx   = np.argmin(np.abs(nside-lmax))
+    return nside[idx]
+
 def zeropad(cl):
     """add zeros for L=0,1"""
     cl=np.insert(cl,0,0)

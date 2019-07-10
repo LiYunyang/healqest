@@ -7,6 +7,7 @@ def qest(est,lmax,clfile,almbar1,almbar2):
     retglm  = 0
     retclm  = 0
     nside    = utils.get_nside(lmax)
+    print("projecting to nside=%d"%nside)
     q        = weights.weights(est,lmax,clfile)
     for i in range (0,q.ntrm):
         wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
@@ -22,6 +23,10 @@ def qest(est,lmax,clfile,almbar1,almbar2):
         XY = X*Y 
 
         glm,clm  = hp.map2alm_spin([XY.real,np.sign(sX)*Y.imag], np.abs(sP), lmax)
+
+        glm = hp.almxfl(glm,0.5*wP)
+        clm = hp.almxfl(clm,0.5*wP)
+
         retglm  += glm
         retclm  += clm
 

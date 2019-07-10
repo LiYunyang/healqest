@@ -22,7 +22,7 @@ def qest(est,lmax,clfile,almbar1,almbar2):
         Y  = qmapY+np.sign(sY)*1j*umapY#*(-1)**(sY+1)
         XY = X*Y 
 
-        glm,clm  = hp.map2alm_spin([XY.real,np.sign(sP)*Y.imag], np.abs(sP), lmax)
+        glm,clm  = hp.map2alm_spin([XY.real,np.sign(sP)*XY.imag], np.abs(sP), lmax)
 
         glm = hp.almxfl(glm,0.5*wP)
         clm = hp.almxfl(clm,0.5*wP)

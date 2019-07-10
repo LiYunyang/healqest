@@ -1,6 +1,7 @@
 import utils
 import weights
 import numpy as np
+import healpy as hp
 
 def qest(est,lmax,clfile,almbar1,almbar2):
     retglm  = 0
@@ -20,7 +21,7 @@ def qest(est,lmax,clfile,almbar1,almbar2):
         Y  = qmapY+np.sign(sY)*1j*umapY#*(-1)**(sY+1)
         XY = X*Y 
 
-        glm,clm  = hp.map2alm_spin([XY.real,Y.imag], np.abs(sP), lmax)
+        glm,clm  = hp.map2alm_spin([XY.real,np.sign(sX)*Y.imag], np.abs(sP), lmax)
         retglm  += glm
         retclm  += clm
 

@@ -1,13 +1,14 @@
 import utils
 import weights
+import numpy as np
 
-def qest(est,lmax,almbar1,almbar2,clfile):
+def qest(est,lmax,clfile,almbar1,almbar2):
     retglm  = 0
     retclm  = 0
     nside    = utils.get_nside(lmax)
 
     for i in range (0,ntrm):
-        w                 = weights.weights(est)
+        w                 = weights.weights(est,lmax,clfile)
         wX,wY,wP,sX,sY,sP = w[i][0],w[i][1],w[i][2],s[i][0],s[i][1],s[i][2]
         walmbar1          = hp.almxfl(almbar1,wX)#########
         walmbar2          = hp.almxfl(almbar2,wY)#########

@@ -1,4 +1,7 @@
+import numpy as np
+
 def get_nside(lmax):
+    """calculates the most appropriate nside based on lmax"""
     nside = np.array([8,16,32,64,128,256,512,1024,2048,4096,8192,16384])
     idx   = np.argmin(np.abs(nside-lmax))
     return nside[idx]

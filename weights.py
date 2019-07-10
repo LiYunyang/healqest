@@ -1,4 +1,4 @@
-import numpy
+import numpy as np
 
 class weights():
     def __init__(self,est,lmax,clfile):

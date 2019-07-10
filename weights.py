@@ -8,8 +8,8 @@ class weights():
         if est=='TT':
             self.sltt = sltt
             self.ntrm = 4
-            self.wl = { i : {} for i in range(0, self.ntrm) }
-            self.sl = { i : {} for i in range(0, self.ntrm) }
+            self.w = { i : {} for i in range(0, self.ntrm) }
+            self.s = { i : {} for i in range(0, self.ntrm) }
             f1 = -0.5*np.ones_like(l)
             f2 = np.nan_to_num(np.sqrt(l*(l+1)))
             f3 = np.nan_to_num(np.sqrt(l*(l+1)))*sltt[:lmax+1]
@@ -21,8 +21,8 @@ class weights():
         if est=='EE':
             self.slee = slee
             self.ntrm = 8
-            self.wl = { i : {} for i in range(0, self.ntrm) }
-            self.sl = { i : {} for i in range(0, self.ntrm) }
+            self.w = { i : {} for i in range(0, self.ntrm) }
+            self.s = { i : {} for i in range(0, self.ntrm) }
             l  = np.arange(lmax+1,dtype=np.float_)
             f1 = -0.25*np.ones_like(l)
             f2 = +np.nan_to_num(np.sqrt(l*(l+1)))
@@ -40,8 +40,8 @@ class weights():
         if est=='TE':
             self.slte = slte
             self.ntrm = 6
-            self.wl = { i : {} for i in range(0, self.ntrm) }
-            self.sl = { i : {} for i in range(0, self.ntrm) }
+            self.w = { i : {} for i in range(0, self.ntrm) }
+            self.s = { i : {} for i in range(0, self.ntrm) }
             l  = np.arange(lmax+1,dtype=np.float_)
             f1 = -0.25*np.ones_like(l,dtype=np.float_)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
@@ -60,8 +60,8 @@ class weights():
         if est=='EB':
             self.slee = slee
             self.ntrm = 6
-            self.wl = { i : {} for i in range(0, self.ntrm) }
-            self.sl = { i : {} for i in range(0, self.ntrm) }
+            self.w = { i : {} for i in range(0, self.ntrm) }
+            self.s = { i : {} for i in range(0, self.ntrm) }
             f1 =  (+1/(4j)*np.ones_like(l))
             f2 =  (+1/(4j)*np.ones_like(l))
             f3 = +np.nan_to_num(np.sqrt(l*(l+1)))

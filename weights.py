@@ -15,7 +15,7 @@ class weights():
             f2 = np.nan_to_num(np.sqrt(l*(l+1)))
             f3 = np.nan_to_num(np.sqrt(l*(l+1)))*sltt[:lmax+1]
             self.w[0][0]=f3; self.w[0][1]=f1; self.w[0][2]=f2; self.s[0][0]=+1; self.s[0][1]=+0; self.s[0][2]=+1
-            self.w[1][0]=f3; self.w[1][1]=f1; self.w[1][2]=f2; self.s[1][0]=+1; self.s[1][1]=+0; self.s[1][2]=+1
+            self.w[1][0]=f3; self.w[1][1]=f1; self.w[1][2]=f2; self.s[1][0]=-1; self.s[1][1]=+0; self.s[1][2]=-1
             self.w[2][0]=f1; self.w[2][1]=f3; self.w[2][2]=f2; self.s[2][0]=+0; self.s[2][1]=-1; self.s[2][2]=-1
             self.w[3][0]=f1; self.w[3][1]=f3; self.w[3][2]=f2; self.s[3][0]=+0; self.s[3][1]=+1; self.s[3][2]=+1
         

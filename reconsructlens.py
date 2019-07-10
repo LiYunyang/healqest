@@ -13,11 +13,11 @@ for seed in range(11,50):
     hp.write_alm('almE_seed%d.alm'%seed,almE) 
     hp.write_alm('almB_seed%d.alm'%seed,almB) 
 '''
-
+lmax      = 4096
 fwhm      = 1.
 nlevT     = 2.2
 nlevP     = 2.2*2**0.5
-bl        = hp.gauss_beam(fwhm=fwhmT*0.000290888,lmax=lmax)
+bl        = hp.gauss_beam(fwhm=fwhm*0.000290888,lmax=lmax)
 nltt      = (np.pi/180./60.*nlevT)**2/bl**2
 nlee=nlbb = (np.pi/180./60.*nlevP)**2/bl**2
 
@@ -33,10 +33,10 @@ nmapu = hp.synfast(nlbb,2048)
 almT,almE,almB = hp.map2alm([t+nmapt,q+nmapq,u+nmapu],lmax=4096)
 
 # ----------- reconstructing lens ---------------
-lmax = 4096
-
-glmTT,clmTT = qest.qest('TT',lmax,almT,almT) #reconstruct TT lensing 
-glmTE,clmTE = qest.qest('TE',lmax,almT,almE) #reconstruct TT lensing 
-glmEE,clmEE = qest.qest('EE',lmax,almE,almE) #reconstruct TT lensing 
+lmax   = 4096
+clfile = '/project2/chihway/yuuki/repo/sptsz_mapmaking/data/camb/planck2018_base_plikHM_TTTEEE_lowl_lowE_lensing_lensedCls.dat'
+glmTT,clmTT = qest.qest('TT',lmax,clfile,almT,almT) #reconstruct TT lensing 
+#glmTE,clmTE = qest.qest('TE',lmax,almT,almE) #reconstruct TT lensing 
+#glmEE,clmEE = qest.qest('EE',lmax,almE,almE) #reconstruct TT lensing 
 
 

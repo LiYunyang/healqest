@@ -1,9 +1,10 @@
 import numpy as np
+import utils 
 
 class weights():
     def __init__(self,est,lmax,clfile):
         l  = np.arange(lmax+1,dtype=np.float_)
-        ell,sltt,slee,slbb,slte = get_lensedcls(clfile,lmax=lmax)
+        ell,sltt,slee,slbb,slte = utils.get_lensedcls(clfile,lmax=lmax)
 
         if est=='TT':
             self.sltt = sltt

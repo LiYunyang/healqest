@@ -28,3 +28,8 @@ There is no install script. The only thing you need to do is either add the foll
 or on a terminal do::
 
     export PYTHON_PATH=${PYTHON_PATH}:PATH_TO_THIS_DIRECTORY
+
+
+Example
+------------
+See example.py or example.ipynb.

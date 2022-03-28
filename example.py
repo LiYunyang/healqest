@@ -10,8 +10,8 @@ import camb
 from pathlib import Path
 
 ####################################
-est       = str(sys.argv[1])
-lmax      = 1000 # for quick testing
+est       = str(sys.argv[1]) # TT/EE/TE/TB/EB
+lmax      = 1000             # For quick testing
 fwhm      = 1
 nlev_t    = 5
 nlev_p    = 5

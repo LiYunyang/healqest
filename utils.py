@@ -1,4 +1,26 @@
 import numpy as np
+import healpy as hp
+
+def reduce_lmax(alm, lmax=4000):
+    """
+    Reduce the lmax of input alm
+    """
+    lmaxin  = hp.Alm.getlmax(alm.shape[0])
+    print( "reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax) )
+    ell,emm = hp.Alm.getlm(lmaxin)
+    almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex_)
+    oldi=0
+    oldf=0
+    newi=0
+    newf=0
+    dl = lmaxin-lmax
+    for i in range(0,lmax+1):
+        oldf=oldi+lmaxin+1-i
+        newf=newi+lmax+1-i
+        almout[newi:newf]=alm[oldi:oldf-dl]
+        oldi=oldf
+        newi=newf
+    return almout
 
 def get_nside(lmax):
     """calculates the most appropriate nside based on lmax"""

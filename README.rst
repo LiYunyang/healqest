@@ -31,4 +31,4 @@ or on a terminal do::
 
 Example
 ------------
-See example.py or example.ipynb.
+See example.py.

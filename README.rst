@@ -14,6 +14,6 @@ Requirements
 
 * `Astropy <http://www.astropy.org>`_
 
-* CAMB
+* `CAMB <https://github.com/cmbant/CAMB>`_
 
-* Healpy
+* `Healpy <https://github.com/healpy/healpy>`_

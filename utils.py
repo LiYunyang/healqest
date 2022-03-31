@@ -41,6 +41,7 @@ def get_lensedcls(file,lmax=2000):
     slee=slee/ell/(ell+1)*2*np.pi; slee=zeropad(slee)
     slte=slte/ell/(ell+1)*2*np.pi; slte=zeropad(slte)
     slbb=slbb/ell/(ell+1)*2*np.pi; slbb=zeropad(slbb)
+    ell=np.insert(ell,0,1); ell=np.insert(ell,0,0)
     ell  = ell[:lmax+1]
     sltt = sltt[:lmax+1]
     slee = slee[:lmax+1]

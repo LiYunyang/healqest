@@ -22,11 +22,11 @@ Install
 
 There is no install script. The only thing you need to do is either add the following line at the beginning of your code::
 
-    sys.path.append("path_to_this_directory")
+    sys.path.append("path_to_this_directory/healqest/src/")
     
 or on a terminal do::
 
-    export PYTHON_PATH=${PYTHON_PATH}:PATH_TO_THIS_DIRECTORY
+    export PYTHON_PATH=${PYTHON_PATH}:PATH_TO_THIS_DIRECTORY/healqest/src
 
 
 Example

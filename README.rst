@@ -28,6 +28,10 @@ or on a terminal do::
 
     export PYTHON_PATH=${PYTHON_PATH}:PATH_TO_THIS_DIRECTORY/healqest/src
 
+You need to compile the cython code if you want to compute the analytic response function. This can be done by simply running::
+
+    python setup.py build_ext --inplace
+
 
 Example
 ------------

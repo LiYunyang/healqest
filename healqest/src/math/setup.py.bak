@@ -1,0 +1,22 @@
+import os,glob
+import numpy as np
+import distutils
+
+def configuration(parent_package='./',top_path=None):
+    from numpy.distutils.misc_util import Configuration
+    config = Configuration('quicklens',parent_package,top_path)
+    config.add_extension('cwignerd', ['wignerd.pyf', 'wignerd.c'])
+    return 
+
+
+if __name__ == "__main__":
+    from numpy.distutils.core import setup
+
+    #packages = ["quicklens","quicklens.cinv","quicklens.qest","quicklens.sims","quicklens.shts","quicklens.math"]
+
+    #data_dir = os.path.join("data","cl","planck_wp_highL","*")
+    #package_data = { "quicklens" : [data_dir] }
+
+    setup(#packages=packages,
+          #package_data=package_data,
+          configuration=configuration)

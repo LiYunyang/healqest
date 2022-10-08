@@ -23,7 +23,7 @@ def qest(est,Lmax,clfile,almbar1,almbar2):
         q        = weights.weights(est,max(lmax1,lmax2),clfile)
 
         wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
-        wX3,wY3,wP3,sX3,sY3,sP3 = q.w[3][0],q.w[3][1],q.w[3][2],q.s[3][0],q.s[3][1],q.s[3][2]
+        wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
 
         walmbar1          = hp.almxfl(almbar1,wX1) #T1/E1
         walmbar3          = hp.almxfl(almbar1,wX3) #T3/E3
@@ -51,40 +51,52 @@ def qest(est,Lmax,clfile,almbar1,almbar2):
 
     else:
         # More traditional quicklens style calculation
-
+        
         for i in range (0,q.ntrm):
-
+            
             wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
             print("computing term %d/%d sj=[%d,%d,%d]"%(i+1,q.ntrm,sX,sY,sP))
             walmbar1          = hp.almxfl(almbar1,wX)
             walmbar2          = hp.almxfl(almbar2,wY)
 
-            ### input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
-            SpX, SmX = hp.alm2map_spin( [walmbar1,np.zeros_like(walmbar1)], nside, np.abs(sX),lmax1)
+            print(sP,u[i])
 
+            ### input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
+            #-----------------------------------------------------------------------------------------------
+            if est[0]=='B':
+                SpX, SmX = hp.alm2map_spin( [np.zeros_like(walmbar1),1j*walmbar1], nside, np.abs(sX),lmax1)
+            else:
+                SpX, SmX = hp.alm2map_spin( [walmbar1,np.zeros_like(walmbar1)], nside, np.abs(sX),lmax1)
+                
+            X  = SpX+1j*SmX # Complex map _{+s}S or _{-s}S
+            
+            if sX<0:
+                X = np.conj(X)*(-1)**(sX)
+            #-----------------------------------------------------------------------------------------------
             if est[1]=='B':
-                #Checked with quicklens and it has a -1j*blm
-                SpY, SmY = hp.alm2map_spin( [np.zeros_like(walmbar2),-1j*walmbar2], nside, np.abs(sY),lmax2)
+                SpY, SmY = hp.alm2map_spin( [np.zeros_like(walmbar2),1j*walmbar2], nside, np.abs(sY),lmax2)
             else:
                 SpY, SmY = hp.alm2map_spin( [walmbar2,np.zeros_like(walmbar2)], nside, np.abs(sY),lmax2)
-
-            X  = SpX+np.sign(sX)*1j*SmX # Complex map _{+s}S or _{-s}S
-            Y  = SpY+np.sign(sY)*1j*SmY 
+                
+            Y  = SpY+1j*SmY
+            
+            if sY<0:
+                Y = np.conj(Y)*(-1)**(sY)
+            #-----------------------------------------------------------------------------------------------
+            
             XY = X*Y
+            
+            if sP<0:
+                XY = np.conj(XY)*(-1)**(sP)
 
-            glm,clm  = hp.map2alm_spin([XY.real,np.sign(sP)*XY.imag], np.abs(sP), Lmax)
+            glm,clm  = hp.map2alm_spin([XY.real,XY.imag], np.abs(sP), Lmax)
+            
+                
 
-            if est=='TT' or est=='EE' or est=='TE' or est=='ET':
-                # see eq 36/37 in Okamoto&Hu
-                nrm=0.5
-            else:
-                nrm=1
-
-            glm = hp.almxfl(glm,-nrm*wP)
-            clm = hp.almxfl(clm,-nrm*wP)
+            glm = hp.almxfl(glm,0.5*wP)
+            clm = hp.almxfl(clm,0.5*wP)
 
             retglm  += glm
             retclm  += clm
 
         return retglm,retclm
-

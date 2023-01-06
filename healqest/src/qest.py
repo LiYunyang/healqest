@@ -59,7 +59,7 @@ def qest(est,Lmax,clfile,almbar1,almbar2):
             walmbar1          = hp.almxfl(almbar1,wX)
             walmbar2          = hp.almxfl(almbar2,wY)
 
-            print(sP,u[i])
+            #print(sP,u[i])
 
             ### input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
             #-----------------------------------------------------------------------------------------------

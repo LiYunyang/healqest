@@ -1,5 +1,7 @@
 import numpy as np
 import healpy as hp
+from pathlib import Path
+import logging 
 
 def reduce_lmax(alm, lmax=4000):
     """
@@ -69,4 +71,20 @@ def get_unlensedcls(file,lmax=2000):
     sltp = sltp[:lmax+1]
     slep = slep[:lmax+1]
     return ell,sltt,slee,slbb,slte,slpp,sltp,slep
-    
+ 
+def setup_logger(nolog,file_log='test.log'):
+
+    dir_log = str(Path(file_log).parent)
+    Path(dir_log).mkdir(parents=True, exist_ok=True)
+
+    if nolog==True:
+        logging.basicConfig(
+                            format   = '[%(asctime)s] %(message)s',
+                            datefmt  = '%H:%M:%S',
+                            level    = logging.WARNING)
+    else:
+        logging.basicConfig(filename = file_log ,
+                            filemode = 'w+',
+                            format   = '[%(asctime)s] %(message)s',
+                            datefmt  = '%H:%M:%S',
+                            level    = logging.WARNING)

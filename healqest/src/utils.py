@@ -59,6 +59,7 @@ def get_unlensedcls(file,lmax=2000):
     slpp=slpp/ell/ell/(ell+1)/(ell+1)*2*np.pi; slpp=zeropad(slpp)
     sltp=sltp/(ell*(ell+1))**(1.5)*2*np.pi;    sltp=zeropad(sltp)
     slep=slep/(ell*(ell+1))**(1.5)*2*np.pi;    slep=zeropad(slep)
+    ell=np.insert(ell,0,1); ell=np.insert(ell,0,0)
     ell  = ell[:lmax+1]
     sltt = sltt[:lmax+1]
     slee = slee[:lmax+1]

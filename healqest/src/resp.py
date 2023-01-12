@@ -1,7 +1,7 @@
 import numpy as np
 import wignerd
 
-def fill_resp_fullsky(qeZA, ret, fX, fY):
+def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY):
     """ compute the response of this estimator to the statistical
     anisotropy encapsulated by a second estimator qeZA,
         
@@ -13,7 +13,7 @@ def fill_resp_fullsky(qeZA, ret, fX, fY):
     normalized estimator for the statistical anisotropy defined by qeZA.
     """
     ret[:] = 0.0
-    qe_cov_fill_helper_fullsky(qeZA, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA=False)
+    qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA=False)
     ret[:] *= 2.0 # multiply by 2 because qe_cov_fill_helper returns 1/2 the response.
     return ret.real
 
@@ -76,6 +76,7 @@ def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_Z
     
     #return ret
     
-def fill_resp(qeZA, ret, fX, fY ):
-    return fill_resp_fullsky( qeZA, ret, fX, fY)
+def fill_resp(qeXY, ret, fX, fY, qeZA=None):
+    if qeZA==None: qeZA=qeXY
+    return fill_resp_fullsky( qeXY, qeZA, ret, fX, fY)
 

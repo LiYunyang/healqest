@@ -171,6 +171,15 @@ class weights():
             self.w[0][0]=f5; self.w[0][1]=f3; self.w[0][2]=f1; self.s[0][0]=+3; self.s[0][1]=-1; self.s[0][2]=+2
             self.w[1][0]=f4; self.w[1][1]=f3; self.w[1][2]=f1; self.s[1][0]=+1; self.s[1][1]=+1; self.s[1][2]=+2
 
+        if est=="srcTT" or est=="TTsrc":
+            self.ntrm = 1
+            self.w = { i : {} for i in range(0, self.ntrm) }
+            self.s = { i : {} for i in range(0, self.ntrm) }
+            f1 = np.ones_like(l)
+            f2 = 0.5*np.ones_like(l)
+            self.w[0][0]=f1; self.w[0][1]=f1; self.w[0][2]=f2; self.s[0][0]=0; self.s[0][1]=0; self.s[0][2]=0  
+
+
 '''
 def weights_TT(idx,sltt,lmax):
     f1 = -0.5*np.ones_like(l)

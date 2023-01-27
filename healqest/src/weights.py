@@ -163,13 +163,13 @@ class weights():
             self.ntrm = 2 
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            f1 =  (-0.5*np.ones_like(l))
-            f2 =  (+0.5*np.ones_like(l))
+            f1 =  (-1*np.ones_like(l))
+            f2 =  (+1*np.ones_like(l))
             f3 = +np.nan_to_num(np.sqrt(l*(l+1))) #*uslpp[:lmax+1] #TBD take WF E/phi or invvar E/phi
             f4 = +np.nan_to_num(np.sqrt((l+2.)*(l-1.))) #*slee[:lmax+1]
-            f5 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*-1.0 #*slee[:lmax+1]
-            self.w[0][0]=f5; self.w[0][1]=f3; self.w[0][2]=f1; self.s[0][0]=+3; self.s[0][1]=-1; self.s[0][2]=+2
-            self.w[1][0]=f4; self.w[1][1]=f3; self.w[1][2]=f1; self.s[1][0]=+1; self.s[1][1]=+1; self.s[1][2]=+2
+            f5 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.))) #*slee[:lmax+1]
+            self.w[0][0]=f5; self.w[0][1]=f3; self.w[0][2]=f2; self.s[0][0]=+3; self.s[0][1]=-1; self.s[0][2]=+2
+            self.w[1][0]=f4; self.w[1][1]=f3; self.w[1][2]=f2; self.s[1][0]=+1; self.s[1][1]=+1; self.s[1][2]=+2
 
 '''
 def weights_TT(idx,sltt,lmax):

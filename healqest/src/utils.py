@@ -88,3 +88,41 @@ def setup_logger(nolog,file_log='test.log'):
                             format   = '[%(asctime)s] %(message)s',
                             datefmt  = '%H:%M:%S',
                             level    = logging.WARNING)
+
+def add_clsdict(d,key,cltt,clee,clbb,clte=None):
+    d[key]  = {}
+    d[key]['tt'] = cltt
+    d[key]['ee'] = clee
+    d[key]['bb'] = clbb
+
+    if clte is not None:
+        d[key]['te'] = clte
+
+    return d
+
+def get_fl(cls, dict_lrange):
+    lmaxTP = dict_lrange['lmaxTP']
+    lmin   = dict_lrange['lmin']
+    lmaxT  = dict_lrange['lmaxT']
+    lmaxP  = dict_lrange['lmaxP']
+
+    flT = 1.0/(cls['cmb']['tt']+cls['res']['tt'][:lmaxTP+1]); flT[lmaxT+1:] = 0; flT[:lmin] = 0
+    flE = 1.0/(cls['cmb']['ee']+cls['res']['ee'][:lmaxTP+1]); flE[lmaxP+1:] = 0; flE[:lmin] = 0
+    flB = 1.0/(cls['cmb']['bb']+cls['res']['bb'][:lmaxTP+1]); flB[lmaxP+1:] = 0; flB[:lmin] = 0
+
+    return flT, flE, flB
+
+def get_almbar(qetype, alms1, alms2, cls, dict_lrange):
+    tlm1,elm1,blm1 = alms1[0],alms1[1],alms1[2]
+    tlm2,elm2,blm2 = alms2[0],alms2[1],alms2[2]
+    flT,flE,flB    = get_fl(cls, dict_lrange)
+
+    lmaxTP = dict_lrange['lmaxTP']
+
+    if qetype[0]=='T': tlm1 = utils.reduce_lmax(tlm1,lmax=lmaxTP); almbar1 = hp.almxfl(tlm1,flT); flm1= flT
+    if qetype[0]=='E': elm1 = utils.reduce_lmax(elm1,lmax=lmaxTP); almbar1 = hp.almxfl(elm1,flE); flm1= flE
+    if qetype[0]=='B': blm1 = utils.reduce_lmax(blm1,lmax=lmaxTP); almbar1 = hp.almxfl(blm1,flB); flm1= flB
+    if qetype[1]=='T': tlm2 = utils.reduce_lmax(tlm2,lmax=lmaxTP); almbar2 = hp.almxfl(tlm2,flT); flm2= flT
+    if qetype[1]=='E': elm2 = utils.reduce_lmax(elm2,lmax=lmaxTP); almbar2 = hp.almxfl(elm2,flE); flm2= flE
+    if qetype[1]=='B': blm2 = utils.reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
+    return almbar1,almbar2,flm1,flm2

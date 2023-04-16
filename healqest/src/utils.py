@@ -1,7 +1,7 @@
 import numpy as np
 import healpy as hp
 from pathlib import Path
-import logging 
+import logging,yaml
 
 def reduce_lmax(alm, lmax=4000):
     """
@@ -36,7 +36,7 @@ def zeropad(cl):
     cl=np.insert(cl,0,0)
     return cl
 
-def get_lensedcls(file,lmax=2000):
+def get_lensedcls(file,lmax=2000,dict=False):
     ell,sltt,slee,slbb,slte=np.loadtxt(file,unpack=True)
     # Removing the ell factors and padding with zeros (since the file starts with l=2)
     sltt=sltt/ell/(ell+1)*2*np.pi; sltt=zeropad(sltt)
@@ -49,7 +49,15 @@ def get_lensedcls(file,lmax=2000):
     slee = slee[:lmax+1]
     slbb = slbb[:lmax+1]
     slte = slte[:lmax+1]
-    return ell,sltt,slee,slbb,slte 
+    if dict==False:
+        return ell,sltt,slee,slbb,slte
+    else:
+        d={}
+        d['tt']=sltt
+        d['ee']=slee
+        d['bb']=slbb
+        d['te']=slte
+        return d
 
 def get_unlensedcls(file,lmax=2000):
     ell,sltt,slee,slbb,slte,slpp,sltp,slep=np.loadtxt(file,unpack=True)

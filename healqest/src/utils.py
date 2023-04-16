@@ -126,3 +126,9 @@ def get_almbar(qetype, alms1, alms2, cls, dict_lrange):
     if qetype[1]=='E': elm2 = reduce_lmax(elm2,lmax=lmaxTP); almbar2 = hp.almxfl(elm2,flE); flm2= flE
     if qetype[1]=='B': blm2 = reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
     return almbar1,almbar2,flm1,flm2
+
+
+def parse_yaml(file_yaml,sec):
+    '''Load all information stored in yaml'''
+    dict = yaml.safe_load(Path(file_yaml).read_text())[sec]
+    return dict

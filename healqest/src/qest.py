@@ -5,7 +5,7 @@ import numpy as np
 import healpy as hp
 np.seterr(all='ignore')
 
-def qest(est,Lmax,clfile,almbar1,almbar2):
+def qest(est,Lmax,clfile,almbar1,almbar2,u=None):
     print('estimator used: %s'%est)
     retglm  = 0
     retclm  = 0
@@ -13,14 +13,13 @@ def qest(est,Lmax,clfile,almbar1,almbar2):
     print("projecting to nside=%d"%nside)
     lmax1    = hp.Alm.getlmax(almbar1.shape[0])
     lmax2    = hp.Alm.getlmax(almbar2.shape[0])
-    q        = weights.weights(est,max(lmax1,lmax2),clfile)
+    q        = weights.weights(est,max(lmax1,lmax2),clfile,u=u)
     print("lmax=%d"%max(lmax1,lmax2))
     print("Lmax=%d"%Lmax)
 
     if est=='TB' or est=='EB':
         # hack to get TB/EB working. currently not understanding some factors of j
         print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
-        q        = weights.weights(est,max(lmax1,lmax2),clfile)
 
         wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
         wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
@@ -52,7 +51,7 @@ def qest(est,Lmax,clfile,almbar1,almbar2):
     else:
         # More traditional quicklens style calculation
         
-        for i in range (0,q.ntrm):
+        for i in range(0,q.ntrm):
             
             wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
             print("computing term %d/%d sj=[%d,%d,%d]"%(i+1,q.ntrm,sX,sY,sP))

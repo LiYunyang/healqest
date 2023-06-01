@@ -18,7 +18,7 @@ class Profile(object):
             f_k = self._fourier()
         return f_k
 
-class profile_Gaussian(Profile):
+class profileGaussian(Profile):
     '''
     Returns Gaussian profile in harmonic space
     
@@ -36,18 +36,18 @@ class profile_Gaussian(Profile):
       
     Examples
     --------
-    >>> p_l = Gaussian(1.2).fourier()
+    >>> p_l = profileGaussian(1.2).fourier()
     array([1.        , 0.99999998, 0.99999993, ..., 0.20564428, 0.20559007,
        0.20553587])
     '''
 
-    name = 'Gaussian'
+    name = 'profileGaussian'
 
     def __init__(self, fwhm, lmax=12000):
         self.fwhm_arcmin = fwhm*0.00029088
         self.lmax        = lmax
         
-        super(Gaussian, self).__init__()
+        super(profileGaussian, self).__init__()
 
     def _real(self):
         '''Compute realspace and then convert to Fourier'''

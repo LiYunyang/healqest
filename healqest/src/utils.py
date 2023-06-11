@@ -1,14 +1,15 @@
+import os,sys,git,uuid
 import numpy as np
 import healpy as hp
 from pathlib import Path
-import logging,yaml
+import logging,yaml,pickle
 
 def reduce_lmax(alm, lmax=4000):
     """
     Reduce the lmax of input alm
     """
     lmaxin  = hp.Alm.getlmax(alm.shape[0])
-    print( "reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax) )
+    print( "-- Reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax) )
     ell,emm = hp.Alm.getlm(lmaxin)
     almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex_)
     oldi=0
@@ -108,35 +109,144 @@ def add_clsdict(d,key,cltt,clee,clbb,clte=None):
 
     return d
 
-def get_fl(cls, dict_lrange):
-    lmaxTP = dict_lrange['lmaxTP']
-    lmin   = dict_lrange['lmin']
-    lmaxT  = dict_lrange['lmaxT']
-    lmaxP  = dict_lrange['lmaxP']
+#def get_fl(config,use_unlCls=False):
+#    lmaxTP = config['lmaxTP']
+#    if use_unlCls:
+#        flT = 1.0/(config['cls']['ucmb']['tt'][:lmaxTP+1]+config['cls']['totres']['tt'][:lmaxTP+1])
+#        flE = 1.0/(config['cls']['ucmb']['ee'][:lmaxTP+1]+config['cls']['totres']['ee'][:lmaxTP+1])
+#        flB = 1.0/(config['cls']['ucmb']['bb'][:lmaxTP+1]+config['cls']['totres']['bb'][:lmaxTP+1])
+#    else:
+#        flT = 1.0/(config['cls']['lcmb']['tt'][:lmaxTP+1]+config['cls']['totres']['tt'][:lmaxTP+1])
+#        flE = 1.0/(config['cls']['lcmb']['ee'][:lmaxTP+1]+config['cls']['totres']['ee'][:lmaxTP+1])
+#        flB = 1.0/(config['cls']['lcmb']['bb'][:lmaxTP+1]+config['cls']['totres']['bb'][:lmaxTP+1])
+#    flT[lmaxT+1:] = 0; flT[:lmin] = 0
+#    flE[lmaxP+1:] = 0; flE[:lmin] = 0
+#    flB[lmaxP+1:] = 0; flB[:lmin] = 0
+#    return flT, flE, flB
 
-    flT = 1.0/(cls['cmb']['tt']+cls['res']['tt'][:lmaxTP+1]); flT[lmaxT+1:] = 0; flT[:lmin] = 0
-    flE = 1.0/(cls['cmb']['ee']+cls['res']['ee'][:lmaxTP+1]); flE[lmaxP+1:] = 0; flE[:lmin] = 0
-    flB = 1.0/(cls['cmb']['bb']+cls['res']['bb'][:lmaxTP+1]); flB[lmaxP+1:] = 0; flB[:lmin] = 0
+#def get_almbar(qetype,alms1,alms2,config,use_unlCls=True):
+#    if alms1.ndim == 1:
+#        tlm1,tlm2 = alms1,alms2
+#    else:
+#        tlm1,elm1,blm1 = alms1[0],alms1[1],alms1[2]
+#        tlm2,elm2,blm2 = alms2[0],alms2[1],alms2[2]
+    
+#    flT,flE,flB = get_fl(config,use_unlCls=use_unlCls)
 
-    return flT, flE, flB
-
-def get_almbar(qetype, alms1, alms2, cls, dict_lrange):
-    tlm1,elm1,blm1 = alms1[0],alms1[1],alms1[2]
-    tlm2,elm2,blm2 = alms2[0],alms2[1],alms2[2]
-    flT,flE,flB    = get_fl(cls, dict_lrange)
-
-    lmaxTP = dict_lrange['lmaxTP']
-
-    if qetype[0]=='T': tlm1 = reduce_lmax(tlm1,lmax=lmaxTP); almbar1 = hp.almxfl(tlm1,flT); flm1= flT
-    if qetype[0]=='E': elm1 = reduce_lmax(elm1,lmax=lmaxTP); almbar1 = hp.almxfl(elm1,flE); flm1= flE
-    if qetype[0]=='B': blm1 = reduce_lmax(blm1,lmax=lmaxTP); almbar1 = hp.almxfl(blm1,flB); flm1= flB
-    if qetype[1]=='T': tlm2 = reduce_lmax(tlm2,lmax=lmaxTP); almbar2 = hp.almxfl(tlm2,flT); flm2= flT
-    if qetype[1]=='E': elm2 = reduce_lmax(elm2,lmax=lmaxTP); almbar2 = hp.almxfl(elm2,flE); flm2= flE
-    if qetype[1]=='B': blm2 = reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
-    return almbar1,almbar2,flm1,flm2
+#    lmaxTP = config['lmaxTP']
+#    print('Preparing input almbars')
+#    if qetype[0]=='T': tlm1 = reduce_lmax(tlm1,lmax=lmaxTP); almbar1 = hp.almxfl(tlm1,flT); flm1= flT
+#    if qetype[0]=='E': elm1 = reduce_lmax(elm1,lmax=lmaxTP); almbar1 = hp.almxfl(elm1,flE); flm1= flE
+#    if qetype[0]=='B': blm1 = reduce_lmax(blm1,lmax=lmaxTP); almbar1 = hp.almxfl(blm1,flB); flm1= flB
+#    if qetype[1]=='T': tlm2 = reduce_lmax(tlm2,lmax=lmaxTP); almbar2 = hp.almxfl(tlm2,flT); flm2= flT
+#    if qetype[1]=='E': elm2 = reduce_lmax(elm2,lmax=lmaxTP); almbar2 = hp.almxfl(elm2,flE); flm2= flE
+#    if qetype[1]=='B': blm2 = reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
+#    return almbar1,almbar2,flm1,flm2
 
 
-def parse_yaml(file_yaml,sec):
-    '''Load all information stored in yaml'''
-    dict = yaml.safe_load(Path(file_yaml).read_text())[sec]
+def get_fl(config,mtype,use_unlCls=False):
+
+    sdict  = {'T':'tt', 'E':'ee', 'B':'bb' }
+    
+    lmaxTP = config['lmaxTP']
+
+    if use_unlCls:
+        fl = 1.0/(config['cls']['ucmb'][sdict[mtype]][:lmaxTP+1]+config['cls']['totres'][sdict[mtype]][:lmaxTP+1])
+    else:
+        fl = 1.0/(config['cls']['ucmb'][sdict[mtype]][:lmaxTP+1]+config['cls']['totres'][sdict[mtype]][:lmaxTP+1])
+
+    return fl
+
+def get_almbar(config,mtype,cmbid,seed,use_unlCls=True):
+
+    hdudict = {_mtype: c+1 for c,_mtype in enumerate(['T','E','B'])}
+
+    lmaxTP  = config['lmaxTP']
+    alm     = hp.read_alm(config['iqu']['dir']+config['iqu']['prefix'].format(cmbid=cmbid,seed=seed),hdu=hdudict[mtype]) 
+    alm     = reduce_lmax(alm,lmax=lmaxTP);
+
+    fl      = get_fl(config,mtype,use_unlCls=use_unlCls)
+
+    almbar  = hp.almxfl(alm,fl)
+
+    return almbar,fl
+
+def parse_yaml(file_yaml):
+    '''
+    Loading all settinsg stored in the yaml and also
+    setting certain dictionary keys based on it.
+    
+    Params
+    
+    Returns
+    
+    '''
+    dict = yaml.safe_load(Path(file_yaml).read_text())
+   
+    repo    = git.Repo(dict['base']['dir_healqest'],search_parent_directories=True)
+    sha     = repo.head.object.hexsha
+
+    dir_out = dict['base']['dir_out']
+    
+    dict = dict['lensing']
+    dict['healqest_githash'] = sha
+    dict['dir_out']          = dir_out
+
+    # ----- Setting lmax of T/P -----
+    dict['lmaxTP']=max(dict['lmaxT'],dict['lmaxP'])
+
+    runhash = uuid.uuid4().hex
+    dict['runhash'] = runhash
+    with open(dir_out+'config_%s.pkl'%runhash, 'wb') as handle:
+        pickle.dump(dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+    # ----- Check if we need pol -----
+    #if all('TT' in qe for qe in dict['plm']['qes']):
+    #    dict['need_pol']=0
+    #else:
+    #    dict['need_pol']=1
+
+    # ----- Setting Cls ------
+    if "cls" in dict:
+
+        if 'file_lcmb' in dict['cls']:
+            try:
+                dict['cls']['lcmb'] = {f: np.loadtxt(dict['cls']['file_lcmb'], usecols=[c+1])[:dict['lmaxTP']+1] for c, f in enumerate(['tt','ee','bb','te']) }
+                print("Setting CMB cls")    
+            except:
+                print("Couldn't load CMB cls -- not setting CMB Cls")
+         
+        if 'file_ucmb' in dict['cls']:
+            try:
+                dict['cls']['ucmb'] = {f: np.loadtxt(dict['cls']['file_ucmb'], usecols=[c+1])[:dict['lmaxTP']+1]  for c, f in enumerate(['tt','ee','bb','te']) }
+                print("Setting CMB cls")
+            except:
+                print("Couldn't load CMB cls -- not setting CMB Cls")
+
+        if 'file_noise' in dict['cls']:
+            try:
+                dict['cls']['noise'] = {f: np.loadtxt(dict['cls']['file_noise'], usecols=[c+1])[:dict['lmaxTP']+1]  for c, f in enumerate(['tt','ee','bb','te']) }
+                print("Setting noise cls")
+            except:
+                print("Couldn't load noise cls -- not setting noise Cls")
+                
+        if 'file_foreground' in dict['cls']:
+            try:
+                dict['cls']['foreground'] = {f: np.loadtxt(dict['cls']['file_foreground'], usecols=[c+1])[:dict['lmaxTP']+1]  for c, f in enumerate(['tt','ee','bb','te']) }
+                print("Setting foreground cls")
+            except:
+                print("Couldn't load foreground cls -- not setting foreground Cls")
+
+        if (('file_foreground' in dict['cls']) and ('file_noise' in dict['cls'])):
+            try:
+                dict['cls']['totres'] = {f: np.loadtxt(dict['cls']['file_noise'], usecols=[c+1])[:dict['lmaxTP']+1] +np.loadtxt(dict['cls']['file_foreground'], usecols=[c+1])[:dict['lmaxTP']+1] for c, f in enumerate(['tt','ee','bb','te']) }
+                print("Setting noise cls")
+            except:
+                print("Couldn't load noise cls -- not setting noise Cls")
+
+
+    else:
+        sys.exit("Need to provide cls")
+        
     return dict

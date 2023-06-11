@@ -1,5 +1,6 @@
-import sys
+import os,sys
 import utils
+import pickle
 import weights
 import numpy as np
 import healpy as hp
@@ -7,7 +8,7 @@ np.seterr(all='ignore')
 
 class qest(object):
 
-    def __init__(est,qe,almbar1,almbar2,config):
+    def __init__(self,config,qe,almbar1,almbar2,cltype='grad',u=None):
         '''
         Sets up the quatratic estimator calculation 
     
@@ -24,20 +25,30 @@ class qest(object):
         config : dictionary of settings
         '''
 
-        assert(est=='lens' or est=='src' or est=='prof', "est expected to be lens/src/prof, got: %s"%est)
+        #assert est=='lens' or est=='src' or est=='prof', "est expected to be lens/src/prof, got: %s"%est
+        assert cltype=='grad' or cltype=='len' or cltype=='unl', "cltype expected to be grad/len/unl, got: %s"%cltype
 
-        clfile = config['clfile']
-
-        print('estimator used: %s'%est)
+        #clfile = config['clfile']
+        print('Setting up lensing reconstruction')
+        print('-- Estimator: %s'%qe)
+        self.qe      = qe
+        self.almbar1 = almbar1
+        self.almbar2 = almbar2
+        self.config  = config
         self.retglm  = 0
         self.retclm  = 0
-        self.nside   = utils.get_nside(Lmax)
-        print("projecting to nside=%d"%nside)
-        self.lmax1   = hp.Alm.getlmax(almbar1.shape[0])
-        self.lmax2   = hp.Alm.getlmax(almbar2.shape[0])
-        self.q       = weights.weights(est,max(lmax1,lmax2),clfile,u=u)
-        print("lmax=%d"%max(lmax1,lmax2))
-        print("Lmax=%d"%Lmax)
+        self.lmax1   = hp.Alm.getlmax(self.almbar1.shape[0])
+        self.lmax2   = hp.Alm.getlmax(self.almbar2.shape[0])
+        self.Lmax    = self.config['Lmax']
+        self.nside   = utils.get_nside(self.Lmax)
+        self.cltype  = cltype
+        print("-- Nside to project: %d"%self.nside)
+        print("-- lmax:%d"%max(self.lmax1,self.lmax2))
+        print("-- Lmax:%d"%self.config['Lmax'])
+        print("-- cltype: %s"%self.cltype)
+        if u is not None:
+            print("-- Using profile to harden")
+        self.q       = weights.weights(qe,max(self.lmax1,self.lmax2),self.config,cltype=self.cltype,u=u)
 
     def eval(self):
         '''
@@ -52,29 +63,31 @@ class qest(object):
 
         '''      
 
-        if qe=='TB' or qe=='EB':
+        print('Running lensing reconstruction')
+
+        if self.qe=='TB' or self.qe=='EB':
             # hack to get TB/EB working. currently not understanding some factors of j
             print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
 
-            wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
-            wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
+            wX1,wY1,wP1,sX1,sY1,sP1 = self.q.w[0][0],self.q.w[0][1],self.q.w[0][2],self.q.s[0][0],self.q.s[0][1],self.q.s[0][2]
+            wX3,wY3,wP3,sX3,sY3,sP3 = self.q.w[2][0],self.q.w[2][1],self.q.w[2][2],self.q.s[2][0],self.q.s[2][1],self.q.s[2][2]
 
-            walmbar1          = hp.almxfl(almbar1,wX1) #T1/E1
-            walmbar3          = hp.almxfl(almbar1,wX3) #T3/E3
-            walmbar2          = hp.almxfl(almbar2,wY1) #B2
+            walmbar1          = hp.almxfl(self.almbar1,wX1) #T1/E1
+            walmbar3          = hp.almxfl(self.almbar1,wX3) #T3/E3
+            walmbar2          = hp.almxfl(self.almbar2,wY1) #B2
 
-            SpX1, SmX1   = hp.alm2map_spin( [walmbar1,np.zeros_like(walmbar1)], nside , 1,lmax1)
-            SpX3, SmX3   = hp.alm2map_spin( [walmbar3,np.zeros_like(walmbar3)], nside , 3,lmax1)
-            SpY2, SmY2   = hp.alm2map_spin( [np.zeros_like(walmbar2),-1j*walmbar2], nside, 2,lmax2)
+            SpX1, SmX1   = hp.alm2map_spin( [walmbar1,np.zeros_like(walmbar1)], self.nside , 1,self.lmax1)
+            SpX3, SmX3   = hp.alm2map_spin( [walmbar3,np.zeros_like(walmbar3)], self.nside , 3,self.lmax1)
+            SpY2, SmY2   = hp.alm2map_spin( [np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2,self.lmax2)
 
             SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
             SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
 
-            glm,clm  = hp.map2alm_spin([SpZ,SmZ],1, Lmax)
+            glm,clm  = hp.map2alm_spin([SpZ,SmZ],1, self.Lmax)
 
-            if est=='TT' or est=='EE' or est=='TE' or est=='ET':
+            if self.qe=='TT' or self.qe=='EE' or self.qe=='TE' or self.qe=='ET':
                 nrm=0.5
-            elif est=='EB':
+            elif self.qe=='EB':
                 nrm=-1
             else:
                 nrm=1
@@ -86,31 +99,31 @@ class qest(object):
         else:
             # More traditional quicklens style calculation
             
-            for i in range(0,q.ntrm):
+            for i in range(0,self.q.ntrm):
                 
-                wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
-                print("computing term %d/%d sj=[%d,%d,%d]"%(i+1,q.ntrm,sX,sY,sP))
-                walmbar1          = hp.almxfl(almbar1,wX)
-                walmbar2          = hp.almxfl(almbar2,wY)
+                wX,wY,wP,sX,sY,sP = self.q.w[i][0],self.q.w[i][1],self.q.w[i][2],self.q.s[i][0],self.q.s[i][1],self.q.s[i][2]
+                print("-- Computing term %d/%d sj=[%d,%d,%d]"%(i+1,self.q.ntrm,sX,sY,sP))
+                walmbar1          = hp.almxfl(self.almbar1,wX)
+                walmbar2          = hp.almxfl(self.almbar2,wY)
 
                 #print(sP,u[i])
 
                 ### input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
                 #-----------------------------------------------------------------------------------------------
-                if est[0]=='B':
-                    SpX, SmX = hp.alm2map_spin( [np.zeros_like(walmbar1),1j*walmbar1], nside, np.abs(sX),lmax1)
+                if self.qe[0]=='B':
+                    SpX, SmX = hp.alm2map_spin( [np.zeros_like(walmbar1),1j*walmbar1], self.nside, np.abs(sX),self.lmax1)
                 else:
-                    SpX, SmX = hp.alm2map_spin( [walmbar1,np.zeros_like(walmbar1)], nside, np.abs(sX),lmax1)
+                    SpX, SmX = hp.alm2map_spin( [walmbar1,np.zeros_like(walmbar1)],self.nside, np.abs(sX),self.lmax1)
                     
                 X  = SpX+1j*SmX # Complex map _{+s}S or _{-s}S
                 
                 if sX<0:
                     X = np.conj(X)*(-1)**(sX)
                 #-----------------------------------------------------------------------------------------------
-                if est[1]=='B':
-                    SpY, SmY = hp.alm2map_spin( [np.zeros_like(walmbar2),1j*walmbar2], nside, np.abs(sY),lmax2)
+                if self.qe[1]=='B':
+                    SpY, SmY = hp.alm2map_spin( [np.zeros_like(walmbar2),1j*walmbar2], self.nside, np.abs(sY),self.lmax2)
                 else:
-                    SpY, SmY = hp.alm2map_spin( [walmbar2,np.zeros_like(walmbar2)], nside, np.abs(sY),lmax2)
+                    SpY, SmY = hp.alm2map_spin( [walmbar2,np.zeros_like(walmbar2)], self.nside, np.abs(sY),self.lmax2)
                     
                 Y  = SpY+1j*SmY
                 
@@ -123,17 +136,18 @@ class qest(object):
                 if sP<0:
                     XY = np.conj(XY)*(-1)**(sP)
 
-                glm,clm  = hp.map2alm_spin([XY.real,XY.imag], np.abs(sP), Lmax)
+                glm,clm  = hp.map2alm_spin([XY.real,XY.imag], np.abs(sP), self.Lmax)
                 
                     
 
                 glm = hp.almxfl(glm,0.5*wP)
                 clm = hp.almxfl(clm,0.5*wP)
 
-                retglm  += glm
-                retclm  += clm
-
-            return retglm,retclm
+                self.retglm  += glm
+                self.retclm  += clm
+             
+            print(" ")
+            return self.retglm, self.retclm
 
 
     def get_aresp(self,flm1,flm2):

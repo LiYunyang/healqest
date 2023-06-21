@@ -212,15 +212,20 @@ def parse_yaml(file_yaml):
 
         if 'file_lcmb' in dict['cls']:
             try:
-                dict['cls']['lcmb'] = {f: np.loadtxt(dict['cls']['file_lcmb'], usecols=[c+1])[:dict['lmaxTP']+1] for c, f in enumerate(['tt','ee','bb','te']) }
+                ell = np.loadtxt(dict['cls']['file_lcmb'], usecols=[0])
+                dict['cls']['lcmb'] = {f: zeropad(np.loadtxt(dict['cls']['file_lcmb'], usecols=[c+1])/ell/(ell+1)*2*np.pi)[:dict['lmaxTP']+1] for c, f in enumerate(['tt','ee','bb','te']) }
                 print("Setting CMB cls")    
             except:
                 print("Couldn't load CMB cls -- not setting CMB Cls")
          
         if 'file_ucmb' in dict['cls']:
             try:
-                dict['cls']['ucmb'] = {f: np.loadtxt(dict['cls']['file_ucmb'], usecols=[c+1])[:dict['lmaxTP']+1]  for c, f in enumerate(['tt','ee','bb','te']) }
-                print("Setting CMB cls")
+                ell = np.loadtxt(dict['cls']['file_ucmb'], usecols=[0])
+                dict['cls']['ucmb'] = {f: zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[c+1])/ell/(ell+1)*2*np.pi)[:dict['lmaxTP']+1]  for c, f in enumerate(['tt','ee','bb','te']) }
+                dict['cls']['ucmb']['pp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[5])/ell/ell/(ell+1)/(ell+1)*2*np.pi)[:dict['lmaxTP']+1]
+                dict['cls']['ucmb']['tp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[6])/(ell*(ell+1))**(1.5)*2*np.pi)[:dict['lmaxTP']+1]
+                dict['cls']['ucmb']['ep'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[7])/(ell*(ell+1))**(1.5)*2*np.pi)[:dict['lmaxTP']+1]
+                print("Setting CMB unlensed cls")
             except:
                 print("Couldn't load CMB cls -- not setting CMB Cls")
 

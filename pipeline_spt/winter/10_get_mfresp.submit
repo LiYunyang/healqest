@@ -1,0 +1,15 @@
+#!/bin/bash
+#SBATCH -t 12:00:00
+#SBATCH --partition=SPT3G
+#SBATCH --account=SPT3G
+#SBATCH --exclusive
+#SBATCH --job-name=reclens
+#source /lcrc/project/SPT3G/users/ac.yomori/setups/setup_py27.sh
+source deactivate
+source /lcrc/project/SPT3G/users/ac.yomori/setups/setup_analysis.sh
+
+yaml=spt3g.yaml
+ilctype=cmbmv
+nsims=29
+
+python src/get_mfresp.py ${yaml} ${ilctype} ${nsims} --getxx --getxy --getyx

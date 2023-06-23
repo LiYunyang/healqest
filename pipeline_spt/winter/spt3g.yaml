@@ -1,0 +1,39 @@
+runtime:
+    # Basic information
+    suff   : 'spt3g'
+    nside  : 8192
+    lmax   : 6500
+
+expt:
+    # Experimental configurations
+    expts  : ['spt3g', 'spt3g', 'spt3g']
+    freqs  : [95 , 150, 220]
+    fwhm   : [1.7, 1.2, 1.0]
+    nlevt  : [2.5, 2.08, 7.56]
+    lkneet : [1200, 2200, 2100]
+    akneet : [3.0, 4.0, 3.9]
+    nlevp  : [3.54,2.94,10.69]
+    lkneep : [150, 200, 200] 
+    akneep : [2.6, 2.2, 2.2]       
+
+masks:
+    dir_mask: '/lcrc/project/SPT3G/users/ac.yomori/sims/mdpl2/v0.7/outputs/spt3g/agora_v0.7_bahamas80_randradioflux_calibrated_mcmc012623/masks/'
+    Tmask   : 'mask8192_mdpl2_lenmag_cibmap_radmap_spt3g_150ghz_fluxcut6.0mjy_singlepix.fits'
+    Tmaska  : 'mask8192_mdpl2_clusters_spt3g_10sigma_apod3.fits'
+    Pmask   : 'mask8192_mdpl2_lenmag_cibmap_radmap_spt3g_150ghz_fluxcut6.0mjy_singlepix.fits'
+
+dirs:
+    dir_mdpl   : '/lcrc/project/SPT3G/users/ac.yomori/sims/mdpl2/v0.7/outputs/spt3g/agora_v0.7_bahamas80_randradioflux_calibrated_mcmc012623/'
+    dir_tmp    : '/lcrc/globalscratch/ac.yomori/proposal_forecast/spt3g_winter/'
+    dir_weights: './weights/'
+
+ilc:
+    cmbmv  : 
+    ynull  : ['Y']
+    cibnull: 
+
+lensing:
+    lmin : 300
+    lmaxT: 4000
+    lmaxP: 5000
+    Lmax : 5100

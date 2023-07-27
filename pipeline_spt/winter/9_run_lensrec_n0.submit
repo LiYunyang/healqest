@@ -1,0 +1,41 @@
+#!/bin/bash
+#SBATCH -t 12:00:00
+#SBATCH --partition=SPT3G
+#SBATCH --account=SPT3G
+#SBATCH --exclusive
+#SBATCH --job-name=reclens
+#SBATCH --array=0-31%11  #0-21
+##SBATCH --dependency=afterok:70258
+#source /lcrc/project/SPT3G/users/ac.yomori/setups/setup_py27.sh
+source deactivate
+source /lcrc/project/SPT3G/users/ac.yomori/setups/setup_analysis.sh
+
+#dir_base='/lcrc/project/SPT3G/users/ac.yomori/sims/mdpl2/v0.6/outputs/spt3g/bahamas80_scal1.000/'  
+yaml=spt3g.yaml
+ilctype='cmbmv'
+#qetype='TT'
+
+j=$SLURM_ARRAY_TASK_ID
+k=$(($SLURM_ARRAY_TASK_ID+1))
+
+# std and RDN0 part
+qetype='TT'
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $j 1 $k  1 none none
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $k 1 $j  1 none none
+
+qetype='TE'
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $j 1 $k  1 none none
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $k 1 $j  1 none none
+
+qetype='EE'
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $j 1 $k  1 none none
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $k 1 $j  1 none none
+
+qetype='TB'
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $j 1 $k  1 none none
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $k 1 $j  1 none none
+
+qetype='EB'
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $j 1 $k  1 none none
+python src/rec_lensrec_mfresp.py ${yaml} ${ilctype} ${qetype} $k 1 $j  1 none none
+

@@ -164,7 +164,7 @@ class qest(object):
 
         Returns
         ----------
-        resp:
+        aresp:
           Analytical response function
         '''
         if qe1 is None:
@@ -554,6 +554,12 @@ class qest_gmv(object):
 
         Parameters
         ----------
+        filename: string
+          Where to save the aresp output to
+        qe1: string
+          First estimator; if None, assumes it is self.qe
+        qe2: string
+          Second estimator; if None, assumes it is the same as qe1
 
         Returns
         ----------
@@ -573,7 +579,7 @@ class qest_gmv(object):
         elif (qe1=='TTEETE' and qe2=='TTEETEprf') or (qe2=='TTEETE' and qe1=='TTEETEprf'):
             # Cross estimator response of lensing and source
             r.calc_tvar_PRF(cross=True)
-        aresp = np.genfromtxt(filename)
+        aresp = np.load(filename)
 
         # Save file has columns L, TTEETE, TBEB, all
         if qe1 == 'TTEETE' or qe1 == 'TTEETEprf':

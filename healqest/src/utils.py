@@ -229,6 +229,16 @@ def parse_yaml(file_yaml):
             except:
                 print("Couldn't load CMB cls -- not setting CMB Cls")
 
+        if 'file_gcmb' in dict['cls']:
+            try:
+                #TODO: This will change if we use a different file! Currently configured for Abhi's file
+                ell = np.loadtxt(dict['cls']['file_gcmb'], usecols=[0])
+                dict['cls']['gcmb'] = {f: zeropad(np.loadtxt(dict['cls']['file_gcmb'], usecols=[c+1])/ell/(ell+1)*2*np.pi)[:dict['lmaxTP']+1]  for c, f in enumerate(['tt','ee','bb']) }
+                dict['cls']['gcmb']['te'] = zeropad(np.loadtxt(dict['cls']['file_gcmb'], usecols=[5])/ell/(ell+1)*2*np.pi)[:dict['lmaxTP']+1]
+                print("Setting CMB gradient cls")
+            except:
+                print("Couldn't load CMB cls -- not setting CMB Cls")
+
         if 'file_noise' in dict['cls']:
             try:
                 dict['cls']['noise'] = {f: np.loadtxt(dict['cls']['file_noise'], usecols=[c+1])[:dict['lmaxTP']+1]  for c, f in enumerate(['tt','ee','bb','te']) }

@@ -167,7 +167,7 @@ class qest(object):
         '''
         if qe1 is None:
             qe1 = self.qe
-        qeXY = weights.weights(qe1,self.Lmax,self.config,u=self.u)
+        qeXY = weights.weights(qe1,self.Lmax,self.config,self.cltype,u=self.u)
         if qe2 is None:
             qeZA = None
         else:

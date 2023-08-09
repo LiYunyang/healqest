@@ -548,7 +548,7 @@ class qest_gmv(object):
 
         return self.retglm_prf,self.retclm_prf
 
-    def get_aresp(self,qe1=None,qe2=None,filename):
+    def get_aresp(self,filename,qe1=None,qe2=None):
         '''
         Compute analytical response function
 

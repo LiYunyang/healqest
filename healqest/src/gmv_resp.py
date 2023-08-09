@@ -544,7 +544,7 @@ class gmv_resp(object):
         #data[:,2] = 1/data[:,2]
         #data[:,3] = 1/data[:,3]
         if self.save_path:
-            np.savetxt(self.save_path, data)
+            np.save(self.save_path, data)
 
     def calc_tvar_PRF(self, cross=False):
         data = np.zeros((self.Nl, 4))
@@ -578,13 +578,13 @@ class gmv_resp(object):
             data[:,3] *= -1
 
         if self.save_path:
-            np.savetxt(self.save_path, data)
+            np.save(self.save_path, data)
 
     def interp_tvar(self):
         print("Interpolating variances")
 
         self.N_d = {}
-        data = np.genfromtxt(self.save_path)
+        data = np.load(self.save_path)
 
         L = data[:, 0]
 

@@ -4,6 +4,8 @@ import pickle
 import weights
 import numpy as np
 import healpy as hp
+import resp
+import gmv_resp
 np.seterr(all='ignore')
 
 class qest(object):
@@ -173,6 +175,7 @@ class qest(object):
         else:
             qeZA = weights.weights(qe2,self.Lmax,self.config,self.cltype,u=self.u)
         aresp = resp.fill_resp(qeXY,np.zeros(self.Lmax+1, dtype=np.complex_),flX,flY,qeZA=qeZA)
+        return aresp
 
     def get_source_estimator(self):
         '''
@@ -291,8 +294,11 @@ class qest_gmv(object):
         elif qe == 'TBEB':
             self.ests = ['TB_GMV', 'EB_GMV']
             self.idxs = [3, 4]
+        elif qe == 'TTEETEprf':
+            self.ests = ['TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF']
+            self.idxs = [0, 1, 2]
         else:
-            raise Exception("For GMV, argument qe must be either 'all', 'TTEETE', or 'TBEB'")
+            print("For GMV, we can only calculate estimators for argument qe 'all', 'TTEETE', 'TBEB', or 'TTEETEprf'")
 
         print('Setting up lensing reconstruction')
         print('-- Estimator: %s'%qe)
@@ -542,7 +548,7 @@ class qest_gmv(object):
 
         return self.retglm_prf,self.retclm_prf
 
-    def get_aresp(self,flm1,flm2):
+    def get_aresp(self,qe1=None,qe2=None,filename):
         '''
         Compute analytical response function
 
@@ -554,7 +560,29 @@ class qest_gmv(object):
         aresp:
           Analytical response function
         '''
-        print("Analytic response calculation for GMV under construction... Use Abhi's code")
+        r = gmv_resp.gmv_resp(self.config,self.cltype,self.totalcls,u=self.u,save_path=filename)
+        if qe1 is None:
+            qe1 = self.qe
+
+        if (qe1 == 'TTEETE' or qe1 == 'TBEB' or qe1 == 'all') and qe2 is None:
+            # Lensing response
+            r.calc_tvar()
+        elif qe1 == 'TTEETEprf' and qe2 is None:
+            # Source response
+            r.calc_tvar_PRF(cross=False)
+        elif (qe1=='TTEETE' and qe2=='TTEETEprf') or (qe2=='TTEETE' and qe1=='TTEETEprf'):
+            # Cross estimator response of lensing and source
+            r.calc_tvar_PRF(cross=True)
+        aresp = np.genfromtxt(filename)
+
+        # Save file has columns L, TTEETE, TBEB, all
+        if qe1 == 'TTEETE' or qe1 == 'TTEETEprf':
+            aresp = aresp[:,1]
+        elif qe1 == 'TBEB':
+            aresp = aresp[:,2]
+        elif qe1 == 'all':
+            aresp = aresp[:,3]
+        return aresp
 
     def harden(self, ee, es, ss):
         '''

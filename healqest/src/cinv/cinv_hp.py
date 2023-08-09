@@ -14,27 +14,6 @@ import utils, hp_utils, cinv_utils
 import opfilt_hp_p, opfilt_hp_t, cd_solve, cd_monitors
 # disable mpi
 
-def reduce_lmax(alm, lmax=4000):
-    """
-    Reduce the lmax of input alm
-    """
-    lmaxin  = hp.Alm.getlmax(alm.shape[0])
-    print( "-- Reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax) )
-    ell,emm = hp.Alm.getlm(lmaxin)
-    almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex_)
-    oldi=0
-    oldf=0
-    newi=0
-    newf=0
-    dl = lmaxin-lmax
-    for i in range(0,lmax+1):
-        oldf=oldi+lmaxin+1-i
-        newf=newi+lmax+1-i
-        almout[newi:newf]=alm[oldi:oldf-dl]
-        oldi=oldf
-        newi=newf
-    return almout
-
 class cinv(object):
     def __init__(self, lib_dir, lmax, eps_min, use_mpi=False):
         self.lib_dir = lib_dir # Output directory
@@ -73,30 +52,31 @@ class cinv(object):
         return ret[:lmax + 1]
 
     def solve(self, soltn, tpn_map):
+        '''
+        soltn  : talm
+        tqn_map: tmap
+        '''
         finifunc = getattr(self.opfilt, 'calc_fini') 
         self.iter_tot = 0
         self.prev_eps = None
-        dot_op = self.opfilt.DotOperator()
-        logger = cd_monitors.logger_basic
+        dot_op  = self.opfilt.DotOperator()
+        logger  = cd_monitors.logger_basic
 
         tpn_alm = self.opfilt.calc_prep(tpn_map, self.s_inv_filt, self.n_inv_filt)
-        monitor = cd_monitors.MonitorBasic(
-                                        dot_op, 
-                                        logger=logger, 
-                                        iter_max=np.inf,
-                                        eps_min=self.eps_min) 
-        fwd_op = self.opfilt.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
-        pre_op = self.opfilt.PreOperatorDiag(self.s_inv_filt.s_cls, 
-                                             self.n_inv_filt,
-                                             n_cls=self.s_inv_filt.ncls1d)
+        monitor = cd_monitors.MonitorBasic(dot_op, logger=logger, iter_max=np.inf, eps_min=self.eps_min) 
+        fwd_op  = self.opfilt.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
+        pre_op  = self.opfilt.PreOperatorDiag(self.s_inv_filt.s_cls, 
+                                              self.n_inv_filt,
+                                              n_cls=self.s_inv_filt.ncls1d)
         
-        cd_solve.cd_solve(soltn, b=tpn_alm,
-                                     fwd_op=fwd_op, 
-                                     pre_ops=[pre_op],
-                                     dot_op=dot_op,
-                                     criterion=monitor,
-                                     tr=cinv_utils.cd_solve.tr_cg, 
-                                     cache=cinv_utils.cd_solve.CacheMemory())
+        cd_solve.cd_solve(soltn, b         = tpn_alm,
+                                 fwd_op    = fwd_op, 
+                                 pre_ops   = [pre_op],
+                                 dot_op    = dot_op,
+                                 criterion = monitor,
+                                 tr        = cinv_utils.cd_solve.tr_cg, 
+                                 cache     = cinv_utils.cd_solve.CacheMemory()       
+                         )
 
         finifunc(soltn, self.s_inv_filt, self.n_inv_filt)
 
@@ -119,84 +99,63 @@ class cinv_t(cinv):
             This changes nothing to the iterations, but gives the dot product testing for convergence more sensitvity to relevant scales
 
     """
-    def __init__(self, dir_tmp,
-                       lmax,
-                       nside,
-                       cl,
-                       tf,
-                       ninv, 
-                       eps_min   = 1.0e-5,
-                       nl        = None,
-                       rescale   = True):
+    def __init__(self, lib_dir, lmax, nside, cl, transf, ninv, 
+                 eps_min = 1.0e-5,
+                 nl=None,
+                 rescal_cl='default', tf2d=None):
 
-        assert dir_tmp is not None and lmax >= 1024 and nside >= 512, (dir_tmp, lmax, nside)
+        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (lib_dir, lmax, nside)
         assert isinstance(ninv, list)
-        super(cinv_t, self).__init__(dir_tmp, lmax, eps_min)
+        super(cinv_t, self).__init__(lib_dir, lmax, eps_min)
 
-        ellscal = np.sqrt(np.arange(lmax + 1, dtype=float) * np.arange(1, lmax + 2, dtype=float) / 2. / np.pi)
+        # Convert Cls to Dls or not
+        if rescal_cl in ['default', None]:
+            rescal_cl = np.sqrt(np.arange(lmax + 1, dtype=float) * np.arange(1, lmax + 2, dtype=float) / 2. / np.pi)
 
-        if rescale==True:
-            # mutltiply Cls and tf with l(l+1)/2/pi factor
-            dl        = {k: ellscal ** 2 * cl[k][:lmax + 1] for k in cl.keys()}  # cls -> dls
-            print('converted cls->dls')
+        # mutltiply Cls and tf with l(l+1)/2/pi factor
+        dl        = {k: rescal_cl ** 2 * cl[k][:lmax + 1] for k in cl.keys()}  # rescaled cls (Dls by default)
+        transf_dl = transf[:lmax + 1] * cinv_utils.cli(rescal_cl)
 
-            # ------- convert tf from cls -> dls -------------
-            if len(tf)>hp.Alm.getsize(1024):
-                print('converting tf2d cls->dls')
-                tf = reduce_lmax(tf,lmax=lmax)
-                tf = hp.almxfl(tf,ellscal) # multiply 1dtf
-            else:
-                print('converting tf1d cls->dls')
-                tf = tf[:lmax+1] * ellscal
+        if tf2d is not None:
+            tf2d_dl = hp.almxfl(tf2d, cinv_utils.cli(rescal_cl))
+            self.rescaled_tf2d = tf2d_dl
+        else:
+            tf2d_dl = tf2d
 
-            # -------- convert noise from cls -> dls ---------
-            if len(tf)>hp.Alm.getsize(1024):
-                print('converted nl2d cls->dls')
-                for key in nl:
-                    nl[key] = reduce_lmax(nl[key],lmax=lmax)
-                    nl[key] = hp.almxfl(nl[key],ellscal) 
-            else:
-                print('converting nl1d cls->dls')
-                for key in nl:
-                    nl[key] = nl[key][:lmax+1] * ellscal
-
-
-        # Transfer function
-        #if tf2d is not None:
-        #    print('tf2d was provided, applying rescal_cl')
-        #    tf2d_dl = hp.almxfl(tf2d, cinv_utils.cli(rescal_cl))
-        #    self.rescaled_tf2d = tf2d_dl
-        #else:
-        #    tf2d_dl = tf2d
-
-        # noise spectrum
-        #if nl is not None:
-        #    print('nl was provided, applying rescal_cl')
-        #    print(rescal_cl)
-        #    nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl)) for key in nl}
-        #    self.rescaled_nl   = nl_dl
-        #else:
-        #    sys.exit('nl was NOT provided')
-        #    nl_dl = nl
+        if nl is not None:
+            print('nl was provided, applying rescal_cl')
+            print(rescal_cl)
+            nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl)) for key in nl}
+            self.rescaled_nl   = nl_dl
+        else:
+            sys.exit('nl was NOT provided')
+            nl_dl = nl
 
         self.nside = nside
 
-        self.cl   = cl
-        self.dl   = dl
-        self.tf   = tf
+        self.cl = cl
+        self.dl = dl
+
+        self.transf = transf[:lmax + 1]
+        self.rescaled_transf =transf_dl
+        self.rescal_cl = rescal_cl
+      
         self.nl   = nl
+        self.tf2d = tf2d
         self.ninv = ninv
 
-        self.n_inv_filt = hp_utils.jit(opfilt_hp_t.NoiseInverseFilter, ninv, tf=tf)
-        self.s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter, dl, lmax, n_cls = nl, tf2d=tf2d, b_transf=tf))
-        self.opfilt     = opfilt_hp_t
+        n_inv_filt = hp_utils.jit(opfilt_hp_t.NoiseInverseFilter, ninv,transf_dl,tf2d=tf2d_dl)
+        s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter, dl, lmax, n_cls=nl_dl, tf2d=tf2d_dl, b_transf=transf_dl)
+        self.n_inv_filt = n_inv_filt
+        self.s_inv_filt = s_inv_filt
+        self.opfilt = opfilt_hp_t
 
         #if mpi.rank == 0:
         Y=0
         if Y==0:
             if not os.path.exists(lib_dir):
                 os.makedirs(lib_dir)
-            
+
             if not os.path.exists(os.path.join(lib_dir, "filt_hash.pk")):
                 pk.dump(self.hashdict(), open(os.path.join(lib_dir, "filt_hash.pk"), 'wb'), protocol=2)
 
@@ -208,10 +167,10 @@ class cinv_t(cinv):
 
             if not os.path.exists(os.path.join(self.lib_dir, "fmask.fits.gz")):
                 hp.write_map(os.path.join(self.lib_dir, "fmask.fits.gz"), self._calc_mask())
-            
+
         #mpi.barrier()
         #cinv_utils.hash_check(pk.load(open(os.path.join(lib_dir, "filt_hash.pk"), 'rb')), self.hashdict())
-    
+
     def _ninv_hash(self):
         ret = []
         for ninv_comp in self.ninv:
@@ -223,51 +182,54 @@ class cinv_t(cinv):
     
     def _calc_ftl(self):
         '''
-        Calculate CMB + (beam deconvolved) Noise spectrum 
-        Note: Noise here is noise + foreground power
+        Compute 1/(cltt+nltt/bl**2)
         '''
-
-        # Get noise level from n_inv map
         ninv = self.n_inv_filt.n_inv
         npix = len(ninv[:])
         NlevT_uKamin = np.sqrt(4. * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0])) * 180. * 60. / np.pi
         print("cinv_t::noiseT_uk_arcmin = %.3f"%NlevT_uKamin)
 
-        # Load fiducial Cls and transfer function
         s_cls    = self.cl
         b_transf = self.transf
 
-        ftl = cinv_utils.cli(self.cl['tt'][0:self.lmax + 1] + (NlevT_uKamin * np.pi / 180. / 60.) ** 2 / self.transf[0:self.lmax + 1] ** 2)
+        ftl = cinv_utils.cli(s_cls['tt'][0:self.lmax + 1] + (NlevT_uKamin * np.pi / 180. / 60.) ** 2 / b_transf[0:self.lmax + 1] ** 2)
         ftl[0:2] = 0.0
 
         return ftl 
 
     def _calc_tal(self):
+        '''
+        Compute 1/tf (2d)
+        '''
         return cinv_utils.cli(self.transf)
 
     def _calc_mask(self):
+        '''
+        Return binary mask 1 if pixval>0 and 0 otherwise
+        '''
         ninv = self.n_inv_filt.n_inv
         assert hp.npix2nside(len(ninv)) == self.nside
         return np.where(ninv > 0, 1., 0.)
 
     def hashdict(self):
-
-        return {'lmax'     : self.lmax,
-                'nside'    : self.nside,
-                'rescal_cl': cinv_utils.clhash(self.rescal_cl),
-                'cltt'     : cinv_utils.clhash(self.cl['tt'][:self.lmax + 1]),
-                'transf'   : cinv_utils.clhash(self.transf[:self.lmax + 1]),
-                'ninv'     : self._ninv_hash(),
+        return {'lmax': self.lmax,
+                'nside': self.nside,
+                'rescal_cl':cinv_utils.clhash(self.rescal_cl),
+                'cltt': cinv_utils.clhash(self.cl['tt'][:self.lmax + 1]),
+                'transf': cinv_utils.clhash(self.transf[:self.lmax + 1]),
+                'ninv': self._ninv_hash(),
                 }
-    
 
     def apply_ivf(self, tmap, soltn=None):
+        '''
+        '''
         if soltn is None:
             talm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex)
         else:
             talm = soltn.copy()
+
         self.solve(talm, tmap)
-        hp.almxfl(talm, self.rescal_cl, inplace=True)
+        hp.almxfl(talm, self.rescal_cl, inplace=True) #  Multiply in 2d by l(l+1)/(2*np.pi)
         return talm
 
 
@@ -455,6 +417,7 @@ class library_sepTP(object):
         """
         tfname = os.path.join(self.lib_dir, 'sim_%04d_tlm.fits'%idx if idx >= 0 else 'dat_tlm.fits')
 
+        # Loading unfiltered alms
         if not os.path.exists(tfname):
             print("no idea what its supposed to do here")
             #tlm = self._apply_ivf_t(self.sim_lib.get_sim_tmap(idx), soltn=None if self.soltn_lib is None else self.soltn_lib.get_sim_tmliklm(idx))
@@ -463,12 +426,14 @@ class library_sepTP(object):
             print('Loading file: %s'%tfname)
             tlm,elm,blm = hp.read_alm(tfname,hdu=[1,2,3])
 
+        # Apply lmin/lmax cuts in 1d
         if self.lfilt is not None:
             hp.almxfl(tlm, self.lfilt, inplace=True)
             hp.almxfl(elm, self.lfilt, inplace=True)
             hp.almxfl(blm, self.lfilt, inplace=True)
 
         return tlm,elm,blm
+
 
     def get_sim_tlm(self, idx):
         """
@@ -557,6 +522,34 @@ class library_sepTP(object):
         """
         clbb = self.cl['bb'][:len(self.lfilt)]*self.lfilt if self.lfilt is not None else self.cl['bb']
         return hp.almxfl(self.get_sim_blm(idx), clbb)
+
+    def get_sim_tlmivf(self, idx):
+        """Returns an inverse variance temperature simulation.
+            Args: idx: simulation index
+            Returns: Wiener-filtered temperature healpy alm array
+        """
+        print("Returning inverse variance filtered tlm")
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['tt'])
+        return hp.almxfl(self.get_sim_tlm(idx), fl)
+
+    def get_sim_elmivf(self, idx):
+        """Returns an inverse variance filtered E-polarization simulation.
+            Args: idx: simulation index
+            Returns: Wiener-filtered E-polarization healpy alm array
+        """
+        print("Returning inverse variance filtered elm")
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['ee'])
+        return hp.almxfl(self.get_sim_elm(idx), fl)
+
+    def get_sim_blmivf(self, idx):
+        """Returns an inverse variance B-polarization simulation.
+            Args: idx: simulation index
+            Returns: Wiener-filtered B-polarization healpy alm array
+        """
+        print("Returning inverse variance filtered blm")
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['bb'])
+        return hp.almxfl(self.get_sim_blm(idx), fl)
+
 
 class library_cinv_sepTP(library_sepTP):
     """Library to perform inverse-variance filtering of a simulation library.

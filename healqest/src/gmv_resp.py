@@ -39,8 +39,7 @@ class gmv_resp(object):
         # Reduce to 50 if you need around 0.6% max accuracy til L = 3000
         # From 200 to 400, there is just 0.03% change in the noise curves til L=3000
         
-        tdict = {'grad':'gcmb', 'len':'lcmb', 'unl':'ucmb' }
-        sl = {ii:config['cls'][tdict[cltype]][ii] for ii in config['cls'][tdict[cltype]].keys()}
+        sl = {ii:config['cls'][cltype][ii] for ii in config['cls'][cltype].keys()}
         self.sltt = interp1d(np.arange(len(sl['tt'])), sl['tt'], kind='linear', bounds_error=False, fill_value=0.)
         self.slee = interp1d(np.arange(len(sl['ee'])), sl['ee'], kind='linear', bounds_error=False, fill_value=0.)
         self.slbb = interp1d(np.arange(len(sl['bb'])), sl['bb'], kind='linear', bounds_error=False, fill_value=0.)

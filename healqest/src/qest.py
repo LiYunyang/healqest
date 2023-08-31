@@ -170,7 +170,7 @@ class qest(object):
                 
                 if qe[0]=='B':
                     SpX, SmX = hp.alm2map_spin([np.zeros_like(walmbar1),1j*walmbar1],self.nside,np.abs(sX),self.lmax)
-                    sys,exit('broken')
+                    sys.exit('broken')
                 else:
                     SpX, SmX = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)],self.nside,np.abs(sX),self.lmax)
 
@@ -181,7 +181,7 @@ class qest(object):
                 #-----------------------------------------------------------------------------------------------
                 if qe[1]=='B':
                     SpY, SmY = hp.alm2map_spin([np.zeros_like(walmbar2),1j*walmbar2],self.nside,np.abs(sY),self.lmax)
-                    sys,exit('broken')
+                    sys.exit('broken')
                 else:
                     SpY, SmY = hp.alm2map_spin([walmbar2,np.zeros_like(walmbar2)],self.nside,np.abs(sY),self.lmax)
 
@@ -214,8 +214,7 @@ class qest(object):
             #    self.retglm_prf = retglm
             #    self.retclm_prf = retclm
 
-            #return retglm, retclm
-
+            return retglm, retclm
 
     def get_aresp(self,flX,flY,qe1=None,qe2=None,u=None):
         '''
@@ -249,8 +248,7 @@ class qest(object):
         
         return aresp
 
-
-    def harden(self, flX, flY, u, qe_hrd='TTprf'):
+    def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='TTprf'):
         '''
         Get the source hardened glm and the response function.
         Need arguments flX, flY in order to compute the analytical response
@@ -268,14 +266,14 @@ class qest(object):
         resp :
           Response function
         '''
-        assert self.qe=='TT', "We only harden for qe 'TT', got: %s"%self.qe
+        assert qe=='TT', "We only harden for qe 'TT', got: %s"%qe
 
-        ss = self.get_aresp(flX, flY, u, qe1=qe_hrd)
-        es = self.get_aresp(flX, flY, u, qe1=qe_hrd, qe2=self.qe)
+        ss = self.get_aresp(flX, flY, qe1=qe_hrd, u=u)
+        es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=self.qe, u=u)
         ee = self.get_aresp(flX, flY)
 
-        plm1 = self.retglm
-        plm2,_ = self.eval(qe_hrd,u)
+        plm1,_ = self.eval(qe,almbar1,almbar2)
+        plm2,_ = self.eval(qe_hrd,almbar1,almbar2,u)
 
         weight = -1*es/ss
         plm    = plm1 + hp.almxfl(plm2, weight)
@@ -285,7 +283,7 @@ class qest(object):
 
 class qest_gmv(object):
 
-    def __init__(self,config,qe,alm1all,alm2all,totalcls,cltype='grad'):
+    def __init__(self,config,cls):
         '''
         Set up the quadratic estimator calculation for GMV
 
@@ -305,30 +303,33 @@ class qest_gmv(object):
           Should be one of 'grad'/'len'/'unl'
         '''
         import gmv_resp
-        assert cltype=='grad' or cltype=='len' or cltype=='unl', "cltype expected to be grad/len/unl, got: %s"%cltype
 
         print('Setting up lensing reconstruction')
-        print('-- Estimator: %s'%qe)
-        self.qe         = qe
-        self.alm1all    = alm1all
-        self.alm2all    = alm2all
         self.config     = config
-        self.retglm     = 0
-        self.retclm     = 0
-        self.retglm_prf = 0
-        self.retclm_prf = 0
-        self.lmax1      = hp.Alm.getlmax(self.alm1all[:,0].shape[0])
-        self.lmax2      = hp.Alm.getlmax(self.alm2all[:,0].shape[0])
-        self.Lmax       = self.config['Lmax']
-        self.nside      = utils.get_nside(self.Lmax)
-        self.cltype     = cltype
-        self.totalcls   = totalcls
-        print("-- nside to project: %d"%self.nside)
-        print("-- lmax:%d"%max(self.lmax1,self.lmax2))
-        print("-- Lmax:%d"%self.config['Lmax'])
-        print("-- cltype: %s"%self.cltype)
+        self.lmint   = self.config['lmint']
+        self.lminp   = self.config['lminp']        
+        self.lmaxt   = self.config['lmaxt']
+        self.lmaxp   = self.config['lmaxp']
+        self.lmax    = self.config['lmax'] = max(self.lmaxt,self.lmaxp)
+        self.Lmax    = self.config['Lmax']
+        self.cltype  = self.config['cltype']
+        self.cls     = cls
 
-    def eval(self,qe=None,u=None):
+        if self.cltype!='ucmb' and self.cltype!='lcmb' and self.cltype!='grad':
+            sys.exit('cltype must be ucmb, lcmb or grad')
+
+        if 'nside' in config:
+            print("-- Overwride default nside")
+            self.nside = self.config['nside'] # Overwrite automatic setting of nside<2*lmax
+        else:
+            self.nside   = utils.get_nside(self.Lmax)
+        
+        print("-- Nside to project: %d"%self.nside)
+        print("-- lmax:%d"%max(self.lmaxt,self.lmaxp))
+        print("-- Lmax:%d"%self.Lmax)
+        print("-- Using %s cls"%self.cltype)
+
+    def eval(self,qe,alm1all,alm2all,totalcls,u=None):
         '''
         Compute quadratic estimator
 
@@ -344,8 +345,6 @@ class qest_gmv(object):
         clm:
           Curl component of the plm
         '''
-        if qe is None:
-            qe = self.qe
         if qe == 'TTEETEprf':
             assert u is not None, "Need profile function to compute this estimator"
 
@@ -371,9 +370,9 @@ class qest_gmv(object):
         for i, est in enumerate(ests):
             print('Doing estimator: %s'%est)
             idx = idxs[i]
-            alm1 = self.alm1all[:,idx]
-            alm2 = self.alm2all[:,idx]
-            q = weights.weights(est,max(self.lmax1,self.lmax2),self.config,cltype=self.cltype,u=u,totalcls=self.totalcls)
+            alm1 = alm1all[:,idx]
+            alm2 = alm2all[:,idx]
+            q = weights.weights(self.config,self.cls[self.cltype],est,u=u,totalcls=totalcls)
             glmsum = 0
             clmsum = 0
 
@@ -388,9 +387,9 @@ class qest_gmv(object):
                 walm3 = hp.almxfl(alm1,wX3) # T3
                 walm2 = hp.almxfl(alm2,wY1) # B2
 
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax1)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax1)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax2)
+                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
 
                 SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
                 SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
@@ -410,9 +409,9 @@ class qest_gmv(object):
                 walm3 = hp.almxfl(alm1,wX3) # E3
                 walm2 = hp.almxfl(alm2,wY1) # B2
 
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax1)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax1)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax2)
+                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
 
                 SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
                 SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
@@ -432,9 +431,9 @@ class qest_gmv(object):
                 walm3 = hp.almxfl(alm1,wY3) # T3
                 walm2 = hp.almxfl(alm2,wX1) # B2
 
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax1)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax1)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax2)
+                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
 
                 SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
                 SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
@@ -454,9 +453,9 @@ class qest_gmv(object):
                 walm3 = hp.almxfl(alm1,wY3) # E3
                 walm2 = hp.almxfl(alm2,wX1) # B2
 
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax1)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax1)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax2)
+                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
 
                 SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
                 SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
@@ -483,9 +482,9 @@ class qest_gmv(object):
                     # Input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
                     # -----------------------------------------------------------------------------------------------
                     if est[0]=='B':
-                        SpX, SmX = hp.alm2map_spin([np.zeros_like(walm1),1j*walm1], self.nside, np.abs(sX), self.lmax1)
+                        SpX, SmX = hp.alm2map_spin([np.zeros_like(walm1),1j*walm1], self.nside, np.abs(sX), self.lmax)
                     else:
-                        SpX, SmX = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, np.abs(sX), self.lmax1)
+                        SpX, SmX = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, np.abs(sX), self.lmax)
 
                     X = SpX+1j*SmX # Complex map _{+s}S or _{-s}S
 
@@ -493,9 +492,9 @@ class qest_gmv(object):
                         X = np.conj(X)*(-1)**(sX)
                     # -----------------------------------------------------------------------------------------------
                     if est[1]=='B':
-                        SpY, SmY = hp.alm2map_spin([np.zeros_like(walm2),1j*walm2], self.nside, np.abs(sY), self.lmax2)
+                        SpY, SmY = hp.alm2map_spin([np.zeros_like(walm2),1j*walm2], self.nside, np.abs(sY), self.lmax)
                     else:
-                        SpY, SmY = hp.alm2map_spin([walm2,np.zeros_like(walm2)], self.nside, np.abs(sY), self.lmax2)
+                        SpY, SmY = hp.alm2map_spin([walm2,np.zeros_like(walm2)], self.nside, np.abs(sY), self.lmax)
 
                     Y = SpY+1j*SmY
 
@@ -516,16 +515,12 @@ class qest_gmv(object):
             retglm += glmsum
             retclm += clmsum
 
-        if qe == self.qe:
-            self.retglm = retglm
-            self.retclm = retclm
-        elif qe == 'TTEETEprf':
-            self.retglm_prf = retglm
-            self.retclm_prf = retclm
+        self.glm = retglm
+        self.clm = retclm
 
         return retglm,retclm
 
-    def get_aresp(self,u=None,qe1=None,qe2=None,filename=None):
+    def get_aresp(self,qe1=None,qe2=None,u=None,filename=None):
         '''
         Compute analytical response function
 
@@ -567,7 +562,7 @@ class qest_gmv(object):
             aresp = aresp[:,3]
         return aresp
 
-    def harden(self, u, qe_hrd='TTEETEprf', fn_ss=None, fn_es=None, fn_ee=None):
+    def harden(self,qe,alm1all,alm2all,totalcls,u,qe_hrd='TTEETEprf',fn_ss=None,fn_es=None,fn_ee=None):
         '''
         Note: We only harden for qe 'all' and 'TTEETE'.
         Getting the hardened plm for TTEETE and then getting the total hardened plm by
@@ -589,12 +584,12 @@ class qest_gmv(object):
         # ee : Response of est*est
         # es : Cross-estimator response of est*src
         # ss : Response of src*src
-        ss = self.get_aresp(u=u,qe1=qe_hrd,filename=fn_ss)
-        es = self.get_aresp(u=u,qe1=qe_hrd, qe2=self.qe,filename=fn_es)
-        ee = self.get_aresp(filename=fn_ee)
+        ss = self.get_aresp(qe1=qe_hrd,u=u,filename=fn_ss)
+        es = self.get_aresp(qe1=qe_hrd,qe2=qe,u=u,filename=fn_es)
+        ee = self.get_aresp(qe1=qe,filename=fn_ee)
 
-        plm1 = self.retglm
-        plm2,_ = self.eval(qe_hrd,u)
+        plm1,_ = self.eval(qe,alm1all,alm2all,totalcls)
+        plm2,_ = self.eval(qe_hrd,alm1all,alm2all,totalcls,u)
 
         weight = -1*es/ss
         plm    = plm1 + hp.almxfl(plm2, weight)

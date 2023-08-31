@@ -193,7 +193,7 @@ def parse_yaml(file_yaml):
     dict['dir_out']          = dir_out
 
     # ----- Setting lmax of T/P -----
-    dict['lmaxTP']=max(dict['lmaxT'],dict['lmaxP'])
+    dict['lmaxTP']=max(dict['lmaxt'],dict['lmaxp'])
 
     runhash = uuid.uuid4().hex
     dict['runhash'] = runhash

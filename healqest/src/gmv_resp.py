@@ -25,9 +25,9 @@ class gmv_resp(object):
         self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
 
         self.Lmax = config['Lmax']
-        self.l1Min = config['lmin']
+        self.l1Min = config['lmint']
         # Max value for l1 and l2 is taken to be same
-        self.l1Max = max(config['lmaxT'],config['lmaxP'])
+        self.l1Max = max(config['lmaxt'],config['lmaxp'])
         self.u = u
         self.save_path = save_path
 

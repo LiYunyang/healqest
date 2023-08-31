@@ -38,6 +38,8 @@ class qest(object):
         self.lmax    = self.config['lmax'] = max(self.lmaxt,self.lmaxp)
         self.Lmax    = self.config['Lmax']
         self.cltype  = self.config['cltype']
+        self.glm = {}
+        self.clm = {}
 
         self.cls     = cls
 
@@ -79,142 +81,144 @@ class qest(object):
           Curl component of the plm
         '''
 
-
-        #if qe is None:
-        #sys.exit('Need to specify estimator')
-        if qe == 'TTprf':
-            assert u is not None, "Need profile function to compute this estimator"
-
-        #ef __init__(self,config,cls,est,u=None,totalcls=None):
-        q = weights.weights(self.config, self.cls[self.cltype], qe, u=u)
-
-        #sys.exit()
-        print('Running lensing reconstruction')
-
-        if qe=='TB' or qe=='EB':
-            # Hack to get TB/EB working. currently not understanding some factors of j
-            print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
-
-            wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
-            wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
-
-            walmbar1 = hp.almxfl(almbar1,wX1) # T1/E1 
-            walmbar3 = hp.almxfl(almbar1,wX3) # T3/E3 
-            walmbar2 = hp.almxfl(almbar2,wY1) # B2    
-
-            SpX1, SmX1 = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)], self.nside, 1, self.lmax)
-            SpX3, SmX3 = hp.alm2map_spin([walmbar3,np.zeros_like(walmbar3)], self.nside, 3, self.lmax)
-            SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
-            #SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
-
-            SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
-            SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
-
-            glm,clm = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
-
-            if qe=='TT' or qe=='EE' or qe=='TE' or qe=='ET':
-                nrm=0.5
-            elif qe=='EB':
-                nrm=-1
-            else:
-                nrm=1
-
-            self.glm = hp.almxfl(glm,nrm*wP1)
-            self.clm = hp.almxfl(clm,nrm*wP1)
-
-        elif qe=='BT' or qe=='BE':
-            # Hack to get TB/EB working. currently not understanding some factors of j
-            print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
-            print('using est: %s'%qe )
-            wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
-            wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
-
-            walmbar1 = hp.almxfl(almbar2,wY1)
-            walmbar3 = hp.almxfl(almbar2,wY3)
-            walmbar2 = hp.almxfl(almbar1,wX1)
-
-            SpX1, SmX1 = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)], self.nside, 1, self.lmax)
-            SpX3, SmX3 = hp.alm2map_spin([walmbar3,np.zeros_like(walmbar3)], self.nside, 3, self.lmax)
-            SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
-            #SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
-
-            SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
-            SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
-
-            glm,clm = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
-
-            if qe=='TT' or qe=='EE' or qe=='TE' or qe=='ET':
-                nrm=0.5
-            elif qe=='BE':
-                nrm=-1
-            else:
-                nrm=1
-
-            self.glm = hp.almxfl(glm,nrm*wP1)
-            self.clm = hp.almxfl(clm,nrm*wP1)
-
+        if qe in self.glm:
+            print("We've already computed this!")
         else:
-            # More traditional quicklens style calculation
-            retglm  = 0
-            retclm  = 0
+            #if qe is None:
+            #sys.exit('Need to specify estimator')
+            if qe == 'TTprf':
+                assert u is not None, "Need profile function to compute this estimator"
 
-            for i in range(0,q.ntrm):
+            #ef __init__(self,config,cls,est,u=None,totalcls=None):
+            q = weights.weights(self.config, self.cls[self.cltype], qe, u=u)
 
-                wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
-                print("-- Computing term %d/%d, sj = [%d,%d,%d]"%(i+1,q.ntrm,sX,sY,sP))
-                walmbar1 = hp.almxfl(almbar1,wX)
-                walmbar2 = hp.almxfl(almbar2,wY)
+            #sys.exit()
+            print('Running lensing reconstruction')
 
-                # Input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
-                #-----------------------------------------------------------------------------------------------
-                
-                if qe[0]=='B':
-                    SpX, SmX = hp.alm2map_spin([np.zeros_like(walmbar1),1j*walmbar1],self.nside,np.abs(sX),self.lmax)
-                    sys.exit('broken')
+            if qe=='TB' or qe=='EB':
+                # Hack to get TB/EB working. currently not understanding some factors of j
+                print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
+
+                wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
+                wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
+
+                walmbar1 = hp.almxfl(almbar1,wX1) # T1/E1 
+                walmbar3 = hp.almxfl(almbar1,wX3) # T3/E3 
+                walmbar2 = hp.almxfl(almbar2,wY1) # B2    
+
+                SpX1, SmX1 = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)], self.nside, 1, self.lmax)
+                SpX3, SmX3 = hp.alm2map_spin([walmbar3,np.zeros_like(walmbar3)], self.nside, 3, self.lmax)
+                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
+                #SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
+
+                SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
+                SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
+
+                glm,clm = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
+
+                if qe=='TT' or qe=='EE' or qe=='TE' or qe=='ET':
+                    nrm=0.5
+                elif qe=='EB':
+                    nrm=-1
                 else:
-                    SpX, SmX = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)],self.nside,np.abs(sX),self.lmax)
+                    nrm=1
 
-                X  = SpX+1j*SmX # Complex map _{+s}S or _{-s}S
+                self.glm[qe] = hp.almxfl(glm,nrm*wP1)
+                self.clm[qe] = hp.almxfl(clm,nrm*wP1)
 
-                if sX<0:
-                    X = np.conj(X)*(-1)**(sX)
-                #-----------------------------------------------------------------------------------------------
-                if qe[1]=='B':
-                    SpY, SmY = hp.alm2map_spin([np.zeros_like(walmbar2),1j*walmbar2],self.nside,np.abs(sY),self.lmax)
-                    sys.exit('broken')
+            elif qe=='BT' or qe=='BE':
+                # Hack to get TB/EB working. currently not understanding some factors of j
+                print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
+                print('using est: %s'%qe )
+                wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
+                wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
+
+                walmbar1 = hp.almxfl(almbar2,wY1)
+                walmbar3 = hp.almxfl(almbar2,wY3)
+                walmbar2 = hp.almxfl(almbar1,wX1)
+
+                SpX1, SmX1 = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)], self.nside, 1, self.lmax)
+                SpX3, SmX3 = hp.alm2map_spin([walmbar3,np.zeros_like(walmbar3)], self.nside, 3, self.lmax)
+                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
+                #SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
+
+                SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
+                SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
+
+                glm,clm = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
+
+                if qe=='TT' or qe=='EE' or qe=='TE' or qe=='ET':
+                    nrm=0.5
+                elif qe=='BE':
+                    nrm=-1
                 else:
-                    SpY, SmY = hp.alm2map_spin([walmbar2,np.zeros_like(walmbar2)],self.nside,np.abs(sY),self.lmax)
+                    nrm=1
 
-                Y  = SpY+1j*SmY
+                self.glm[qe] = hp.almxfl(glm,nrm*wP1)
+                self.clm[qe] = hp.almxfl(clm,nrm*wP1)
 
-                if sY<0:
-                    Y = np.conj(Y)*(-1)**(sY)
-                
-                #-----------------------------------------------------------------------------------------------
+            else:
+                # More traditional quicklens style calculation
+                retglm  = 0
+                retclm  = 0
 
-                XY = X*Y
+                for i in range(0,q.ntrm):
 
-                if sP<0:
-                    XY = np.conj(XY)*(-1)**(sP)
+                    wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
+                    print("-- Computing term %d/%d, sj = [%d,%d,%d]"%(i+1,q.ntrm,sX,sY,sP))
+                    walmbar1 = hp.almxfl(almbar1,wX)
+                    walmbar2 = hp.almxfl(almbar2,wY)
 
-                glm,clm  = hp.map2alm_spin([XY.real,XY.imag], np.abs(sP), self.Lmax)
+                    # Input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
+                    #-----------------------------------------------------------------------------------------------
+                    
+                    if qe[0]=='B':
+                        SpX, SmX = hp.alm2map_spin([np.zeros_like(walmbar1),1j*walmbar1],self.nside,np.abs(sX),self.lmax)
+                        sys.exit('broken')
+                    else:
+                        SpX, SmX = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)],self.nside,np.abs(sX),self.lmax)
 
-                glm = hp.almxfl(glm,0.5*wP)
-                clm = hp.almxfl(clm,0.5*wP)
+                    X  = SpX+1j*SmX # Complex map _{+s}S or _{-s}S
 
-                retglm  += glm
-                retclm  += clm
+                    if sX<0:
+                        X = np.conj(X)*(-1)**(sX)
+                    #-----------------------------------------------------------------------------------------------
+                    if qe[1]=='B':
+                        SpY, SmY = hp.alm2map_spin([np.zeros_like(walmbar2),1j*walmbar2],self.nside,np.abs(sY),self.lmax)
+                        sys.exit('broken')
+                    else:
+                        SpY, SmY = hp.alm2map_spin([walmbar2,np.zeros_like(walmbar2)],self.nside,np.abs(sY),self.lmax)
 
-            self.glm = retglm 
-            self.clm = retclm   
-            #if qe == self.qe:
-            #    self.retglm = retglm
-            #    self.retclm = retclm
-            #elif qe == 'TTprf':
-            #    self.retglm_prf = retglm
-            #    self.retclm_prf = retclm
+                    Y  = SpY+1j*SmY
 
-            return retglm, retclm
+                    if sY<0:
+                        Y = np.conj(Y)*(-1)**(sY)
+                    
+                    #-----------------------------------------------------------------------------------------------
+
+                    XY = X*Y
+
+                    if sP<0:
+                        XY = np.conj(XY)*(-1)**(sP)
+
+                    glm,clm  = hp.map2alm_spin([XY.real,XY.imag], np.abs(sP), self.Lmax)
+
+                    glm = hp.almxfl(glm,0.5*wP)
+                    clm = hp.almxfl(clm,0.5*wP)
+
+                    retglm  += glm
+                    retclm  += clm
+
+                self.glm[qe] = retglm 
+                self.clm[qe] = retclm   
+                #if qe == self.qe:
+                #    self.retglm = retglm
+                #    self.retclm = retclm
+                #elif qe == 'TTprf':
+                #    self.retglm_prf = retglm
+                #    self.retclm_prf = retclm
+
+        return self.glm[qe], self.clm[qe]
 
     def get_aresp(self,flX,flY,qe1=None,qe2=None,u=None):
         '''
@@ -314,6 +318,8 @@ class qest_gmv(object):
         self.Lmax    = self.config['Lmax']
         self.cltype  = self.config['cltype']
         self.cls     = cls
+        self.glm = {}
+        self.clm = {}
 
         if self.cltype!='ucmb' and self.cltype!='lcmb' and self.cltype!='grad':
             sys.exit('cltype must be ucmb, lcmb or grad')
@@ -345,180 +351,183 @@ class qest_gmv(object):
         clm:
           Curl component of the plm
         '''
-        if qe == 'TTEETEprf':
-            assert u is not None, "Need profile function to compute this estimator"
-
-        if qe == 'all':
-            ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'TB_GMV', 'EB_GMV']
-            idxs = [0, 1, 2, 3, 4]
-        elif qe == 'TTEETE':
-            ests = ['TT_GMV', 'EE_GMV', 'TE_GMV']
-            idxs = [0, 1, 2]
-        elif qe == 'TBEB':
-            ests = ['TB_GMV', 'EB_GMV']
-            idxs = [3, 4]
-        elif qe == 'TTEETEprf':
-            ests = ['TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF']
-            idxs = [0, 1, 2]
+        if qe in self.glm:
+            print("We've already computed this!")
         else:
-            print("For GMV, we can only calculate estimators for argument qe 'all', 'TTEETE', 'TBEB', or 'TTEETEprf'")
+            if qe == 'TTEETEprf':
+                assert u is not None, "Need profile function to compute this estimator"
 
-        print('Running lensing reconstruction')
-        retglm = 0
-        retclm = 0
-
-        for i, est in enumerate(ests):
-            print('Doing estimator: %s'%est)
-            idx = idxs[i]
-            alm1 = alm1all[:,idx]
-            alm2 = alm2all[:,idx]
-            q = weights.weights(self.config,self.cls[self.cltype],est,u=u,totalcls=totalcls)
-            glmsum = 0
-            clmsum = 0
-
-            if est=='TB_GMV' or est=='EB_GMV':
-                print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
-
-                # TB first!
-                wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
-                wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
-
-                walm1 = hp.almxfl(alm1,wX1) # T1
-                walm3 = hp.almxfl(alm1,wX3) # T3
-                walm2 = hp.almxfl(alm2,wY1) # B2
-
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
-
-                SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
-                SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
-
-                glm_TB,clm_TB = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
-
-                nrm = 1
-
-                glm_TB = hp.almxfl(glm_TB,nrm*wP1)
-                clm_TB = hp.almxfl(clm_TB,nrm*wP1)
-
-                # EB next!
-                wX1,wY1,wP1,sX1,sY1,sP1 = q.w[4][0],q.w[4][1],q.w[4][2],q.s[4][0],q.s[4][1],q.s[4][2]
-                wX3,wY3,wP3,sX3,sY3,sP3 = q.w[6][0],q.w[6][1],q.w[6][2],q.s[6][0],q.s[6][1],q.s[6][2]
-
-                walm1 = hp.almxfl(alm1,wX1) # E1
-                walm3 = hp.almxfl(alm1,wX3) # E3
-                walm2 = hp.almxfl(alm2,wY1) # B2
-
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
-
-                SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
-                SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
-
-                glm_EB,clm_EB = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
-
-                nrm = -1
-
-                glm_EB = hp.almxfl(glm_EB,nrm*wP1)
-                clm_EB = hp.almxfl(clm_EB,nrm*wP1)
-
-                # BT now...
-                wX1,wY1,wP1,sX1,sY1,sP1 = q.w[12][0],q.w[12][1],q.w[12][2],q.s[12][0],q.s[12][1],q.s[12][2]
-                wX3,wY3,wP3,sX3,sY3,sP3 = q.w[14][0],q.w[14][1],q.w[14][2],q.s[14][0],q.s[14][1],q.s[14][2]
-
-                walm1 = hp.almxfl(alm1,wY1) # T1
-                walm3 = hp.almxfl(alm1,wY3) # T3
-                walm2 = hp.almxfl(alm2,wX1) # B2
-
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
-
-                SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
-                SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
-
-                glm_BT,clm_BT = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
-
-                nrm = 1
-
-                glm_BT = hp.almxfl(glm_BT,nrm*wP1)
-                clm_BT = hp.almxfl(clm_BT,nrm*wP1)
-
-                # BE now...
-                wX1,wY1,wP1,sX1,sY1,sP1 = q.w[16][0],q.w[16][1],q.w[16][2],q.s[16][0],q.s[16][1],q.s[16][2]
-                wX3,wY3,wP3,sX3,sY3,sP3 = q.w[18][0],q.w[18][1],q.w[18][2],q.s[18][0],q.s[18][1],q.s[18][2]
-
-                walm1 = hp.almxfl(alm1,wY1) # E1
-                walm3 = hp.almxfl(alm1,wY3) # E3
-                walm2 = hp.almxfl(alm2,wX1) # B2
-
-                SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
-                SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
-                SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
-
-                SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
-                SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
-
-                glm_BE,clm_BE = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
-
-                nrm = -1
-
-                glm_BE = hp.almxfl(glm_BE,nrm*wP1)
-                clm_BE = hp.almxfl(clm_BE,nrm*wP1)
-
-                # Sum
-                glmsum = glm_TB + glm_EB + glm_BT + glm_BE
-                clmsum = clm_TB + clm_EB + clm_BT + glm_BE
-
+            if qe == 'all':
+                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'TB_GMV', 'EB_GMV']
+                idxs = [0, 1, 2, 3, 4]
+            elif qe == 'TTEETE':
+                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV']
+                idxs = [0, 1, 2]
+            elif qe == 'TBEB':
+                ests = ['TB_GMV', 'EB_GMV']
+                idxs = [3, 4]
+            elif qe == 'TTEETEprf':
+                ests = ['TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF']
+                idxs = [0, 1, 2]
             else:
-                # More traditional quicklens style calculation
-                for i in range(0,q.ntrm):
-                    wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
-                    print("Computing term %d/%d sj = [%d,%d,%d] of est %s"%(i+1,q.ntrm,sX,sY,sP,est))
-                    walm1 = hp.almxfl(alm1,wX)
-                    walm2 = hp.almxfl(alm2,wY)
+                print("For GMV, we can only calculate estimators for argument qe 'all', 'TTEETE', 'TBEB', or 'TTEETEprf'")
 
-                    # Input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
-                    # -----------------------------------------------------------------------------------------------
-                    if est[0]=='B':
-                        SpX, SmX = hp.alm2map_spin([np.zeros_like(walm1),1j*walm1], self.nside, np.abs(sX), self.lmax)
-                    else:
-                        SpX, SmX = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, np.abs(sX), self.lmax)
+            print('Running lensing reconstruction')
+            retglm = 0
+            retclm = 0
 
-                    X = SpX+1j*SmX # Complex map _{+s}S or _{-s}S
+            for i, est in enumerate(ests):
+                print('Doing estimator: %s'%est)
+                idx = idxs[i]
+                alm1 = alm1all[:,idx]
+                alm2 = alm2all[:,idx]
+                q = weights.weights(self.config,self.cls[self.cltype],est,u=u,totalcls=totalcls)
+                glmsum = 0
+                clmsum = 0
 
-                    if sX<0:
-                        X = np.conj(X)*(-1)**(sX)
-                    # -----------------------------------------------------------------------------------------------
-                    if est[1]=='B':
-                        SpY, SmY = hp.alm2map_spin([np.zeros_like(walm2),1j*walm2], self.nside, np.abs(sY), self.lmax)
-                    else:
-                        SpY, SmY = hp.alm2map_spin([walm2,np.zeros_like(walm2)], self.nside, np.abs(sY), self.lmax)
+                if est=='TB_GMV' or est=='EB_GMV':
+                    print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
 
-                    Y = SpY+1j*SmY
+                    # TB first!
+                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
+                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
 
-                    if sY<0:
-                        Y = np.conj(Y)*(-1)**(sY)
-                    # -----------------------------------------------------------------------------------------------
+                    walm1 = hp.almxfl(alm1,wX1) # T1
+                    walm3 = hp.almxfl(alm1,wX3) # T3
+                    walm2 = hp.almxfl(alm2,wY1) # B2
 
-                    XY = X*Y
+                    SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                    SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                    SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
 
-                    if sP<0:
-                        XY = np.conj(XY)*(-1)**(sP)
+                    SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
+                    SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
 
-                    glm,clm  = hp.map2alm_spin([XY.real,XY.imag], np.abs(sP), self.Lmax)
+                    glm_TB,clm_TB = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
 
-                    glmsum += hp.almxfl(glm,0.5*wP)
-                    clmsum += hp.almxfl(clm,0.5*wP)
+                    nrm = 1
 
-            retglm += glmsum
-            retclm += clmsum
+                    glm_TB = hp.almxfl(glm_TB,nrm*wP1)
+                    clm_TB = hp.almxfl(clm_TB,nrm*wP1)
 
-        self.glm = retglm
-        self.clm = retclm
+                    # EB next!
+                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[4][0],q.w[4][1],q.w[4][2],q.s[4][0],q.s[4][1],q.s[4][2]
+                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[6][0],q.w[6][1],q.w[6][2],q.s[6][0],q.s[6][1],q.s[6][2]
 
-        return retglm,retclm
+                    walm1 = hp.almxfl(alm1,wX1) # E1
+                    walm3 = hp.almxfl(alm1,wX3) # E3
+                    walm2 = hp.almxfl(alm2,wY1) # B2
+
+                    SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                    SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                    SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
+
+                    SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
+                    SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
+
+                    glm_EB,clm_EB = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
+
+                    nrm = -1
+
+                    glm_EB = hp.almxfl(glm_EB,nrm*wP1)
+                    clm_EB = hp.almxfl(clm_EB,nrm*wP1)
+
+                    # BT now...
+                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[12][0],q.w[12][1],q.w[12][2],q.s[12][0],q.s[12][1],q.s[12][2]
+                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[14][0],q.w[14][1],q.w[14][2],q.s[14][0],q.s[14][1],q.s[14][2]
+
+                    walm1 = hp.almxfl(alm1,wY1) # T1
+                    walm3 = hp.almxfl(alm1,wY3) # T3
+                    walm2 = hp.almxfl(alm2,wX1) # B2
+
+                    SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                    SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                    SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
+
+                    SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
+                    SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
+
+                    glm_BT,clm_BT = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
+
+                    nrm = 1
+
+                    glm_BT = hp.almxfl(glm_BT,nrm*wP1)
+                    clm_BT = hp.almxfl(clm_BT,nrm*wP1)
+
+                    # BE now...
+                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[16][0],q.w[16][1],q.w[16][2],q.s[16][0],q.s[16][1],q.s[16][2]
+                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[18][0],q.w[18][1],q.w[18][2],q.s[18][0],q.s[18][1],q.s[18][2]
+
+                    walm1 = hp.almxfl(alm1,wY1) # E1
+                    walm3 = hp.almxfl(alm1,wY3) # E3
+                    walm2 = hp.almxfl(alm2,wX1) # B2
+
+                    SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
+                    SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
+                    SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walm2),-1j*walm2], self.nside, 2, self.lmax)
+
+                    SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
+                    SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
+
+                    glm_BE,clm_BE = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
+
+                    nrm = -1
+
+                    glm_BE = hp.almxfl(glm_BE,nrm*wP1)
+                    clm_BE = hp.almxfl(clm_BE,nrm*wP1)
+
+                    # Sum
+                    glmsum = glm_TB + glm_EB + glm_BT + glm_BE
+                    clmsum = clm_TB + clm_EB + clm_BT + glm_BE
+
+                else:
+                    # More traditional quicklens style calculation
+                    for i in range(0,q.ntrm):
+                        wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
+                        print("Computing term %d/%d sj = [%d,%d,%d] of est %s"%(i+1,q.ntrm,sX,sY,sP,est))
+                        walm1 = hp.almxfl(alm1,wX)
+                        walm2 = hp.almxfl(alm2,wY)
+
+                        # Input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
+                        # -----------------------------------------------------------------------------------------------
+                        if est[0]=='B':
+                            SpX, SmX = hp.alm2map_spin([np.zeros_like(walm1),1j*walm1], self.nside, np.abs(sX), self.lmax)
+                        else:
+                            SpX, SmX = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, np.abs(sX), self.lmax)
+
+                        X = SpX+1j*SmX # Complex map _{+s}S or _{-s}S
+
+                        if sX<0:
+                            X = np.conj(X)*(-1)**(sX)
+                        # -----------------------------------------------------------------------------------------------
+                        if est[1]=='B':
+                            SpY, SmY = hp.alm2map_spin([np.zeros_like(walm2),1j*walm2], self.nside, np.abs(sY), self.lmax)
+                        else:
+                            SpY, SmY = hp.alm2map_spin([walm2,np.zeros_like(walm2)], self.nside, np.abs(sY), self.lmax)
+
+                        Y = SpY+1j*SmY
+
+                        if sY<0:
+                            Y = np.conj(Y)*(-1)**(sY)
+                        # -----------------------------------------------------------------------------------------------
+
+                        XY = X*Y
+
+                        if sP<0:
+                            XY = np.conj(XY)*(-1)**(sP)
+
+                        glm,clm  = hp.map2alm_spin([XY.real,XY.imag], np.abs(sP), self.Lmax)
+
+                        glmsum += hp.almxfl(glm,0.5*wP)
+                        clmsum += hp.almxfl(clm,0.5*wP)
+
+                retglm += glmsum
+                retclm += clmsum
+
+            self.glm[qe] = retglm 
+            self.clm[qe] = retclm   
+
+        return self.glm[qe], self.clm[qe]
 
     def get_aresp(self,qe1=None,qe2=None,u=None,filename=None):
         '''

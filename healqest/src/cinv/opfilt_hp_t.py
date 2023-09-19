@@ -109,6 +109,7 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
             #self.slinv = utils.cli(cltt_2d + n_cls['tt'] * utils.cli(tf2d*tf2d) )
 
         else:
+            sys.exit('bad path')
             cltt = s_cls['tt'][:lmax+1]
             if n_cls is None: n_cls = {key: np.zeros(lmax+1) for key in s_cls}
             if b_transf is None:
@@ -182,7 +183,7 @@ class NoiseInverseFilter: #alm_filter_ninv(object):
             alm *= self.tf2d
         tmap = alm2map(alm, hp.npix2nside(npix))
         self.apply_map(tmap)
-        alm[:] = map2alm(tmap, lmax=hp.Alm.getlmax(alm.size), iter=0)
+        alm[:] = map2alm(tmap, lmax=hp.Alm.getlmax(alm.size),use_pixel_weights=True)
         if self.tf2d is None:
             hp.almxfl(alm, self.b_transf  *  (npix / (4. * np.pi)), inplace=True)
         else:
@@ -191,4 +192,3 @@ class NoiseInverseFilter: #alm_filter_ninv(object):
     def apply_map(self, tmap):
         """Missing doc. """
         tmap *= self.n_inv
-

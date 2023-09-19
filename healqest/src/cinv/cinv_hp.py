@@ -125,8 +125,8 @@ class cinv_t(cinv):
         if nl is not None:
             print('nl was provided, applying rescal_cl')
             print(rescal_cl)
-            nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl)) for key in nl}
-            self.rescaled_nl   = nl_dl
+            nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl**2)) for key in nl}
+            #self.rescaled_nl   = nl_dl
         else:
             sys.exit('nl was NOT provided')
             nl_dl = nl
@@ -144,7 +144,7 @@ class cinv_t(cinv):
         self.tf2d = tf2d
         self.ninv = ninv
 
-        n_inv_filt = hp_utils.jit(opfilt_hp_t.NoiseInverseFilter, ninv,transf_dl,tf2d=tf2d_dl)
+        n_inv_filt = hp_utils.jit(opfilt_hp_t.NoiseInverseFilter, ninv, transf_dl, tf2d=tf2d_dl)
         s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter, dl, lmax, n_cls=nl_dl, tf2d=tf2d_dl, b_transf=transf_dl)
         self.n_inv_filt = n_inv_filt
         self.s_inv_filt = s_inv_filt
@@ -477,6 +477,44 @@ class library_sepTP(object):
             hp.almxfl(elm, self.lfilt, inplace=True)
         return elm
 
+    def get_sim_eblm(self, idx):
+        """Returns an inverse-filtered E-polarization simulation.
+            Args:idx: simulation index
+            Returns: inverse-filtered E-polarization healpy alm array
+        """
+        if self.soltn_lib is None:
+            soltn = None
+        else:
+            soltn = np.array([self.soltn_lib.get_sim_emliklm(idx), self.soltn_lib.get_sim_bmliklm(idx)])
+
+        elm, blm = self._apply_ivf_p(self.sim_lib.get_pmap(idx,add_noise=self.add_noise), soltn=soltn)
+
+
+        '''
+        tfname = os.path.join(self.lib_dir, 'sim_%04d_elm.fits'%idx  if idx >= 0 else 'dat_elm.fits')
+        if not os.path.exists(tfname):
+            print("elm file doesnt exit so creating one")
+
+            if self.soltn_lib is None:
+                soltn = None
+            else:
+                soltn = np.array([self.soltn_lib.get_sim_emliklm(idx), self.soltn_lib.get_sim_bmliklm(idx)])
+
+            elm, blm = self._apply_ivf_p(self.sim_lib.get_pmap(idx,add_noise=self.add_noise), soltn=soltn)
+
+            if self.cache:
+                hp.write_alm(tfname, elm, overwrite=True)
+                hp.write_alm(os.path.join(self.lib_dir, 'sim_%04d_blm.fits'%idx if idx >= 0 else 'dat_blm.fits'), blm, overwrite=True)
+        else:
+            elm = hp.read_alm(tfname)
+        '''
+        if self.lfilt is not None:
+            hp.almxfl(elm, self.lfilt, inplace=True)
+            hp.almxfl(blm, self.lfilt, inplace=True)
+        return elm,blm
+
+
+
     def get_sim_blm(self, idx):
         """Returns an inverse-filtered B-polarization simulation.
             Args: idx: simulation index
@@ -531,6 +569,16 @@ class library_sepTP(object):
         print("Returning inverse variance filtered tlm")
         fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['tt'])
         return hp.almxfl(self.get_sim_tlm(idx), fl)
+
+    def get_sim_eblmivf(self, idx):
+        """Returns an inverse variance filtered E-polarization simulation.
+            Args: idx: simulation index
+            Returns: Wiener-filtered E-polarization healpy alm array
+        """
+        print("Returning inverse variance filtered elm")
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['ee'])
+        elm,blm = self.get_sim_eblm(idx)
+        return hp.almxfl(elm, fl), hp.almxfl(blm, fl)
 
     def get_sim_elmivf(self, idx):
         """Returns an inverse variance filtered E-polarization simulation.
@@ -637,5 +685,4 @@ class library_cinv_sepTP(library_sepTP):
         assert not hasattr(self.cinv_p.cl, 'eb')
         return  hp.almxfl(self.get_sim_blm(idx), self.cinv_t.cl['bb'])
     '''
-
 

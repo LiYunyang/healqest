@@ -31,11 +31,7 @@ class qest(object):
         #self.almbar1 = almbar1
         #self.almbar2 = almbar2
 
-        self.lmint   = self.config['lmint']
-        self.lminp   = self.config['lminp']        
-        self.lmaxt   = self.config['lmaxt']
-        self.lmaxp   = self.config['lmaxp']
-        self.lmax    = self.config['lmax'] = max(self.lmaxt,self.lmaxp)
+        self.lmax    = self.config['lmax'] = max(config['lmaxT'],config['lmaxP'])
         self.Lmax    = self.config['Lmax']
         self.cltype  = self.config['cltype']
         self.glm = {}
@@ -53,7 +49,7 @@ class qest(object):
             self.nside   = utils.get_nside(self.Lmax)
         
         print("-- Nside to project: %d"%self.nside)
-        print("-- lmax:%d"%max(self.lmaxt,self.lmaxp))
+        print("-- lmax:%d"%self.lmax)
         print("-- Lmax:%d"%self.Lmax)
         print("-- Using %s cls"%self.cltype)
 
@@ -90,7 +86,7 @@ class qest(object):
                 assert u is not None, "Need profile function to compute this estimator"
 
             #ef __init__(self,config,cls,est,u=None,totalcls=None):
-            q = weights.weights(self.config, self.cls[self.cltype], qe, u=u)
+            q = weights.weights(qe, self.cls[self.cltype], self.lmax, u=u)
 
             #sys.exit()
             print('Running lensing reconstruction')
@@ -310,11 +306,7 @@ class qest_gmv(object):
 
         print('Setting up lensing reconstruction')
         self.config     = config
-        self.lmint   = self.config['lmint']
-        self.lminp   = self.config['lminp']        
-        self.lmaxt   = self.config['lmaxt']
-        self.lmaxp   = self.config['lmaxp']
-        self.lmax    = self.config['lmax'] = max(self.lmaxt,self.lmaxp)
+        self.lmax    = self.config['lmax'] = max(config['lmaxT'],config['lmaxP'])
         self.Lmax    = self.config['Lmax']
         self.cltype  = self.config['cltype']
         self.cls     = cls
@@ -331,7 +323,7 @@ class qest_gmv(object):
             self.nside   = utils.get_nside(self.Lmax)
         
         print("-- Nside to project: %d"%self.nside)
-        print("-- lmax:%d"%max(self.lmaxt,self.lmaxp))
+        print("-- lmax:%d"%self.lmax)
         print("-- Lmax:%d"%self.Lmax)
         print("-- Using %s cls"%self.cltype)
 
@@ -381,7 +373,7 @@ class qest_gmv(object):
                 idx = idxs[i]
                 alm1 = alm1all[:,idx]
                 alm2 = alm2all[:,idx]
-                q = weights.weights(self.config,self.cls[self.cltype],est,u=u,totalcls=totalcls)
+                q = weights.weights(qe,self.cls[self.cltype],self.lmax,u=u,totalcls=totalcls)
                 glmsum = 0
                 clmsum = 0
 

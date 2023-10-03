@@ -1,3 +1,5 @@
+#quicklens routines for QE covariance calc
+
 import numpy as np
 import wignerd
 
@@ -17,6 +19,20 @@ def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY):
     ret[:] *= 2.0 # multiply by 2 because qe_cov_fill_helper returns 1/2 the response.
     return ret.real
 
+def fill_clqq_fullsky(qeXY, ret, fXX, fXY, fYY):
+    """ compute the ensemble-averaged auto-power < |q^{XY}(L)[\bar{X}, \bar{Y}]|^2 >,
+    given estimates of the auto- and cross-spectra of \bar{X} and \bar{Y}.
+
+         * ret             = complex numpy array whose length (lmax+1) defines the maximum multipole
+                             at which to evaluate the auto-power.
+         * fXX             = estimate of <\bar{X} \bar{X}^*>
+         * fXY             = estimate of <\bar{X} \bar{Y}^*>
+         * fYY             = estimate of <\bar{Y} \bar{Y}^*>
+    """
+    ret[:] = 0.0
+    qe_cov_fill_helper_fullsky( qeXY, qeXY, ret, fXX, fYY, switch_ZA=False, conj_ZA=True )
+    qe_cov_fill_helper_fullsky( qeXY, qeXY, ret, fXY, fXY, switch_ZA=True,  conj_ZA=True )
+    return ret
     
 def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA=False):
     """ a full-sky version of qe_cov_fill_helper_flatsky.

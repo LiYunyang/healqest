@@ -34,7 +34,7 @@ class gmv_resp(object):
         self.save_path = save_path
 
         # L = l1 + l2; L for reconstructed phi field
-        self.L = np.arange(self.l1Max+1)
+        self.L = np.arange(self.Lmax+1)
         self.Nl = len(self.L)
         #TODO: Try increasing!
         self.N_phi = 50  # Number of steps for angular integration steps

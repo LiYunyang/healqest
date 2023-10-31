@@ -225,7 +225,7 @@ class qest(object):
         flX, flY
           1D real arrays representing the filter functions for the X and Y fields
         qe1: string
-          First estimator; if None, assumes it is self.qe
+          First estimator
         qe2: string
           Second estimator; if None, assumes it is the same as qe1
 
@@ -235,14 +235,14 @@ class qest(object):
           Analytical response function
         '''
         if qe1 is None:
-            qe1 = self.qe
+            assert 0, "qe1 must be defined" 
                               
-        qeXY = weights.weights(self.config, self.cls[self.cltype], qe1,u=u)
+        qeXY = weights.weights(qe1, self.cls[self.cltype], self.lmax, u=u)
         
         if qe2 is None or qe2==qe1:
             qeZA = None
         else:
-            qeZA = weights.weights(self.config, self.cls[self.cltype],qe2,u=u)
+            qeZA = weights.weights(qe2, self.cls[self.cltype], self.lmax, u=u)
         
         aresp = resp.fill_resp(qeXY,np.zeros(self.Lmax+1, dtype=np.complex_),flX,flY,qeZA=qeZA)
         
@@ -269,8 +269,8 @@ class qest(object):
         assert qe=='TT', "We only harden for qe 'TT', got: %s"%qe
 
         ss = self.get_aresp(flX, flY, qe1=qe_hrd, u=u)
-        es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=self.qe, u=u)
-        ee = self.get_aresp(flX, flY)
+        es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=qe, u=u)
+        ee = self.get_aresp(flX, flY, qe1=qe)
 
         plm1,_ = self.eval(qe,almbar1,almbar2)
         plm2,_ = self.eval(qe_hrd,almbar1,almbar2,u)

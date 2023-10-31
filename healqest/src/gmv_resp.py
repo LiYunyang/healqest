@@ -12,7 +12,9 @@ class gmv_resp(object):
     TODO: This is flat sky!
     '''
 
-    def __init__(self,config,cltype,totalcls,u=None,save_path=None):
+    def __init__(self,config,cltype,totalcls,u=None,rlzcls=None,semi=False,save_path=None):
+
+        if semi: assert rlzcls is not None, "must provide rlzcls for semi-analytic N0"
 
         cltt = totalcls[:,0]
         clee = totalcls[:,1]
@@ -25,10 +27,10 @@ class gmv_resp(object):
         self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
 
         self.Lmax = config['Lmax']
-        self.l1Min = config['lmint']
+        self.l1Min = config['lmin']
         # Max value for l1 and l2 is taken to be same
-        self.l1Max = max(config['lmaxt'],config['lmaxp'])
-        self.u = u
+        self.l1Max = max(config['lmaxT'],config['lmaxP'])
+        self.u = interp1d(np.arange(len(u)), u, kind='linear', bounds_error=False, fill_value=0.)
         self.save_path = save_path
 
         # L = l1 + l2; L for reconstructed phi field
@@ -44,6 +46,9 @@ class gmv_resp(object):
         self.slee = interp1d(np.arange(len(sl['ee'])), sl['ee'], kind='linear', bounds_error=False, fill_value=0.)
         self.slbb = interp1d(np.arange(len(sl['bb'])), sl['bb'], kind='linear', bounds_error=False, fill_value=0.)
         self.slte = interp1d(np.arange(len(sl['te'])), sl['te'], kind='linear', bounds_error=False, fill_value=0.)
+
+        self.rlzcls = rlzcls
+        self.semi   = semi
 
     """
     L = l1 + l2
@@ -121,17 +126,17 @@ class gmv_resp(object):
         u = self.u
 
         if XY == 'TT':
-            result = u
+            result = u(l_1)
         elif XY == 'EE':
-            result = np.zeros(len(u))
+            result = np.zeros(len(l_1))
         elif XY == 'TE':
-            result = np.zeros(len(u))
+            result = np.zeros(len(l_1))
         elif XY == 'TB':
-            result = np.zeros(len(u))
+            result = np.zeros(len(l_1))
         elif XY == 'EB':
-            result = np.zeros(len(u))
+            result = np.zeros(len(l_1))
         elif XY == 'BB':
-            result = np.zeros(len(u))
+            result = np.zeros(len(l_1))
         return result
 
     def M_1(self, L, l_1, phi1):
@@ -139,28 +144,38 @@ class gmv_resp(object):
         l_2 = self.l2(L, l_1, phi1)
         m1 = np.zeros((len(l_1), 4, 4))
 
-        m1[:, 0, 0] = 2.*self.totalTT(l_1)*self.totalTT(l_2)
-        m1[:, 1, 1] = 2.*self.totalEE(l_1)*self.totalEE(l_2)
-        m1[:, 2, 2] = 0.5*(self.totalTT(l_1)*self.totalEE(l_2) +
-                           self.totalEE(l_1)*self.totalTT(l_2)) + \
-                           self.totalTE(l_1)*self.totalTE(l_2)
-        m1[:, 3, 3] = 0.5*(self.totalTT(l_1)*self.totalEE(l_2) +
-                           self.totalEE(l_1)*self.totalTT(l_2)) - \
-                           self.totalTE(l_1)*self.totalTE(l_2)
-        m1[:, 0, 1] = m1[:, 1, 0] = 2.*self.totalTE(l_1)*self.totalTE(l_2)
+        if self.semi:
+            ll  = np.arange(len(self.rlzcls[:,0]))
+            tTT = interp1d(ll,self.rlzcls[:,0],kind='linear',bounds_error=False,fill_value=0.)
+            tEE = interp1d(ll,self.rlzcls[:,1],kind='linear',bounds_error=False,fill_value=0.)
+            tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
+        else: 
+            tTT = self.totalTT
+            tEE = self.totalEE
+            tTE = self.totalTE
+
+        m1[:, 0, 0] = 2.*tTT(l_1)*tTT(l_2)
+        m1[:, 1, 1] = 2.*tEE(l_1)*tEE(l_2)
+        m1[:, 2, 2] = 0.5*(tTT(l_1)*tEE(l_2) +
+                           tEE(l_1)*tTT(l_2)) + \
+                           tTE(l_1)*tTE(l_2)
+        m1[:, 3, 3] = 0.5*(tTT(l_1)*tEE(l_2) +
+                           tEE(l_1)*tTT(l_2)) - \
+                           tTE(l_1)*tTE(l_2)
+        m1[:, 0, 1] = m1[:, 1, 0] = 2.*tTE(l_1)*tTE(l_2)
 
         ################################
 
-        m1[:, 0, 2] = m1[:, 2, 0] = (self.totalTT(l_1)*self.totalTE(l_2) +
-                                     self.totalTE(l_1)*self.totalTT(l_2))
-        m1[:, 0, 3] = m1[:, 3, 0] = (self.totalTT(l_1)*self.totalTE(l_2) -
-                                     self.totalTE(l_1)*self.totalTT(l_2))
-        m1[:, 1, 2] = m1[:, 2, 1] = (self.totalEE(l_1)*self.totalTE(l_2) +
-                                     self.totalTE(l_1)*self.totalEE(l_2))
-        m1[:, 1, 3] = m1[:, 3, 1] = -(self.totalEE(l_1)*self.totalTE(l_2) -
-                                     self.totalTE(l_1)*self.totalEE(l_2))
-        m1[:, 2, 3] = m1[:, 3, 2] = 0.5*(self.totalTT(l_1)*self.totalEE(l_2) -
-                                         self.totalEE(l_1)*self.totalTT(l_2))
+        m1[:, 0, 2] = m1[:, 2, 0] = (tTT(l_1)*tTE(l_2) +
+                                     tTE(l_1)*tTT(l_2))
+        m1[:, 0, 3] = m1[:, 3, 0] = (tTT(l_1)*tTE(l_2) -
+                                     tTE(l_1)*tTT(l_2))
+        m1[:, 1, 2] = m1[:, 2, 1] = (tEE(l_1)*tTE(l_2) +
+                                     tTE(l_1)*tEE(l_2))
+        m1[:, 1, 3] = m1[:, 3, 1] = -(tEE(l_1)*tTE(l_2) -
+                                     tTE(l_1)*tEE(l_2))
+        m1[:, 2, 3] = m1[:, 3, 2] = 0.5*(tTT(l_1)*tEE(l_2) -
+                                         tEE(l_1)*tTT(l_2))
 
         return m1
 
@@ -255,13 +270,18 @@ class gmv_resp(object):
             # L = l1 + l2 thus max L = 2*l1
             return 0.
 
-        def integrand(l_1, phil):
+        def integrand(l_1, phil, semi=self.semi):
 
             l_2 = self.l2(L, l_1, phil)
             M1invf1 = self.F1prime(L, l_1, phil)
-            f_1 = self.f_1(L, l_1, phil)
-            Fdotf = np.sum(M1invf1*f_1, -1)
-            result = Fdotf
+            if semi:
+                M1 = self.M_1(L, l_1, phil)
+                M1_M1invf1 = np.einsum('ijk, ij -> ik', M1, M1invf1)
+                result = np.sum(M1invf1*M1_M1invf1, -1)
+            else:
+                f_1 = self.f_1(L, l_1, phil)
+                Fdotf = np.sum(M1invf1*f_1, -1)
+                result = Fdotf
             result *= 2*l_1
             """
             Factor of 2 above because phi integral is symmetric.
@@ -308,7 +328,7 @@ class gmv_resp(object):
             # L = l1 + l2 thus max L = 2*l1
             return 0.
 
-        def integrand(l_1, phil):
+        def integrand(l_1, phil, semi=self.semi):
 
             l_2 = self.l2(L, l_1, phil)
 
@@ -318,9 +338,15 @@ class gmv_resp(object):
             else:
                 # For R^SS
                 M1invf1 = self.F1prime_PRF(L, l_1, phil)
-            f_1 = self.f_1_PRF(L, l_1, phil)
-            Fdotf = np.sum(M1invf1*f_1, -1)
-            result = Fdotf
+            if semi:
+                M1 = self.M_1(L, l_1, phil)
+                M1_M1invf1 = np.einsum('ijk, ij -> ik', M1, M1invf1)
+                if cross: M1invf1 = self.F1prime_PRF(L, l_1, phil)
+                result = np.sum(M1invf1*M1_M1invf1, -1)
+            else:
+                f_1 = self.f_1_PRF(L, l_1, phil)
+                Fdotf = np.sum(M1invf1*f_1, -1)
+                result = Fdotf
             result *= 2*l_1
             """
             Factor of 2 above because phi integral is symmetric.
@@ -356,12 +382,24 @@ class gmv_resp(object):
         return result
 
     def M_2(self, L, l_1, phi1):
-
         m2 = np.zeros((len(l_1), 2, 2))
         l_2 = self.l2(L, l_1, phi1)
-        m2[:, 0, 0] = (self.totalTT(l_1)*self.totalBB(l_2))
-        m2[:, 1, 1] = (self.totalEE(l_1)*self.totalBB(l_2))
-        m2[:, 0, 1] = m2[:, 1, 0] = (self.totalTE(l_1)*self.totalBB(l_2))
+
+        if self.semi:
+            ll  = np.arange(len(self.rlzcls[:,0]))
+            tTT = interp1d(ll,self.rlzcls[:,0],kind='linear',bounds_error=False,fill_value=0.)
+            tEE = interp1d(ll,self.rlzcls[:,1],kind='linear',bounds_error=False,fill_value=0.)
+            tBB = interp1d(ll,self.rlzcls[:,2],kind='linear',bounds_error=False,fill_value=0.)
+            tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
+        else:
+            tTT = self.totalTT 
+            tEE = self.totalEE           
+            tBB = self.totalBB
+            tTE = self.totalTE
+
+        m2[:, 0, 0] = (tTT(l_1)*tBB(l_2))
+        m2[:, 1, 1] = (tEE(l_1)*tBB(l_2))
+        m2[:, 0, 1] = m2[:, 1, 0] = (tTE(l_1)*tBB(l_2))
         return m2
 
     def f_2(self, L, l_1, phi1):
@@ -422,12 +460,17 @@ class gmv_resp(object):
             # L = l1 + l2 thus max L = 2*l1
             return 0.
 
-        def integrand(l_1, phil):
+        def integrand(l_1, phil, semi=self.semi):
             l_2 = self.l2(L, l_1, phil)
             F2p = self.F2prime(L, l_1, phil)
-            f_2 = self.f_2(L, l_1, phil)
-            Fdotf = np.sum(F2p*f_2, -1)
-            result = Fdotf
+            if semi:
+                M2 = self.M_2(L, l_1, phil)
+                M2_M2invf2 = np.einsum('ijk, ij -> ik', M2, F2p)
+                result = np.sum(F2p*M2_M2invf2, -1)
+            else:
+                f_2 = self.f_2(L, l_1, phil)
+                Fdotf = np.sum(F2p*f_2, -1)
+                result = Fdotf
             result *= 2*l_1  # **2
             """
             Factor of 2 above because phi integral is symmetric.

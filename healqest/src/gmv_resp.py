@@ -30,7 +30,7 @@ class gmv_resp(object):
         self.l1Min = config['lmin']
         # Max value for l1 and l2 is taken to be same
         self.l1Max = max(config['lmaxT'],config['lmaxP'])
-        self.u = interp1d(np.arange(len(u)), u, kind='linear', bounds_error=False, fill_value=0.)
+        self.u = interp1d(np.arange(len(u)), u, kind='linear', bounds_error=False, fill_value=0.) if u is not None else None
         self.save_path = save_path
 
         # L = l1 + l2; L for reconstructed phi field

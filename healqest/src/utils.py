@@ -157,7 +157,7 @@ def get_fl(config,mtype,use_unlCls=False):
     else:
         fl = 1.0/(config['cls']['lcmb'][sdict[mtype]][:lmaxTP+1]+config['cls']['totres'][sdict[mtype]][:lmaxTP+1])
     fl[:lmin] = 0
-    if lmax < lmaxTP: fl[lmax:] = 0
+    if lmax < lmaxTP: fl[lmax+1:] = 0
 
     return fl
 

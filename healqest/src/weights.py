@@ -2,16 +2,20 @@ import numpy as np
 import utils 
 
 class weights():
-    def __init__(self,config,cls,est,u=None,totalcls=None):
-
-        self.lmax = lmax = config['lmax']
-
+    def __init__(self,est,cls,lmax,u=None,totalcls=None):
+        """
+          est  = estimator name 'TT'/'TE'/'EE', etc.
+          cls  = dictionary with keys 'tt','te','ee','bb'
+                 spectra (could be lensed cmb spec, XgradX spec etc.) for weights
+          lmax = lmax of Cls for weights
+          u    = f(ell) that describe the power spectrum of a foreground 
+                 for profile hardening (can be array of 1s)
+          totalcls = signal+noise spectra for GMV weights
+        """
+        self.lmax = lmax 
         l  = np.arange(lmax+1,dtype=np.float_)
         print('Computing weights')
          
-        #sl    = {ii:config['cls'][tdict[cltype]][ii] for ii in cls.keys() }
-        
-        #tdict = {'grad':'gcmb', 'len':'lcmb', 'unl':'ucmb' }
         sl    = {ii: cls[ii] for ii in cls.keys() }
 
         if totalcls is not None:
@@ -22,8 +26,6 @@ class weights():
 
         if est=='TTprf' or est=='TT_GMV_PRF' or est=='EE_GMV_PRF' or est=='TE_GMV_PRF' or est=='TB_GMV_PRF' or est=='EB_GMV_PRF':
             assert u is not None, "must provide u(ell)"
-        
-       
 
         if est=='TT_GMV_PRF':
             self.ntrm = 1
@@ -221,7 +223,6 @@ class weights():
             self.ntrm = 24
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            l  = np.arange(lmax+1,dtype=np.float_)
             TB_f1 = -0.25j*np.ones_like(l,dtype=np.float_)
             TB_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TB_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
@@ -297,7 +298,6 @@ class weights():
             self.ntrm = 24
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            l  = np.arange(lmax+1,dtype=np.float_)
             TB_f1 = -0.25j*np.ones_like(l,dtype=np.float_)
             TB_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TB_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
@@ -372,7 +372,7 @@ class weights():
             self.s = { i : {} for i in range(0, self.ntrm) }
             f1 = -0.5*np.ones_like(l)
             f2 = np.nan_to_num(np.sqrt(l*(l+1)))
-            f3 = np.nan_to_num(np.sqrt(l*(l+1)))*sl['tt'][:lmax+1]
+            f3 = np.nan_to_num(np.sqrt(l*(l+1)))*self.sltt[:lmax+1]
             self.w[0][0]=f3; self.w[0][1]=f1; self.w[0][2]=f2; self.s[0][0]=+1; self.s[0][1]=+0; self.s[0][2]=+1
             self.w[1][0]=f3; self.w[1][1]=f1; self.w[1][2]=f2; self.s[1][0]=-1; self.s[1][1]=+0; self.s[1][2]=-1
             self.w[2][0]=f1; self.w[2][1]=f3; self.w[2][2]=f2; self.s[2][0]=+0; self.s[2][1]=-1; self.s[2][2]=-1
@@ -383,10 +383,9 @@ class weights():
             self.ntrm = 8
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            l  = np.arange(lmax+1,dtype=np.float_)
             f1 = -0.25*np.ones_like(l)
             f2 = +np.nan_to_num(np.sqrt(l*(l+1)))
-            f3 = +np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*sl['ee'][:lmax+1]
+            f3 = +np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slee[:lmax+1]
             #f4 = -np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*slee[:lmax+1]
             f4 = np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*sl['ee'][:lmax+1]
             self.w[0][0]=f3; self.w[0][1]=f1; self.w[0][2]=f2; self.s[0][0]=-1; self.s[0][1]=+2; self.s[0][2]=+1
@@ -403,12 +402,11 @@ class weights():
             self.ntrm = 6
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            l  = np.arange(lmax+1,dtype=np.float_)
             f1 = -0.25*np.ones_like(l,dtype=np.float_)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
-            f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*sl['te'][:lmax+1]
+            f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             #f4 = -np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*slte[:lmax+1]
-            f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*sl['te'][:lmax+1]
+            f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
             f5 = -0.50*np.ones_like(l,dtype=np.float_)
             f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*sl['te'][:lmax+1]
@@ -424,7 +422,6 @@ class weights():
             self.ntrm = 6
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            l  = np.arange(lmax+1,dtype=np.float_)
             f1 = -0.25*np.ones_like(l,dtype=np.float_)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
@@ -445,11 +442,10 @@ class weights():
             self.ntrm = 4
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            l  = np.arange(lmax+1,dtype=np.float_)
             f1 = -0.25j*np.ones_like(l,dtype=np.float_)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
-            f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*sl['te'][:lmax+1]
-            f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*sl['te'][:lmax+1]
+            f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
+            f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
             f5 = +0.25j*np.ones_like(l,dtype=np.float_)
             #self.w[0][0]=f4; self.w[0][1]=f5; self.w[0][2]=f2; self.s[0][0]=+3; self.s[0][1]=-2; self.s[0][2]=+1 #from QL
             #self.w[1][0]=f4; self.w[1][1]=f1; self.w[1][2]=f2; self.s[1][0]=-3; self.s[1][1]=+2; self.s[1][2]=-1
@@ -465,7 +461,6 @@ class weights():
             self.ntrm = 4
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            l  = np.arange(lmax+1,dtype=np.float_)
             #f1 = +0.25*np.ones_like(l,dtype=np.float_)
             #f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             #f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*sl['te'][:lmax+1]

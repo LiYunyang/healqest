@@ -194,11 +194,15 @@ def get_fl(config,mtype,use_unlCls=False):
     sdict  = {'T':'tt', 'E':'ee', 'B':'bb' }
     
     lmaxTP = config['lmaxTP']
+    lmax   = config['lmax%s'%('T' if mtype=='T' else 'P')]
+    lmin   = config['lmin']
 
     if use_unlCls:
         fl = 1.0/(config['cls']['ucmb'][sdict[mtype]][:lmaxTP+1]+config['cls']['totres'][sdict[mtype]][:lmaxTP+1])
     else:
         fl = 1.0/(config['cls']['lcmb'][sdict[mtype]][:lmaxTP+1]+config['cls']['totres'][sdict[mtype]][:lmaxTP+1])
+    fl[:lmin] = 0
+    if lmax < lmaxTP: fl[lmax+1:] = 0
 
     return fl
 

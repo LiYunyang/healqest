@@ -2,7 +2,24 @@ import os,sys,git,uuid
 import numpy as np
 import healpy as hp
 from pathlib import Path
-import logging,yaml,pickle
+import yaml,pickle
+import logging as lg
+
+class RelativeSeconds(lg.Formatter):
+    def format(self, record):
+        nhrs  = record.relativeCreated//(1000*60*60)
+        nmins = record.relativeCreated//(1000*60)-nhrs*60
+        nsecs = record.relativeCreated//(1000)-nmins*60
+        record.relativeCreated = "%02d:%02d:%02d"%(nhrs,nmins,nsecs)#, record.relativeCreated//(1000) )
+        #print( dtype(record.relativeCreated//(1000)) )
+        return super(RelativeSeconds, self).format(record)
+
+def setup_logger():
+    print("Setting up logging")
+    lg.basicConfig(level = lg.WARNING)
+    formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
+    lg.root.handlers[0].setFormatter(formatter)
+
 
 def reduce_lmax(alm, lmax=4000):
     """
@@ -37,6 +54,33 @@ def zeropad(cl):
     cl=np.insert(cl,0,0)
     return cl
 
+def load_cambcls(file,lmax=2000,dict=False,dls=False):
+    d = np.loadtxt(file)
+    ell,sltt,slee,slbb,slte = d[:,(0,1,2,3,4)].T
+
+    if dls==False:
+        # Removing the ell factors and padding with zeros (since the file starts with l=2)
+        sltt=sltt/ell/(ell+1)*2*np.pi; sltt=zeropad(sltt)
+        slee=slee/ell/(ell+1)*2*np.pi; slee=zeropad(slee)
+        slte=slte/ell/(ell+1)*2*np.pi; slte=zeropad(slte)
+        slbb=slbb/ell/(ell+1)*2*np.pi; slbb=zeropad(slbb)
+        ell  = np.insert(ell,0,1); ell=np.insert(ell,0,0)
+        ell  = ell[:lmax+1]
+        sltt = sltt[:lmax+1]
+        slee = slee[:lmax+1]
+        slbb = slbb[:lmax+1]
+        slte = slte[:lmax+1]
+
+    if dict==False:
+        return ell,sltt,slee,slbb,slte
+    else:
+        d={}
+        d['tt']=sltt
+        d['ee']=slee
+        d['bb']=slbb
+        d['te']=slte
+        return d
+    
 def get_lensedcls(file,lmax=2000,dict=False):
     ell,sltt,slee,slbb,slte=np.loadtxt(file,unpack=True)
     # Removing the ell factors and padding with zeros (since the file starts with l=2)
@@ -80,7 +124,7 @@ def get_unlensedcls(file,lmax=2000):
     sltp = sltp[:lmax+1]
     slep = slep[:lmax+1]
     return ell,sltt,slee,slbb,slte,slpp,sltp,slep
- 
+'''
 def setup_logger(nolog,file_log='test.log'):
 
     dir_log = str(Path(file_log).parent)
@@ -97,6 +141,7 @@ def setup_logger(nolog,file_log='test.log'):
                             format   = '[%(asctime)s] %(message)s',
                             datefmt  = '%H:%M:%S',
                             level    = logging.WARNING)
+'''
 
 def add_clsdict(d,key,cltt,clee,clbb,clte=None):
     d[key]  = {}
@@ -205,6 +250,29 @@ def parse_yaml(file_yaml):
         pickle.dump(dict, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+    # Return maptype and qe needed based on reconstruction type
+    # For gmv, it will do all qe at once so no need to specify which qes are needed.
+    '''
+    recdict  = {'sqe'  : {'maptype1': 'cmbmv',
+                          'maptype2': 'cmbmv',
+                          'qes'     : ['tt','ee','te','tb','eb','et','bt','eb']
+                         },
+                'gmv'  : {'maptype1': 'cmbmv',
+                          'maptype2': 'cmbmv'
+                         } 
+                'gmvph': {'maptype1': 'cmbmv',
+                          'maptype2': 'cmbmv'
+                         }           
+                'mh'   : {'maptype1': 'cmbynull',
+                          'maptype2': 'cmbmv'   ,
+                          'qes'     : ['tt']
+                         },
+                'xilc' : {'maptype1': 'cmbynull',
+                          'maptype2': 'cmbcibnull',
+                          'qes'     : ['tt']
+                         }
+                } 
+    '''
     # ----- Check if we need pol -----
     #if all('TT' in qe for qe in dict['plm']['qes']):
     #    dict['need_pol']=0
@@ -269,3 +337,33 @@ def parse_yaml(file_yaml):
         sys.exit("Need to provide cls")
         
     return dict
+
+def load_beam():
+    file_beam=dir_base+'/beam/saturn.txt'
+    tmp  = np.loadtxt(file_beam)
+    bl   = {}
+    bl[90],bl[150],bl[220] = tmp[:,1], tmp[:,2],  tmp[:,3]
+    return bl
+
+def load_tf(d='/lcrc/project/SPT3G/users/ac.yomori/projects/spt3g_lensing_20192020/tf/',fill_value=0,include_beam=True):
+    if include_beam:
+        print('Including beam in the transfer function')
+        bl = load_beam()
+
+    for freqi in (90,150,220):
+        print('Loading TF from %s'%d)
+        y = np.load(d+'tf2d_%d.npz'%freqi)['tf2d'].real
+        y[np.isnan(y)] = fill_value
+        y    = reduce_lmax(y,lmax=lmax)
+        if include_beam:
+            y = hp.almxlf(y,bl[freqi][:lmax+1])
+        tf1d = np.sqrt(hp.alm2cl(y))
+        tf2d = y.real
+    return tf1d, tf2d
+
+def make_2dmask(mmin,lmax=6000):
+    '''Generate a 2d almspace mask'''
+    ell,emm = hp.Alm.getlm(lmax)
+    w       = np.ones_like(ell,dtype=np.complex_)
+    w[emm<mmin]=0
+    return w

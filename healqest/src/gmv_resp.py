@@ -12,7 +12,7 @@ class gmv_resp(object):
     TODO: This is flat sky!
     '''
 
-    def __init__(self,config,cltype,totalcls,u=None,rlzcls=None,semi=False,save_path=None):
+    def __init__(self,config,cltype,totalcls,u=None,rlzcls=None,save_path=None):
 
         if semi: assert rlzcls is not None, "must provide rlzcls for semi-analytic N0"
 
@@ -48,7 +48,7 @@ class gmv_resp(object):
         self.slte = interp1d(np.arange(len(sl['te'])), sl['te'], kind='linear', bounds_error=False, fill_value=0.)
 
         self.rlzcls = rlzcls
-        self.semi   = semi
+        self.semi   = False if rlzcls is None else True
 
     """
     L = l1 + l2

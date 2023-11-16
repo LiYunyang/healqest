@@ -14,8 +14,6 @@ class gmv_resp(object):
 
     def __init__(self,config,cltype,totalcls,u=None,rlzcls=None,save_path=None):
 
-        if semi: assert rlzcls is not None, "must provide rlzcls for semi-analytic N0"
-
         cltt = totalcls[:,0]
         clee = totalcls[:,1]
         clbb = totalcls[:,2]

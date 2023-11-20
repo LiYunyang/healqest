@@ -43,7 +43,7 @@ class qest(object):
             sys.exit('cltype must be ucmb, lcmb or grad')
 
         if 'nside' in config:
-            print("-- Overwride default nside")
+            print("-- Overwrite default nside")
             self.nside = self.config['nside'] # Overwrite automatic setting of nside<2*lmax
         else:
             self.nside   = utils.get_nside(self.Lmax)

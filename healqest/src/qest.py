@@ -373,7 +373,7 @@ class qest_gmv(object):
                 idx = idxs[i]
                 alm1 = alm1all[:,idx]
                 alm2 = alm2all[:,idx]
-                q = weights.weights(qe,self.cls[self.cltype],self.lmax,u=u,totalcls=totalcls)
+                q = weights.weights(est,self.cls[self.cltype],self.lmax,u=u,totalcls=totalcls)
                 glmsum = 0
                 clmsum = 0
 

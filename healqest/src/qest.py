@@ -327,7 +327,7 @@ class qest_gmv(object):
         print("-- Lmax:%d"%self.Lmax)
         print("-- Using %s cls"%self.cltype)
 
-    def eval(self,qe,alm1all,alm2all,totalcls,u=None):
+    def eval(self,qe,alm1all,alm2all,totalcls,u=None,crossilc=False):
         '''
         Compute quadratic estimator
 
@@ -373,7 +373,7 @@ class qest_gmv(object):
                 idx = idxs[i]
                 alm1 = alm1all[:,idx]
                 alm2 = alm2all[:,idx]
-                q = weights.weights(est,self.cls[self.cltype],self.lmax,u=u,totalcls=totalcls)
+                q = weights.weights(est,self.cls[self.cltype],self.lmax,u=u,totalcls=totalcls,crossilc=crossilc)
                 glmsum = 0
                 clmsum = 0
 
@@ -521,7 +521,7 @@ class qest_gmv(object):
 
         return self.glm[qe], self.clm[qe]
 
-    def get_aresp(self,qe1=None,qe2=None,u=None,filename=None):
+    def get_aresp(self,qe1=None,qe2=None,u=None,filename=None,crossilc=False):
         '''
         Compute analytical response function
 
@@ -539,7 +539,7 @@ class qest_gmv(object):
         aresp:
           Analytical response function
         '''
-        r = gmv_resp.gmv_resp(self.config,self.cltype,self.totalcls,u=u,save_path=filename)
+        r = gmv_resp.gmv_resp(self.config,self.cltype,self.totalcls,u=u,save_path=filename,crossilc=crossilc)
         if qe1 is None:
             qe1 = self.qe
 

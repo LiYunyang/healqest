@@ -9,20 +9,36 @@ import healpy as hp
 
 class gmv_resp(object):
     '''
-    TODO: This is flat sky!
+    Not implemented: doing semi = True (rlzcls defined) with crossilc = True
     '''
 
-    def __init__(self,config,cltype,totalcls,u=None,rlzcls=None,save_path=None):
+    def __init__(self,config,cltype,totalcls,u=None,crossilc=False,rlzcls=None,save_path=None):
 
-        cltt = totalcls[:,0]
-        clee = totalcls[:,1]
-        clbb = totalcls[:,2]
-        clte = totalcls[:,3]
-        
-        self.totalTT = interp1d(np.arange(len(cltt)),cltt,kind='linear',bounds_error=False,fill_value=0.)
-        self.totalEE = interp1d(np.arange(len(clee)),clee,kind='linear',bounds_error=False,fill_value=0.)
-        self.totalBB = interp1d(np.arange(len(clbb)),clbb,kind='linear',bounds_error=False,fill_value=0.)
-        self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
+        if crossilc:
+            assert totalcls.shape[1]==5, "If temperature map T1 != T2, must provide cltt for both"
+
+        if not crossilc:
+            cltt = totalcls[:,0]
+            clee = totalcls[:,1]
+            clbb = totalcls[:,2]
+            clte = totalcls[:,3]
+
+            self.totalTT = interp1d(np.arange(len(cltt)),cltt,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalEE = interp1d(np.arange(len(clee)),clee,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalBB = interp1d(np.arange(len(clbb)),clbb,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
+        else:
+            cltt1 = totalcls[:,0]
+            cltt2 = totalcls[:,1]
+            clee = totalcls[:,2]
+            clbb = totalcls[:,3]
+            clte = totalcls[:,4]
+
+            self.totalTT1 = interp1d(np.arange(len(cltt1)),cltt,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalTT2 = interp1d(np.arange(len(cltt2)),cltt,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalEE = interp1d(np.arange(len(clee)),clee,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalBB = interp1d(np.arange(len(clbb)),clbb,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
 
         self.Lmax = config['Lmax']
         self.l1Min = config['lmin']
@@ -46,7 +62,7 @@ class gmv_resp(object):
         self.slte = interp1d(np.arange(len(sl['te'])), sl['te'], kind='linear', bounds_error=False, fill_value=0.)
 
         self.rlzcls = rlzcls
-        self.semi   = False if rlzcls is None else True
+        self.semi = False if rlzcls is None else True
 
     """
     L = l1 + l2
@@ -147,33 +163,63 @@ class gmv_resp(object):
             tTT = interp1d(ll,self.rlzcls[:,0],kind='linear',bounds_error=False,fill_value=0.)
             tEE = interp1d(ll,self.rlzcls[:,1],kind='linear',bounds_error=False,fill_value=0.)
             tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
-        else: 
-            tTT = self.totalTT
-            tEE = self.totalEE
-            tTE = self.totalTE
+        else:
+            if not crossilc: 
+                tTT = self.totalTT
+                tEE = self.totalEE
+                tTE = self.totalTE
+            else:
+                tTT1 = self.totalTT1
+                tTT2 = self.totalTT2
+                tEE = self.totalEE
+                tTE = self.totalTE
 
-        m1[:, 0, 0] = 2.*tTT(l_1)*tTT(l_2)
-        m1[:, 1, 1] = 2.*tEE(l_1)*tEE(l_2)
-        m1[:, 2, 2] = 0.5*(tTT(l_1)*tEE(l_2) +
-                           tEE(l_1)*tTT(l_2)) + \
-                           tTE(l_1)*tTE(l_2)
-        m1[:, 3, 3] = 0.5*(tTT(l_1)*tEE(l_2) +
-                           tEE(l_1)*tTT(l_2)) - \
-                           tTE(l_1)*tTE(l_2)
-        m1[:, 0, 1] = m1[:, 1, 0] = 2.*tTE(l_1)*tTE(l_2)
+        if not crossilc:
+            m1[:, 0, 0] = 2.*tTT(l_1)*tTT(l_2)
+            m1[:, 1, 1] = 2.*tEE(l_1)*tEE(l_2)
+            m1[:, 2, 2] = 0.5*(tTT(l_1)*tEE(l_2) +
+                               tEE(l_1)*tTT(l_2)) + \
+                               tTE(l_1)*tTE(l_2)
+            m1[:, 3, 3] = 0.5*(tTT(l_1)*tEE(l_2) +
+                               tEE(l_1)*tTT(l_2)) - \
+                               tTE(l_1)*tTE(l_2)
+            m1[:, 0, 1] = m1[:, 1, 0] = 2.*tTE(l_1)*tTE(l_2)
 
-        ################################
+            ################################
 
-        m1[:, 0, 2] = m1[:, 2, 0] = (tTT(l_1)*tTE(l_2) +
-                                     tTE(l_1)*tTT(l_2))
-        m1[:, 0, 3] = m1[:, 3, 0] = (tTT(l_1)*tTE(l_2) -
-                                     tTE(l_1)*tTT(l_2))
-        m1[:, 1, 2] = m1[:, 2, 1] = (tEE(l_1)*tTE(l_2) +
-                                     tTE(l_1)*tEE(l_2))
-        m1[:, 1, 3] = m1[:, 3, 1] = -(tEE(l_1)*tTE(l_2) -
-                                     tTE(l_1)*tEE(l_2))
-        m1[:, 2, 3] = m1[:, 3, 2] = 0.5*(tTT(l_1)*tEE(l_2) -
-                                         tEE(l_1)*tTT(l_2))
+            m1[:, 0, 2] = m1[:, 2, 0] = (tTT(l_1)*tTE(l_2) +
+                                         tTE(l_1)*tTT(l_2))
+            m1[:, 0, 3] = m1[:, 3, 0] = (tTT(l_1)*tTE(l_2) -
+                                         tTE(l_1)*tTT(l_2))
+            m1[:, 1, 2] = m1[:, 2, 1] = (tEE(l_1)*tTE(l_2) +
+                                         tTE(l_1)*tEE(l_2))
+            m1[:, 1, 3] = m1[:, 3, 1] = -(tEE(l_1)*tTE(l_2) -
+                                         tTE(l_1)*tEE(l_2))
+            m1[:, 2, 3] = m1[:, 3, 2] = 0.5*(tTT(l_1)*tEE(l_2) -
+                                             tEE(l_1)*tTT(l_2))
+        else:
+            m1[:, 0, 0] = 2.*tTT1(l_1)*tTT2(l_2)
+            m1[:, 1, 1] = 2.*tEE(l_1)*tEE(l_2)
+            m1[:, 2, 2] = 0.5*(tTT1(l_1)*tEE(l_2) +
+                               tEE(l_1)*tTT2(l_2)) + \
+                               tTE(l_1)*tTE(l_2)
+            m1[:, 3, 3] = 0.5*(tTT1(l_1)*tEE(l_2) +
+                               tEE(l_1)*tTT2(l_2)) - \
+                               tTE(l_1)*tTE(l_2)
+            m1[:, 0, 1] = m1[:, 1, 0] = 2.*tTE(l_1)*tTE(l_2)
+
+            ################################
+
+            m1[:, 0, 2] = m1[:, 2, 0] = (tTT1(l_1)*tTE(l_2) +
+                                         tTE(l_1)*tTT2(l_2))
+            m1[:, 0, 3] = m1[:, 3, 0] = (tTT1(l_1)*tTE(l_2) -
+                                         tTE(l_1)*tTT2(l_2))
+            m1[:, 1, 2] = m1[:, 2, 1] = (tEE(l_1)*tTE(l_2) +
+                                         tTE(l_1)*tEE(l_2))
+            m1[:, 1, 3] = m1[:, 3, 1] = -(tEE(l_1)*tTE(l_2) -
+                                         tTE(l_1)*tEE(l_2))
+            m1[:, 2, 3] = m1[:, 3, 2] = 0.5*(tTT1(l_1)*tEE(l_2) -
+                                             tEE(l_1)*tTT2(l_2))
 
         return m1
 
@@ -213,30 +259,57 @@ class gmv_resp(object):
         nl2 = len(l_2)
         inv_m1 = np.zeros((nl2, 4, 4))
 
-        det = self.totalTT(l_1)*self.totalEE(l_1)-self.totalTE(l_1)**2
-        det *= self.totalTT(l_2)*self.totalEE(l_2)-self.totalTE(l_2)**2
-        # Determinant = 1./det
-        inv_m1[:, 0, 0] = 0.5*self.totalEE(l_1)*self.totalEE(l_2)
-        inv_m1[:, 1, 1] = 0.5*self.totalTT(l_1)*self.totalTT(l_2)
-        inv_m1[:, 2, 2] = 0.5*(self.totalTT(l_1)*self.totalEE(l_2) +
-                               self.totalEE(l_1)*self.totalTT(l_2)) + \
-                               self.totalTE(l_1)*self.totalTE(l_2)
-        inv_m1[:, 3, 3] = 0.5*(self.totalTT(l_1)*self.totalEE(l_2) +
-                               self.totalEE(l_1)*self.totalTT(l_2)) - \
-                               self.totalTE(l_1)*self.totalTE(l_2)
+        if not crossilc:
+            det = self.totalTT(l_1)*self.totalEE(l_1)-self.totalTE(l_1)**2
+            det *= self.totalTT(l_2)*self.totalEE(l_2)-self.totalTE(l_2)**2
+            # Determinant = 1./det
+            inv_m1[:, 0, 0] = 0.5*self.totalEE(l_1)*self.totalEE(l_2)
+            inv_m1[:, 1, 1] = 0.5*self.totalTT(l_1)*self.totalTT(l_2)
+            inv_m1[:, 2, 2] = 0.5*(self.totalTT(l_1)*self.totalEE(l_2) +
+                                   self.totalEE(l_1)*self.totalTT(l_2)) + \
+                                   self.totalTE(l_1)*self.totalTE(l_2)
+            inv_m1[:, 3, 3] = 0.5*(self.totalTT(l_1)*self.totalEE(l_2) +
+                                   self.totalEE(l_1)*self.totalTT(l_2)) - \
+                                   self.totalTE(l_1)*self.totalTE(l_2)
 
-        inv_m1[:, 0, 1] = inv_m1[:, 1, 0] = 0.5*self.totalTE(l_1)*self.totalTE(l_2)
-        inv_m1[:, 0, 2] = inv_m1[:, 2, 0] = -0.5*(self.totalEE(l_1)*self.totalTE(l_2) +
-                                                  self.totalTE(l_1)*self.totalEE(l_2))
-        inv_m1[:, 0, 3] = inv_m1[:, 3, 0] = 0.5*(self.totalTE(l_1)*self.totalEE(l_2) -
-                                                 self.totalEE(l_1)*self.totalTE(l_2))
+            inv_m1[:, 0, 1] = inv_m1[:, 1, 0] = 0.5*self.totalTE(l_1)*self.totalTE(l_2)
+            inv_m1[:, 0, 2] = inv_m1[:, 2, 0] = -0.5*(self.totalEE(l_1)*self.totalTE(l_2) +
+                                                      self.totalTE(l_1)*self.totalEE(l_2))
+            inv_m1[:, 0, 3] = inv_m1[:, 3, 0] = 0.5*(self.totalTE(l_1)*self.totalEE(l_2) -
+                                                     self.totalEE(l_1)*self.totalTE(l_2))
 
-        inv_m1[:, 1, 2] = inv_m1[:, 2, 1] = -0.5*(self.totalTT(l_1)*self.totalTE(l_2) +
-                                                  self.totalTE(l_1)*self.totalTT(l_2))
-        inv_m1[:, 1, 3] = inv_m1[:, 3, 1] = -0.5*(self.totalTE(l_1)*self.totalTT(l_2) -
-                                                  self.totalTT(l_1)*self.totalTE(l_2))
-        inv_m1[:, 2, 3] = inv_m1[:, 3, 2] = 0.5*(self.totalEE(l_1)*self.totalTT(l_2) -
-                                                 self.totalTT(l_1)*self.totalEE(l_2))
+            inv_m1[:, 1, 2] = inv_m1[:, 2, 1] = -0.5*(self.totalTT(l_1)*self.totalTE(l_2) +
+                                                      self.totalTE(l_1)*self.totalTT(l_2))
+            inv_m1[:, 1, 3] = inv_m1[:, 3, 1] = -0.5*(self.totalTE(l_1)*self.totalTT(l_2) -
+                                                      self.totalTT(l_1)*self.totalTE(l_2))
+            inv_m1[:, 2, 3] = inv_m1[:, 3, 2] = 0.5*(self.totalEE(l_1)*self.totalTT(l_2) -
+                                                     self.totalTT(l_1)*self.totalEE(l_2))
+        else:
+            det = self.totalTT1(l_1)*self.totalEE(l_1)-self.totalTE(l_1)**2
+            det *= self.totalTT2(l_2)*self.totalEE(l_2)-self.totalTE(l_2)**2
+            # Determinant = 1./det
+            inv_m1[:, 0, 0] = 0.5*self.totalEE(l_1)*self.totalEE(l_2)
+            inv_m1[:, 1, 1] = 0.5*self.totalTT1(l_1)*self.totalTT2(l_2)
+            inv_m1[:, 2, 2] = 0.5*(self.totalTT1(l_1)*self.totalEE(l_2) +
+                                   self.totalEE(l_1)*self.totalTT2(l_2)) + \
+                                   self.totalTE(l_1)*self.totalTE(l_2)
+            inv_m1[:, 3, 3] = 0.5*(self.totalTT1(l_1)*self.totalEE(l_2) +
+                                   self.totalEE(l_1)*self.totalTT2(l_2)) - \
+                                   self.totalTE(l_1)*self.totalTE(l_2)
+
+            inv_m1[:, 0, 1] = inv_m1[:, 1, 0] = 0.5*self.totalTE(l_1)*self.totalTE(l_2)
+            inv_m1[:, 0, 2] = inv_m1[:, 2, 0] = -0.5*(self.totalEE(l_1)*self.totalTE(l_2) +
+                                                      self.totalTE(l_1)*self.totalEE(l_2))
+            inv_m1[:, 0, 3] = inv_m1[:, 3, 0] = 0.5*(self.totalTE(l_1)*self.totalEE(l_2) -
+                                                     self.totalEE(l_1)*self.totalTE(l_2))
+
+            inv_m1[:, 1, 2] = inv_m1[:, 2, 1] = -0.5*(self.totalTT1(l_1)*self.totalTE(l_2) +
+                                                      self.totalTE(l_1)*self.totalTT2(l_2))
+            inv_m1[:, 1, 3] = inv_m1[:, 3, 1] = -0.5*(self.totalTE(l_1)*self.totalTT2(l_2) -
+                                                      self.totalTT1(l_1)*self.totalTE(l_2))
+            inv_m1[:, 2, 3] = inv_m1[:, 3, 2] = 0.5*(self.totalEE(l_1)*self.totalTT2(l_2) -
+                                                     self.totalTT1(l_1)*self.totalEE(l_2))
+
         return inv_m1/det[:, None, None]
 
     def F1prime(self, L, l_1, phi1):
@@ -390,14 +463,27 @@ class gmv_resp(object):
             tBB = interp1d(ll,self.rlzcls[:,2],kind='linear',bounds_error=False,fill_value=0.)
             tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
         else:
-            tTT = self.totalTT 
-            tEE = self.totalEE           
-            tBB = self.totalBB
-            tTE = self.totalTE
+            if not crossilc:
+                tTT = self.totalTT 
+                tEE = self.totalEE           
+                tBB = self.totalBB
+                tTE = self.totalTE
+            else:
+                tTT1 = self.totalTT1
+                tTT2 = self.totalTT2
+                tEE = self.totalEE           
+                tBB = self.totalBB
+                tTE = self.totalTE
 
-        m2[:, 0, 0] = (tTT(l_1)*tBB(l_2))
-        m2[:, 1, 1] = (tEE(l_1)*tBB(l_2))
-        m2[:, 0, 1] = m2[:, 1, 0] = (tTE(l_1)*tBB(l_2))
+        if not crossilc:
+            m2[:, 0, 0] = (tTT(l_1)*tBB(l_2))
+            m2[:, 1, 1] = (tEE(l_1)*tBB(l_2))
+            m2[:, 0, 1] = m2[:, 1, 0] = (tTE(l_1)*tBB(l_2))
+        else:
+            m2[:, 0, 0] = (tTT1(l_1)*tBB(l_2))
+            m2[:, 1, 1] = (tEE(l_1)*tBB(l_2))
+            m2[:, 0, 1] = m2[:, 1, 0] = (tTE(l_1)*tBB(l_2))
+
         return m2
 
     def f_2(self, L, l_1, phi1):
@@ -418,15 +504,26 @@ class gmv_resp(object):
 
     def M2_inv(self, L, l_1, phi1):
 
-        l_2 = self.l2(L, l_1, phi1)
-        nl2 = len(l_2)
-        inv_m2 = np.zeros((nl2, 2, 2))
-        det = self.totalTT(l_1)*self.totalEE(l_1)*self.totalBB(l_2)**2
-        det -= self.totalTE(l_1)**2*self.totalBB(l_2)**2
+        if not crossilc:
+            l_2 = self.l2(L, l_1, phi1)
+            nl2 = len(l_2)
+            inv_m2 = np.zeros((nl2, 2, 2))
+            det = self.totalTT(l_1)*self.totalEE(l_1)*self.totalBB(l_2)**2
+            det -= self.totalTE(l_1)**2*self.totalBB(l_2)**2
 
-        inv_m2[:, 0, 0] = self.totalEE(l_1)*self.totalBB(l_2)
-        inv_m2[:, 1, 1] = self.totalTT(l_1)*self.totalBB(l_2)
-        inv_m2[:, 0, 1] = inv_m2[:, 1, 0] = -self.totalTE(l_1)*self.totalBB(l_2)
+            inv_m2[:, 0, 0] = self.totalEE(l_1)*self.totalBB(l_2)
+            inv_m2[:, 1, 1] = self.totalTT(l_1)*self.totalBB(l_2)
+            inv_m2[:, 0, 1] = inv_m2[:, 1, 0] = -self.totalTE(l_1)*self.totalBB(l_2)
+        else:
+            l_2 = self.l2(L, l_1, phi1)
+            nl2 = len(l_2)
+            inv_m2 = np.zeros((nl2, 2, 2))
+            det = self.totalTT1(l_1)*self.totalEE(l_1)*self.totalBB(l_2)**2
+            det -= self.totalTE(l_1)**2*self.totalBB(l_2)**2
+
+            inv_m2[:, 0, 0] = self.totalEE(l_1)*self.totalBB(l_2)
+            inv_m2[:, 1, 1] = self.totalTT1(l_1)*self.totalBB(l_2)
+            inv_m2[:, 0, 1] = inv_m2[:, 1, 0] = -self.totalTE(l_1)*self.totalBB(l_2)
 
         return inv_m2/det[:, None, None]
 

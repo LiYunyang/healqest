@@ -84,6 +84,7 @@ class PreOperatorDiag:
     def calc(self, talm):
         return hp.almxfl(talm, self.filt)
 
+
 class SkyInverseFilter: #alm_filter_sinv_nocorr:
     """Class allowing spectrum-formed covariances
        from signal and also 1/ell noise. 
@@ -98,16 +99,91 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
             assert 'tt' in n_cls.keys()
             assert len(n_cls['tt']) == len(tf2d), "n_cls must be 2d (and TF+beam-ed)"
 
-            cltt = s_cls['tt'][:lmax+1]
-            cltt_2d = hp_utils.cl2almformat(cltt)
+            cltt    = s_cls['tt'][:lmax+1]
+            cltt_2d = hp_utils.cl2almformat(cltt) # dltt
 
             #1/(cltt_2d + nltt_2d/tf2d**2) recovers 1d behavior if nltt_2d==0. 
             #the following two implementation are identical if tf2d has no zeros
             #if tf2d has zeros, this first one ensures the solution doesn't
             #depend on those modes
+            
             self.slinv = tf2d*tf2d * cinv_utils.cli(cltt_2d *tf2d*tf2d + n_cls['tt'])
+            #np.save('/lcrc/project/SPT3G/users/ac.yomori/scratch/nlttdl2.npy',n_cls['tt'])
+            #import pdb; pdb.set_trace()
             #self.slinv = utils.cli(cltt_2d + n_cls['tt'] * utils.cli(tf2d*tf2d) )
 
+        else:
+            print(' NOT: n_cls is not None and tf2d is not None:')
+            sys.exit('bad path aa')
+            cltt = s_cls['tt'][:lmax+1]
+            if n_cls is None: n_cls = {key: np.zeros(lmax+1) for key in s_cls}
+            if b_transf is None:
+                assert tf2d is None, "if tf2d is not None, nor should b_transf"
+                b_transf = np.ones(lmax+1)
+            pdb.set_trace()
+            self.slinv = cinv_utils.cli(cltt + n_cls['tt']*cinv_utils.cli(b_transf*b_transf))
+
+        self.lmax  = lmax
+        self.s_cls = s_cls
+        self.tf2d  = tf2d
+
+        if self.n_cls is not None and tf2d is not None:
+            self.ncls1d = {'tt': np.sqrt(hp.alm2cl(n_cls['tt']))}
+        else: #self.n_cls is None or self.n_cls is 1d
+            self.ncls1d = self.n_cls
+
+    def calc(self, alm, inplace=False):
+        if self.n_cls is not None and self.tf2d is not None:
+            if inplace:
+                alm *= self.slinv
+            else:
+                return alm*self.slinv
+        else:
+            sys.exit('bad path')
+            if inplace:
+                hp.almxfl(alm, self.slinv, inplace=inplace)
+            else:
+                return hp.almxfl(alm, self.slinv, inplace=inplace)
+
+
+    def hashdict(self):
+        return {'slinv': cinv_utils.clhash(self.slinv)}
+
+
+'''
+class SkyInverseFilter: #alm_filter_sinv_nocorr:
+    def __init__(self, s_cls, lmax, n_cls=None, tf2d=None, b_transf=None, obsstack=None):
+        
+        s_cls    = dl
+        lmax     = lmax
+        n_cls    = nl_dl
+        tf2d     = tf2d_dl
+        b_transf = ones* ell*(ell+1)/2/np.pi
+        
+
+        self.n_cls = n_cls # dict of |nlm|^2 * l*(l+1)/2/pi
+
+        if n_cls is not None and tf2d is not None:
+            #the only case that needs to expand into alms
+            assert 'tt' in n_cls.keys()
+            assert len(n_cls['tt']) == len(tf2d), "n_cls must be 2d (and TF+beam-ed)"
+
+            if obsstack is None:
+                sys.exit('bad path')
+                cltt    = s_cls['tt'][:lmax+1]
+                cltt_2d = hp_utils.cl2almformat(cltt) # dltt
+
+                #1/(cltt_2d + nltt_2d/tf2d**2) recovers 1d behavior if nltt_2d==0. 
+                #the following two implementation are identical if tf2d has no zeros
+                #if tf2d has zeros, this first one ensures the solution doesn't
+                #depend on those modes
+                self.slinv = tf2d*tf2d * cinv_utils.cli(cltt_2d *tf2d*tf2d + n_cls['tt'])
+                #self.slinv = utils.cli(cltt_2d + n_cls['tt'] * utils.cli(tf2d*tf2d) )
+            else:
+                u = obsstack['tt']*tf2d*tf2d
+                u[u<1e-6]=np.inf
+                self.slinv = tf2d*tf2d * cinv_utils.cli(u)
+                #import pdb; pdb.set_trace()
         else:
             sys.exit('bad path')
             cltt = s_cls['tt'][:lmax+1]
@@ -118,12 +194,16 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
             pdb.set_trace()
             self.slinv = cinv_utils.cli(cltt + n_cls['tt']*cinv_utils.cli(b_transf*b_transf))
 
-        self.lmax = lmax
+        self.lmax  = lmax
         self.s_cls = s_cls
         self.tf2d  = tf2d
+
         if self.n_cls is not None and tf2d is not None:
+            # Compute 1d noise
             self.ncls1d = {'tt': np.sqrt(hp.alm2cl(n_cls['tt']))}
+
         else: #self.n_cls is None or self.n_cls is 1d
+            sys.exit('bad path')
             self.ncls1d = self.n_cls
 
     def calc(self, alm, inplace=False):
@@ -141,12 +221,11 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
 
     def hashdict(self):
         return {'slinv': cinv_utils.clhash(self.slinv)}
+'''    
 
 class NoiseInverseFilter: #alm_filter_ninv(object):
     """Missing doc. """
-    def __init__(self, n_inv, b_transf,
-                 tf2d = None,
-                 nlev_ftl=None):
+    def __init__(self, n_inv, b_transf, tf2d = None, nlev_ftl=None):
                  #marge_monopole=False, marge_dipole=False, marge_uptolmin=-1, marge_maps=(), nlev_ftl=None):
         if isinstance(n_inv, list):
             n_inv_prod = hp_utils.read_map(n_inv[0])
@@ -156,6 +235,7 @@ class NoiseInverseFilter: #alm_filter_ninv(object):
             n_inv = n_inv_prod
         else:
             n_inv = hp_utils.read_map(n_inv)
+
         print("opfilt_tt: inverse noise map std dev / av = %.3e" % (
                     np.std(n_inv[np.where(n_inv != 0.0)]) / np.average(n_inv[np.where(n_inv != 0.0)])))
 
@@ -171,20 +251,25 @@ class NoiseInverseFilter: #alm_filter_ninv(object):
         print("ninv_ftl: using %.2f uK-amin noise Cl"%self.nlev_ftl)
 
     def hashdict(self):
-        return {'n_inv': cinv_utils.clhash(self.n_inv),
+        return {'n_inv'   : cinv_utils.clhash(self.n_inv),
                 'b_transf': cinv_utils.clhash(self.b_transf)}
 
     def apply_alm(self, alm):
         """Missing doc. """
-        npix = len(self.n_inv)
+        npix = len(self.n_inv) #npix of 2048
         if self.tf2d is None:
+            sys.exit('bad paths sss')
             hp.almxfl(alm, self.b_transf, inplace=True)
         else:
-            alm *= self.tf2d
+            alm *= self.tf2d # alm*TF*bl
+
         tmap = alm2map(alm, hp.npix2nside(npix))
+        
         self.apply_map(tmap)
         alm[:] = map2alm(tmap, lmax=hp.Alm.getlmax(alm.size),use_pixel_weights=True)
+        
         if self.tf2d is None:
+            sys.exit('bad path ddddd')
             hp.almxfl(alm, self.b_transf  *  (npix / (4. * np.pi)), inplace=True)
         else:
             alm *= self.tf2d * (npix / (4. * np.pi))

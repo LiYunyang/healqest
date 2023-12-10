@@ -104,13 +104,17 @@ class cinv_t(cinv):
                  nl=None,
                  rescal_cl='default', tf2d=None):
 
+        #np.save('/lcrc/project/SPT3G/users/ac.yomori/scratch/nlttaaa.npy',nl['tt'])
+        #import pdb;pdb.set_trace()
+
         assert lib_dir is not None and lmax >= 1024 and nside >= 512, (lib_dir, lmax, nside)
         assert isinstance(ninv, list)
         super(cinv_t, self).__init__(lib_dir, lmax, eps_min)
 
         # Convert Cls to Dls or not
         if rescal_cl in ['default', None]:
-            rescal_cl = np.sqrt(np.arange(lmax + 1, dtype=float) * np.arange(1, lmax + 2, dtype=float) / 2. / np.pi)
+            #rescal_cl = np.sqrt(np.arange(lmax + 1, dtype=float)**0 * np.arange(1, lmax + 2, dtype=float) / 2. / np.pi)
+            rescal_cl = np.ones(lmax+1)
 
         # mutltiply Cls and tf with l(l+1)/2/pi factor
         dl        = {k: rescal_cl ** 2 * cl[k][:lmax + 1] for k in cl.keys()}  # rescaled cls (Dls by default)
@@ -124,8 +128,11 @@ class cinv_t(cinv):
 
         if nl is not None:
             print('nl was provided, applying rescal_cl')
-            print(rescal_cl)
+            #print(rescal_cl)
             nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl**2)) for key in nl}
+            #np.save('/lcrc/project/SPT3G/users/ac.yomori/scratch/nlttaaa.npy',nl['tt'])
+            #np.save('/lcrc/project/SPT3G/users/ac.yomori/scratch/nlttdl.npy',nl_dl['tt'])
+            #import pdb; pdb.set_trace()
             #self.rescaled_nl   = nl_dl
         else:
             sys.exit('nl was NOT provided')
@@ -145,7 +152,7 @@ class cinv_t(cinv):
         self.ninv = ninv
 
         n_inv_filt = hp_utils.jit(opfilt_hp_t.NoiseInverseFilter, ninv, transf_dl, tf2d=tf2d_dl)
-        s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter, dl, lmax, n_cls=nl_dl, tf2d=tf2d_dl, b_transf=transf_dl)
+        s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter  , dl, lmax, n_cls=nl_dl, tf2d=tf2d_dl, b_transf=transf_dl)
         self.n_inv_filt = n_inv_filt
         self.s_inv_filt = s_inv_filt
         self.opfilt = opfilt_hp_t
@@ -155,7 +162,7 @@ class cinv_t(cinv):
         if Y==0:
             if not os.path.exists(lib_dir):
                 os.makedirs(lib_dir)
-
+            '''
             if not os.path.exists(os.path.join(lib_dir, "filt_hash.pk")):
                 pk.dump(self.hashdict(), open(os.path.join(lib_dir, "filt_hash.pk"), 'wb'), protocol=2)
 
@@ -165,9 +172,10 @@ class cinv_t(cinv):
             if not os.path.exists(os.path.join(self.lib_dir, "tal.dat")):
                 np.savetxt(os.path.join(self.lib_dir, "tal.dat"),  self._calc_tal())
 
+            '''
             if not os.path.exists(os.path.join(self.lib_dir, "fmask.fits.gz")):
-                hp.write_map(os.path.join(self.lib_dir, "fmask.fits.gz"), self._calc_mask())
-
+                hp.write_map(os.path.join(self.lib_dir, "fmask.fits.gz"), self._calc_mask(),overwrite=True)
+            
         #mpi.barrier()
         #cinv_utils.hash_check(pk.load(open(os.path.join(lib_dir, "filt_hash.pk"), 'rb')), self.hashdict())
 
@@ -224,7 +232,7 @@ class cinv_t(cinv):
         '''
         '''
         if soltn is None:
-            talm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex)
+            talm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex_)
         else:
             talm = soltn.copy()
 
@@ -278,7 +286,7 @@ class cinv_p(cinv):
         if Y==0:
             if not os.path.exists(lib_dir):
                 os.makedirs(lib_dir)
-
+            '''
             if not os.path.exists(os.path.join(lib_dir, "filt_hash.pk")):
                 pk.dump(self.hashdict(), open(os.path.join(lib_dir, "filt_hash.pk"), 'wb'), protocol=2)
 
@@ -289,10 +297,10 @@ class cinv_p(cinv):
 
             if not os.path.exists(os.path.join(self.lib_dir, "tal.dat")):
                 np.savetxt(os.path.join(self.lib_dir, "tal.dat"), self._calc_tal())
-
+            '''
             if not os.path.exists(os.path.join(self.lib_dir,  "fmask.fits.gz")):
                 hp.write_map(os.path.join(self.lib_dir,  "fmask.fits.gz"),  self._calc_mask())
-
+            
         #mpi.barrier()
         #cinv_utils.hash_check(pk.load(open(os.path.join(lib_dir, "filt_hash.pk"), 'rb')), self.hashdict())
 
@@ -398,8 +406,8 @@ class library_sepTP(object):
         #if mpi.rank == 0:
             if not os.path.exists(lib_dir):
                 os.makedirs(lib_dir)
-            if not os.path.exists(fn_hash):
-                pk.dump(self.hashdict(), open(fn_hash, 'wb'), protocol=2)
+            #if not os.path.exists(fn_hash):
+            #    pk.dump(self.hashdict(), open(fn_hash, 'wb'), protocol=2)
         #mpi.barrier()
         #cinv_utils.hash_check(pk.load(open(fn_hash, 'rb')), self.hashdict())
 
@@ -626,8 +634,9 @@ class library_cinv_sepTP(library_sepTP):
             fname_mask = os.path.join(self.lib_dir, "fmask.fits.gz")
             if not os.path.exists(fname_mask):
                 fmask = self.cinv_t.get_fmask()
-                assert np.all(fmask == self.cinv_p.get_fmask())
-                hp.write_map(fname_mask, fmask)
+
+                #assert np.all(fmask == self.cinv_p.get_fmask())
+                hp.write_map(fname_mask, fmask, overwrite=True)
 
         #mpi.barrier()
         #cinv_utils.hash_check(pk.load(open(os.path.join(lib_dir, "filt_hash.pk"), 'rb')), self.hashdict())

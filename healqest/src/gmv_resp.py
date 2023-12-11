@@ -40,6 +40,7 @@ class gmv_resp(object):
             self.totalBB = interp1d(np.arange(len(clbb)),clbb,kind='linear',bounds_error=False,fill_value=0.)
             self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
 
+        self.crossilc = crossilc
         self.Lmax = config['Lmax']
         self.l1Min = config['lmin']
         # Max value for l1 and l2 is taken to be same
@@ -164,7 +165,7 @@ class gmv_resp(object):
             tEE = interp1d(ll,self.rlzcls[:,1],kind='linear',bounds_error=False,fill_value=0.)
             tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
         else:
-            if not crossilc: 
+            if not self.crossilc: 
                 tTT = self.totalTT
                 tEE = self.totalEE
                 tTE = self.totalTE
@@ -174,7 +175,7 @@ class gmv_resp(object):
                 tEE = self.totalEE
                 tTE = self.totalTE
 
-        if not crossilc:
+        if not self.crossilc:
             m1[:, 0, 0] = 2.*tTT(l_1)*tTT(l_2)
             m1[:, 1, 1] = 2.*tEE(l_1)*tEE(l_2)
             m1[:, 2, 2] = 0.5*(tTT(l_1)*tEE(l_2) +
@@ -259,7 +260,7 @@ class gmv_resp(object):
         nl2 = len(l_2)
         inv_m1 = np.zeros((nl2, 4, 4))
 
-        if not crossilc:
+        if not self.crossilc:
             det = self.totalTT(l_1)*self.totalEE(l_1)-self.totalTE(l_1)**2
             det *= self.totalTT(l_2)*self.totalEE(l_2)-self.totalTE(l_2)**2
             # Determinant = 1./det
@@ -463,7 +464,7 @@ class gmv_resp(object):
             tBB = interp1d(ll,self.rlzcls[:,2],kind='linear',bounds_error=False,fill_value=0.)
             tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
         else:
-            if not crossilc:
+            if not self.crossilc:
                 tTT = self.totalTT 
                 tEE = self.totalEE           
                 tBB = self.totalBB
@@ -475,7 +476,7 @@ class gmv_resp(object):
                 tBB = self.totalBB
                 tTE = self.totalTE
 
-        if not crossilc:
+        if not self.crossilc:
             m2[:, 0, 0] = (tTT(l_1)*tBB(l_2))
             m2[:, 1, 1] = (tEE(l_1)*tBB(l_2))
             m2[:, 0, 1] = m2[:, 1, 0] = (tTE(l_1)*tBB(l_2))
@@ -504,7 +505,7 @@ class gmv_resp(object):
 
     def M2_inv(self, L, l_1, phi1):
 
-        if not crossilc:
+        if not self.crossilc:
             l_2 = self.l2(L, l_1, phi1)
             nl2 = len(l_2)
             inv_m2 = np.zeros((nl2, 2, 2))

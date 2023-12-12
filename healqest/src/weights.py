@@ -1,5 +1,5 @@
 import numpy as np
-import utils 
+import healqest_utils as utils
 
 class weights():
     def __init__(self,est,cls,lmax,u=None,totalcls=None,crossilc=False):

@@ -1,7 +1,9 @@
 import os,sys,pickle
-import utils,weights,resp
+import weights,resp
 import numpy as np
 import healpy as hp
+import healqest_utils as utils
+
 
 np.seterr(all='ignore')
 
@@ -31,16 +33,16 @@ class qest(object):
         #self.almbar1 = almbar1
         #self.almbar2 = almbar2
 
-        self.lmax    = self.config['lmax'] = max(config['lmaxT'],config['lmaxP'])
-        self.Lmax    = self.config['Lmax']
-        self.cltype  = self.config['cltype']
+        self.lmax    = self.config['lensrec']['lmax'] = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
+        self.Lmax    = self.config['lensrec']['Lmax']
+        self.cltype  = self.config['lensrec']['cltype']
         self.glm = {}
         self.clm = {}
 
         self.cls     = cls
 
-        if self.cltype!='ucmb' and self.cltype!='lcmb' and self.cltype!='grad':
-            sys.exit('cltype must be ucmb, lcmb or grad')
+        if self.cltype!='ucmb' and self.cltype!='lcmb' and self.cltype!='gcmb':
+            sys.exit('cltype must be ucmb, lcmb or gcmb')
 
         if 'nside' in config:
             print("-- Overwrite default nside")

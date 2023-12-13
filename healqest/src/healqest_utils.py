@@ -82,10 +82,11 @@ def parse_yaml(file_yaml):
 
     recdict  = {'sqe'  : {'maptype1': 'cmbmv',
                           'maptype2': 'cmbmv',
-                          'qes'     : ['TT','EE','TE','TB','EB','ET','BT','EB']
+                          'qes'     : ['TT','EE','TE','TB','EB','ET','BT','BE']
                          },
                 'gmv'  : {'maptype1': 'cmbmv',
-                          'maptype2': 'cmbmv'
+                          'maptype2': 'cmbmv',
+                          'qes'     : ['TT_GMV','EE_GMV','TE_GMV','ET_GMV','TB_GMV','BT_GMV','EB_GMV','BE_GMV']
                          },
                 'gmvph': {'maptype1': 'cmbmv',
                           'maptype2': 'cmbmv'

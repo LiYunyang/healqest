@@ -34,17 +34,17 @@ class gmv_resp(object):
             clbb = totalcls[:,3]
             clte = totalcls[:,4]
 
-            self.totalTT1 = interp1d(np.arange(len(cltt1)),cltt,kind='linear',bounds_error=False,fill_value=0.)
-            self.totalTT2 = interp1d(np.arange(len(cltt2)),cltt,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalTT1 = interp1d(np.arange(len(cltt1)),cltt1,kind='linear',bounds_error=False,fill_value=0.)
+            self.totalTT2 = interp1d(np.arange(len(cltt2)),cltt2,kind='linear',bounds_error=False,fill_value=0.)
             self.totalEE = interp1d(np.arange(len(clee)),clee,kind='linear',bounds_error=False,fill_value=0.)
             self.totalBB = interp1d(np.arange(len(clbb)),clbb,kind='linear',bounds_error=False,fill_value=0.)
             self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
 
         self.crossilc = crossilc
-        self.Lmax = config['Lmax']
-        self.l1Min = config['lmin']
+        self.Lmax = config['lensrec']['Lmax']
+        self.l1Min = config['lensrec']['lmin']
         # Max value for l1 and l2 is taken to be same
-        self.l1Max = max(config['lmaxT'],config['lmaxP'])
+        self.l1Max = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
         self.u = interp1d(np.arange(len(u)), u, kind='linear', bounds_error=False, fill_value=0.) if u is not None else None
         self.save_path = save_path
 
@@ -55,7 +55,7 @@ class gmv_resp(object):
         self.N_phi = 50  # Number of steps for angular integration steps
         # Reduce to 50 if you need around 0.6% max accuracy til L = 3000
         # From 200 to 400, there is just 0.03% change in the noise curves til L=3000
-        
+
         sl = {ii:config['cls'][cltype][ii] for ii in config['cls'][cltype].keys()}
         self.sltt = interp1d(np.arange(len(sl['tt'])), sl['tt'], kind='linear', bounds_error=False, fill_value=0.)
         self.slee = interp1d(np.arange(len(sl['ee'])), sl['ee'], kind='linear', bounds_error=False, fill_value=0.)
@@ -165,7 +165,7 @@ class gmv_resp(object):
             tEE = interp1d(ll,self.rlzcls[:,1],kind='linear',bounds_error=False,fill_value=0.)
             tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
         else:
-            if not self.crossilc: 
+            if not self.crossilc:
                 tTT = self.totalTT
                 tEE = self.totalEE
                 tTE = self.totalTE
@@ -237,7 +237,7 @@ class gmv_resp(object):
         f1[:, 1] = self.f_XY(L, l_1, phi1, 'EE')
         f1[:, 2] = f_TE_sym
         f1[:, 3] = f_TE_asym
-        return f1 
+        return f1
 
     def f_1_PRF(self, L, l_1, phi1):
 
@@ -465,14 +465,14 @@ class gmv_resp(object):
             tTE = interp1d(ll,self.rlzcls[:,3],kind='linear',bounds_error=False,fill_value=0.)
         else:
             if not self.crossilc:
-                tTT = self.totalTT 
-                tEE = self.totalEE           
+                tTT = self.totalTT
+                tEE = self.totalEE
                 tBB = self.totalBB
                 tTE = self.totalTE
             else:
                 tTT1 = self.totalTT1
                 tTT2 = self.totalTT2
-                tEE = self.totalEE           
+                tEE = self.totalEE
                 tBB = self.totalBB
                 tTE = self.totalTE
 
@@ -589,7 +589,7 @@ class gmv_resp(object):
 
         result = int_ll
         #result = 1./int_ll
-        #result *= L**2 
+        #result *= L**2
         # Factor of L**2 if we are calculating the reconstruction noise for d field instead of the phi field.
 
         if not np.isfinite(result):

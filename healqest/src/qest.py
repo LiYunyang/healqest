@@ -4,7 +4,6 @@ import numpy as np
 import healpy as hp
 import healqest_utils as utils
 
-
 np.seterr(all='ignore')
 
 class qest(object):
@@ -44,18 +43,17 @@ class qest(object):
         if self.cltype!='ucmb' and self.cltype!='lcmb' and self.cltype!='gcmb':
             sys.exit('cltype must be ucmb, lcmb or gcmb')
 
-        if 'nside' in config:
+        if 'nside' in self.config['lensrec']:
             print("-- Overwrite default nside")
-            self.nside = self.config['nside'] # Overwrite automatic setting of nside<2*lmax
+            self.nside = self.config['lensrec']['nside'] # Overwrite automatic setting of nside<2*lmax
         else:
             self.nside   = utils.get_nside(self.Lmax)
-        
+
         print("-- Nside to project: %d"%self.nside)
         print("-- lmax:%d"%self.lmax)
         print("-- Lmax:%d"%self.Lmax)
         print("-- Using %s cls"%self.cltype)
 
-        
     def eval(self,qe,almbar1,almbar2,u=None):
         '''
         Compute quadratic estimator
@@ -65,7 +63,7 @@ class qest(object):
         qe : str
           Quadratic estimator type: 'TT'/'EE'/'TE'/'EB'/'TB'/'TTprf'
         almbar1: complex array healpy alm
-          First filtered alm 
+          First filtered alm
         almbar2: complex array healpy alm
           Second filtered alm
         u  : profile
@@ -100,9 +98,9 @@ class qest(object):
                 wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
                 wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
 
-                walmbar1 = hp.almxfl(almbar1,wX1) # T1/E1 
-                walmbar3 = hp.almxfl(almbar1,wX3) # T3/E3 
-                walmbar2 = hp.almxfl(almbar2,wY1) # B2    
+                walmbar1 = hp.almxfl(almbar1,wX1) # T1/E1
+                walmbar3 = hp.almxfl(almbar1,wX3) # T3/E3
+                walmbar2 = hp.almxfl(almbar2,wY1) # B2
 
                 SpX1, SmX1 = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)], self.nside, 1, self.lmax)
                 SpX3, SmX3 = hp.alm2map_spin([walmbar3,np.zeros_like(walmbar3)], self.nside, 3, self.lmax)
@@ -169,7 +167,7 @@ class qest(object):
 
                     # Input takes in a^+ and a^-, but in this case we are inserting spin-0 maps i.e. tlm,elm,blm
                     #-----------------------------------------------------------------------------------------------
-                    
+
                     if qe[0]=='B':
                         SpX, SmX = hp.alm2map_spin([np.zeros_like(walmbar1),1j*walmbar1],self.nside,np.abs(sX),self.lmax)
                         sys.exit('broken')
@@ -191,7 +189,7 @@ class qest(object):
 
                     if sY<0:
                         Y = np.conj(Y)*(-1)**(sY)
-                    
+
                     #-----------------------------------------------------------------------------------------------
 
                     XY = X*Y
@@ -207,8 +205,8 @@ class qest(object):
                     retglm  += glm
                     retclm  += clm
 
-                self.glm[qe] = retglm 
-                self.clm[qe] = retclm   
+                self.glm[qe] = retglm
+                self.clm[qe] = retclm
                 #if qe == self.qe:
                 #    self.retglm = retglm
                 #    self.retclm = retclm
@@ -220,7 +218,7 @@ class qest(object):
 
     def get_aresp(self,flX,flY,qe1=None,qe2=None,u=None):
         '''
-        Compute analytical response function for 1D filtering 
+        Compute analytical response function for 1D filtering
 
         Parameters
         ----------
@@ -237,17 +235,17 @@ class qest(object):
           Analytical response function
         '''
         if qe1 is None:
-            assert 0, "qe1 must be defined" 
-                              
+            assert 0, "qe1 must be defined"
+
         qeXY = weights.weights(qe1, self.cls[self.cltype], self.lmax, u=u)
-        
+
         if qe2 is None or qe2==qe1:
             qeZA = None
         else:
             qeZA = weights.weights(qe2, self.cls[self.cltype], self.lmax, u=u)
-        
+
         aresp = resp.fill_resp(qeXY,np.zeros(self.Lmax+1, dtype=np.complex_),flX,flY,qeZA=qeZA)
-        
+
         return aresp
 
     def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='TTprf'):
@@ -308,9 +306,9 @@ class qest_gmv(object):
 
         print('Setting up lensing reconstruction')
         self.config     = config
-        self.lmax    = self.config['lmax'] = max(config['lmaxT'],config['lmaxP'])
-        self.Lmax    = self.config['Lmax']
-        self.cltype  = self.config['cltype']
+        self.lmax    = self.config['lensrec']['lmax'] = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
+        self.Lmax    = self.config['lensrec']['Lmax']
+        self.cltype  = self.config['lensrec']['cltype']
         self.cls     = cls
         self.glm = {}
         self.clm = {}
@@ -318,12 +316,12 @@ class qest_gmv(object):
         if self.cltype!='ucmb' and self.cltype!='lcmb' and self.cltype!='grad':
             sys.exit('cltype must be ucmb, lcmb or grad')
 
-        if 'nside' in config:
-            print("-- Overwride default nside")
-            self.nside = self.config['nside'] # Overwrite automatic setting of nside<2*lmax
+        if 'nside' in self.config['lensrec']:
+            print("-- Overwrite default nside")
+            self.nside = self.config['lensrec']['nside'] # Overwrite automatic setting of nside<2*lmax
         else:
             self.nside   = utils.get_nside(self.Lmax)
-        
+
         print("-- Nside to project: %d"%self.nside)
         print("-- lmax:%d"%self.lmax)
         print("-- Lmax:%d"%self.Lmax)
@@ -336,7 +334,7 @@ class qest_gmv(object):
         Parameters
         ----------
         qe : str
-          Quadratic estimator type: 'all'/'TTEETE' (TT/EE/TE only)/'TBEB' (TB/EB only)/'TTEETEprf'; defaults to self.qe
+          Quadratic estimator type: 'all'/'TTEETE' (TT/EE/TE only)/'TBEB' (TB/EB only)/'TTEETEprf'
 
         Returns
         ----------
@@ -352,17 +350,17 @@ class qest_gmv(object):
                 assert u is not None, "Need profile function to compute this estimator"
 
             if qe == 'all':
-                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'TB_GMV', 'EB_GMV']
-                idxs = [0, 1, 2, 3, 4]
+                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV', 'TB_GMV', 'BT_GMV', 'EB_GMV', 'BE_GMV']
+                idxs = [0, 1, 2, 3, 4, 5, 6, 7]
             elif qe == 'TTEETE':
-                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV']
-                idxs = [0, 1, 2]
+                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV']
+                idxs = [0, 1, 2, 3]
             elif qe == 'TBEB':
-                ests = ['TB_GMV', 'EB_GMV']
-                idxs = [3, 4]
+                ests = ['TB_GMV', 'BT_GMV', 'EB_GMV', 'BE_GMV']
+                idxs = [4, 5, 6, 7]
             elif qe == 'TTEETEprf':
-                ests = ['TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF']
-                idxs = [0, 1, 2]
+                ests = ['TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF','ET_GMV_PRF']
+                idxs = [0, 1, 2, 3]
             else:
                 print("For GMV, we can only calculate estimators for argument qe 'all', 'TTEETE', 'TBEB', or 'TTEETEprf'")
 
@@ -426,13 +424,20 @@ class qest_gmv(object):
                     glm_EB = hp.almxfl(glm_EB,nrm*wP1)
                     clm_EB = hp.almxfl(clm_EB,nrm*wP1)
 
-                    # BT now...
-                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[12][0],q.w[12][1],q.w[12][2],q.s[12][0],q.s[12][1],q.s[12][2]
-                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[14][0],q.w[14][1],q.w[14][2],q.s[14][0],q.s[14][1],q.s[14][2]
+                    # Sum
+                    glmsum = glm_TB + glm_EB
+                    clmsum = clm_TB + clm_EB
 
-                    walm1 = hp.almxfl(alm1,wY1) # T1
-                    walm3 = hp.almxfl(alm1,wY3) # T3
-                    walm2 = hp.almxfl(alm2,wX1) # B2
+                elif est=='BT_GMV' or est=='BE_GMV':
+                    print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
+
+                    # BT first!
+                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
+                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
+
+                    walm1 = hp.almxfl(alm2,wY1) # T1
+                    walm3 = hp.almxfl(alm2,wY3) # T3
+                    walm2 = hp.almxfl(alm1,wX1) # B2
 
                     SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
                     SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
@@ -449,12 +454,12 @@ class qest_gmv(object):
                     clm_BT = hp.almxfl(clm_BT,nrm*wP1)
 
                     # BE now...
-                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[16][0],q.w[16][1],q.w[16][2],q.s[16][0],q.s[16][1],q.s[16][2]
-                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[18][0],q.w[18][1],q.w[18][2],q.s[18][0],q.s[18][1],q.s[18][2]
+                    wX1,wY1,wP1,sX1,sY1,sP1 = q.w[4][0],q.w[4][1],q.w[4][2],q.s[4][0],q.s[4][1],q.s[4][2]
+                    wX3,wY3,wP3,sX3,sY3,sP3 = q.w[6][0],q.w[6][1],q.w[6][2],q.s[6][0],q.s[6][1],q.s[6][2]
 
-                    walm1 = hp.almxfl(alm1,wY1) # E1
-                    walm3 = hp.almxfl(alm1,wY3) # E3
-                    walm2 = hp.almxfl(alm2,wX1) # B2
+                    walm1 = hp.almxfl(alm2,wY1) # E1
+                    walm3 = hp.almxfl(alm2,wY3) # E3
+                    walm2 = hp.almxfl(alm1,wX1) # B2
 
                     SpX1, SmX1 = hp.alm2map_spin([walm1,np.zeros_like(walm1)], self.nside, 1, self.lmax)
                     SpX3, SmX3 = hp.alm2map_spin([walm3,np.zeros_like(walm3)], self.nside, 3, self.lmax)
@@ -471,8 +476,8 @@ class qest_gmv(object):
                     clm_BE = hp.almxfl(clm_BE,nrm*wP1)
 
                     # Sum
-                    glmsum = glm_TB + glm_EB + glm_BT + glm_BE
-                    clmsum = clm_TB + clm_EB + clm_BT + glm_BE
+                    glmsum = glm_BT + glm_BE
+                    clmsum = clm_BT + glm_BE
 
                 else:
                     # More traditional quicklens style calculation
@@ -518,8 +523,8 @@ class qest_gmv(object):
                 retglm += glmsum
                 retclm += clmsum
 
-            self.glm[qe] = retglm 
-            self.clm[qe] = retclm   
+            self.glm[qe] = retglm
+            self.clm[qe] = retclm
 
         return self.glm[qe], self.clm[qe]
 

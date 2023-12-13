@@ -32,7 +32,6 @@ def extract_patch(mask,patch):
 
     return pix0,pidx
 
-
 def rd2tp(ra,dec):
     """
     Convert ra,dec -> tht,phi
@@ -63,15 +62,14 @@ def zeropad(cl):
     cl=np.insert(cl,0,0)
     return cl
 
-
 def parse_yaml(file_yaml):
     '''
     Load all settings in yaml
     '''
     print('Loading lensing config: %s'%file_yaml)
-    # Read the yaml file 
+    # Read the yaml file
     dict  = yaml.safe_load(Path(file_yaml).read_text())
-   
+
     # Check healqest version of commit used
     repo  = git.Repo(dict['base']['dir_healqest'],search_parent_directories=True)
     sha   = repo.head.object.hexsha
@@ -79,7 +77,7 @@ def parse_yaml(file_yaml):
     print('healqest commit: %s'%sha)
 
     # Check reconstruction type and return maps and qe needed.
-    rectype  = dict['lensrec']['rectype'] 
+    rectype  = dict['lensrec']['rectype']
     print('Reconstruction type: %s'%rectype)
 
     recdict  = {'sqe'  : {'maptype1': 'cmbmv',
@@ -88,10 +86,10 @@ def parse_yaml(file_yaml):
                          },
                 'gmv'  : {'maptype1': 'cmbmv',
                           'maptype2': 'cmbmv'
-                         }, 
+                         },
                 'gmvph': {'maptype1': 'cmbmv',
                           'maptype2': 'cmbmv'
-                         },           
+                         },
                 'mh'   : {'maptype1': 'cmbynull',
                           'maptype2': 'cmbmv'   ,
                           'qes'     : ['TT']
@@ -105,7 +103,8 @@ def parse_yaml(file_yaml):
     dict['maptype1'] = recdict[rectype]['maptype1']
     dict['maptype2'] = recdict[rectype]['maptype2']
     dict['qes']      = recdict[rectype]['qes']
-    
+    dict['dir_out']  = dict['outputs']['dir_out']
+
     # Read Cls from specified files
     dict['lensrec']['lmax'] = max(dict['lensrec']['lmaxT'],dict['lensrec']['lmaxP'])
 
@@ -117,10 +116,10 @@ def parse_yaml(file_yaml):
                 ell = np.loadtxt(f, usecols=[0])
                 dd  = ell*(ell+1)/2/np.pi
                 dict['cls']['lcmb'] = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1] for c, n in enumerate(['tt','ee','bb','te']) }
-                #print("Setting CMB lensed cls")    
+                #print("Setting CMB lensed cls")
             except:
                 print("Couldn't load lensed CMB cls -- not setting CMB Cls")
-         
+
         if 'file_ucmb' in dict['cls']:
             try:
                 f   = dict['cls']['file_ucmb']
@@ -147,11 +146,7 @@ def parse_yaml(file_yaml):
             except:
                 print("Couldn't load gradient CMB cls -- not setting CMB Cls")
 
-        
-
     return dict
-
-
 
 class RelativeSeconds(lg.Formatter):
     def format(self, record):
@@ -228,7 +223,7 @@ def load_cambcls(file,lmax=2000,dict=False,dls=False):
         d['bb']=slbb
         d['te']=slte
         return d
-    
+
 def get_lensedcls(file,lmax=2000,dict=False):
     ell,sltt,slee,slbb,slte=np.loadtxt(file,unpack=True)
     # Removing the ell factors and padding with zeros (since the file starts with l=2)
@@ -272,6 +267,7 @@ def get_unlensedcls(file,lmax=2000):
     sltp = sltp[:lmax+1]
     slep = slep[:lmax+1]
     return ell,sltt,slee,slbb,slte,slpp,sltp,slep
+
 '''
 def setup_logger(nolog,file_log='test.log'):
 
@@ -323,7 +319,7 @@ def add_clsdict(d,key,cltt,clee,clbb,clte=None):
 #    else:
 #        tlm1,elm1,blm1 = alms1[0],alms1[1],alms1[2]
 #        tlm2,elm2,blm2 = alms2[0],alms2[1],alms2[2]
-    
+
 #    flT,flE,flB = get_fl(config,use_unlCls=use_unlCls)
 
 #    lmaxTP = config['lmaxTP']
@@ -336,11 +332,10 @@ def add_clsdict(d,key,cltt,clee,clbb,clte=None):
 #    if qetype[1]=='B': blm2 = reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
 #    return almbar1,almbar2,flm1,flm2
 
-
 def get_fl(config,mtype,use_unlCls=False):
 
     sdict  = {'T':'tt', 'E':'ee', 'B':'bb' }
-    
+
     lmaxTP = config['lmaxTP']
     lmax   = config['lmax%s'%('T' if mtype=='T' else 'P')]
     lmin   = config['lmin']
@@ -359,7 +354,7 @@ def get_almbar(config,mtype,cmbid,seed,use_unlCls=True):
     hdudict = {_mtype: c+1 for c,_mtype in enumerate(['T','E','B'])}
 
     lmaxTP  = config['lmaxTP']
-    alm     = hp.read_alm(config['iqu']['dir']+config['iqu']['prefix'].format(cmbid=cmbid,seed=seed),hdu=hdudict[mtype]) 
+    alm     = hp.read_alm(config['iqu']['dir']+config['iqu']['prefix'].format(cmbid=cmbid,seed=seed),hdu=hdudict[mtype])
     alm     = reduce_lmax(alm,lmax=lmaxTP);
 
     fl      = get_fl(config,mtype,use_unlCls=use_unlCls)
@@ -367,7 +362,6 @@ def get_almbar(config,mtype,cmbid,seed,use_unlCls=True):
     almbar  = hp.almxfl(alm,fl)
 
     return almbar,fl
-
 
 def load_beam():
     file_beam=dir_base+'/beam/saturn.txt'

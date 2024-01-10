@@ -15,7 +15,7 @@ class gmv_resp(object):
     def __init__(self,config,cltype,totalcls,u=None,crossilc=False,rlzcls=None,save_path=None):
 
         if crossilc:
-            assert totalcls.shape[1]==7, "If temperature map T1 != T2, must provide cltt for both autospectra and cross spectrum"
+            assert totalcls.shape[1]==9, "If temperature map T1 != T2, must provide cltt for both autospectra and cross spectrum"
 
         if not crossilc:
             cltt = totalcls[:,0]

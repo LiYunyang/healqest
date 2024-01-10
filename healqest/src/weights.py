@@ -16,7 +16,7 @@ class weights():
         if est=='TTprf' or est=='TT_GMV_PRF' or est=='EE_GMV_PRF' or est=='TE_GMV_PRF' or est=='TB_GMV_PRF' or est=='EB_GMV_PRF':
             assert u is not None, "Must provide u(ell)"
         if crossilc:
-            assert totalcls.shape[1]=9, "If temperature map T1 != T2, must provide cltt for both autospectra and cross spectrum"
+            assert totalcls.shape[1]==11, "If temperature map T1 != T2, must provide cltt for both autospectra and cross spectrum"
 
         self.lmax = lmax
         l = np.arange(lmax+1,dtype=np.float_)
@@ -31,13 +31,14 @@ class weights():
                 clbb = totalcls[:,2]
                 clte = totalcls[:,3]
             else:
-                cltt1 = totalcls[:,0]
-                cltt2 = totalcls[:,1]
-                clttx = totalcls[:,2]
-                cltt3 = totalcls[:,3]
-                clee = totalcls[:,4]
-                clbb = totalcls[:,5]
-                clte = totalcls[:,6]
+                # totalcls: T3T3, EE, BB, T3E, T1T1, T2T2, T1T2, T1T3, T2T3, T1E, T2E
+                cltt3 = totalcls[:,0]
+                cltt1 = totalcls[:,4]
+                cltt2 = totalcls[:,5]
+                clttx = totalcls[:,6]
+                clee = totalcls[:,1]
+                clbb = totalcls[:,2]
+                clte = totalcls[:,3]
 
         if est=='TT_GMV_PRF':
             self.ntrm = 1

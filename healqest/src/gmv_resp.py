@@ -15,7 +15,7 @@ class gmv_resp(object):
     def __init__(self,config,cltype,totalcls,u=None,crossilc=False,rlzcls=None,save_path=None):
 
         if crossilc:
-            assert totalcls.shape[1]==9, "If temperature map T1 != T2, must provide cltt for both autospectra and cross spectrum"
+            assert totalcls.shape[1]==11, "If temperature map T1 != T2, must provide cltt for both autospectra and cross spectrum"
 
         if not crossilc:
             cltt = totalcls[:,0]
@@ -28,13 +28,14 @@ class gmv_resp(object):
             self.totalBB = interp1d(np.arange(len(clbb)),clbb,kind='linear',bounds_error=False,fill_value=0.)
             self.totalTE = interp1d(np.arange(len(clte)),clte,kind='linear',bounds_error=False,fill_value=0.)
         else:
-            cltt1 = totalcls[:,0]
-            cltt2 = totalcls[:,1]
-            clttx = totalcls[:,2]
-            cltt3 = totalcls[:,3]
-            clee = totalcls[:,4]
-            clbb = totalcls[:,5]
-            clte = totalcls[:,6]
+            # totalcls: T3T3, EE, BB, T3E, T1T1, T2T2, T1T2, T1T3, T2T3, T1E, T2E
+            cltt3 = totalcls[:,0]
+            cltt1 = totalcls[:,4]
+            cltt2 = totalcls[:,5]
+            clttx = totalcls[:,6]
+            clee = totalcls[:,1]
+            clbb = totalcls[:,2]
+            clte = totalcls[:,3]
 
             self.totalTT1 = interp1d(np.arange(len(cltt1)),cltt1,kind='linear',bounds_error=False,fill_value=0.)
             self.totalTT2 = interp1d(np.arange(len(cltt2)),cltt2,kind='linear',bounds_error=False,fill_value=0.)

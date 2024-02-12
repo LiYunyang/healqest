@@ -1,5 +1,5 @@
 import os,sys
-import utils
+import healqest_utils as utils
 import healpy as hp
 from tabulate import tabulate
 

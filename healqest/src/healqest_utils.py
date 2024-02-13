@@ -1,4 +1,4 @@
-import os,sys,git,uuid
+import os,sys 
 import numpy as np
 import healpy as hp
 from pathlib import Path
@@ -66,6 +66,7 @@ def parse_yaml(file_yaml):
     '''
     Load all settings in yaml
     '''
+    import git
     print('Loading lensing config: %s'%file_yaml)
     # Read the yaml file
     dict  = yaml.safe_load(Path(file_yaml).read_text())

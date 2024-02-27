@@ -11,7 +11,7 @@ import numpy  as np
 import pickle as pk
 sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
 import utils, hp_utils, cinv_utils
-import opfilt_hp_p, opfilt_hp_t, cd_solve, cd_monitors
+import opfilt_hp_p, opfilt_hp_t, opfilt_hp_tp, cd_solve, cd_monitors
 # disable mpi
 
 class cinv(object):

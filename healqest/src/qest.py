@@ -85,7 +85,7 @@ class qest(object):
             if qe == 'TTprf':
                 assert u is not None, "Need profile function to compute this estimator"
 
-            #ef __init__(self,config,cls,est,u=None,totalcls=None):
+            #def __init__(self,config,cls,est,u=None,totalcls=None):
             q = weights.weights(qe, self.cls[self.cltype], self.lmax, u=u)
 
             #sys.exit()
@@ -350,14 +350,25 @@ class qest_gmv(object):
                 assert u is not None, "Need profile function to compute this estimator"
 
             if qe == 'all':
-                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV', 'TB_GMV', 'BT_GMV', 'EB_GMV', 'BE_GMV']
-                idxs = [0, 1, 2, 3, 4, 5, 6, 7]
+                if crossilc:
+                    ests = ['TT_GMV', 'TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV', 'TB_GMV', 'BT_GMV', 'EB_GMV', 'BE_GMV']
+                    idxs = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+                else:
+                    ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV', 'TB_GMV', 'BT_GMV', 'EB_GMV', 'BE_GMV']
+                    idxs = [0, 1, 2, 3, 4, 5, 6, 7]
             elif qe == 'TTEETE':
-                ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV']
-                idxs = [0, 1, 2, 3]
+                if crossilc:
+                    ests = ['TT_GMV', 'TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV']
+                    idxs = [0, 1, 2, 3, 4]
+                else:
+                    ests = ['TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV']
+                    idxs = [0, 1, 2, 3]
             elif qe == 'TBEB':
                 ests = ['TB_GMV', 'BT_GMV', 'EB_GMV', 'BE_GMV']
-                idxs = [4, 5, 6, 7]
+                if crossilc:
+                    idxs = [5, 6, 7, 8]
+                else:
+                    idxs = [4, 5, 6, 7]
             elif qe == 'TTEETEprf':
                 ests = ['TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF','ET_GMV_PRF']
                 idxs = [0, 1, 2, 3]
@@ -520,8 +531,12 @@ class qest_gmv(object):
                         glmsum += hp.almxfl(glm,0.5*wP)
                         clmsum += hp.almxfl(clm,0.5*wP)
 
-                retglm += glmsum
-                retclm += clmsum
+                if est=='TT_GMV' and crossilc is True:
+                    nrm = 0.5
+                else:
+                    nrm = 1
+                retglm += nrm*glmsum
+                retclm += nrm*clmsum
 
             self.glm[qe] = retglm
             self.clm[qe] = retclm

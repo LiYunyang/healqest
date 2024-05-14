@@ -88,6 +88,10 @@ def parse_yaml(file_yaml):
                           'maptype2': 'cmbmv',
                           'qes'     : ['TT_GMV','EE_GMV','TE_GMV','ET_GMV','TB_GMV','BT_GMV','EB_GMV','BE_GMV']
                          },
+                'gmvjtp': {'maptype1': 'cmbmv',
+                           'maptype2': 'cmbmv',
+                           'qes'     : ['TT','TE','TB','ET','EE','EB','BT','BE']
+                         },
                 'gmvph': {'maptype1': 'cmbmv',
                           'maptype2': 'cmbmv'
                          },

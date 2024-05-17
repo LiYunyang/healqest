@@ -5,6 +5,20 @@ from pathlib import Path
 import yaml,pickle
 import logging as lg
 
+def rebincl(ell,cl, bb):
+    #bb   = np.linspace(minell,maxell,Nbins+1)
+    Nbins=len(bb)-1
+    ll   = (bb[:-1]).astype(np.int_)
+    uu   = (bb[1:]).astype(np.int_)
+    ret  = np.zeros(Nbins)
+    retl = np.zeros(Nbins)
+    err  = np.zeros(Nbins)
+    for i in range(0,Nbins):
+        ret[i]  = np.mean(cl[ll[i]:uu[i]])
+        retl[i] = np.mean(ell[ll[i]:uu[i]])
+        err[i]  = np.std(cl[ll[i]:uu[i]])
+    return ret
+
 def extract_patch(mask,patch):
 
     nside  = hp.npix2nside(mask.shape[0])

@@ -190,7 +190,7 @@ def reduce_lmax(alm, lmax=4000):
     lmaxin  = hp.Alm.getlmax(alm.shape[0])
     print( "-- Reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax) )
     ell,emm = hp.Alm.getlm(lmaxin)
-    almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex_)
+    almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex128)
     oldi=0
     oldf=0
     newi=0

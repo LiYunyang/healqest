@@ -76,7 +76,7 @@ def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_Z
             tl1min = max(abs(qeXY.s[i][0]), abs(qeZA.s[j][i1_ZA]))
             tl1max = min( [qeXY.lmax, qeZA.lmax, lmax_fX] )
             
-            cl1 = np.zeros( tl1max+1, dtype=np.complex_ )
+            cl1 = np.zeros( tl1max+1, dtype=np.complex128 )
         
             for tl1 in range(tl1min, tl1max+1):
                 #print(tl1)
@@ -88,7 +88,7 @@ def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_Z
             tl2min = max(abs(qeXY.s[i][1]), abs(qeZA.s[j][i2_ZA]))
             tl2max = min( [qeXY.lmax, qeZA.lmax, lmax_fY] )
 
-            cl2 = np.zeros( tl2max+1, dtype=np.complex_ )
+            cl2 = np.zeros( tl2max+1, dtype=np.complex128 )
     
             for tl2 in range(tl2min, tl2max+1):
                 cl2[tl2] = qeXY.w[i][1][tl2] * cfunc_ZA( qeZA.w[j][i2_ZA][tl2] ) * (2.*tl2+1.) * fY[tl2]

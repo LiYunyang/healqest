@@ -19,7 +19,7 @@ class weights():
             assert totalcls.shape[1]==11, "If temperature map T1 != T2, must provide cltt for both autospectra and cross spectrum"
 
         self.lmax = lmax
-        l = np.arange(lmax+1,dtype=np.float_)
+        l = np.arange(lmax+1,dtype=np.float64)
         print('Computing weights')
 
         sl = {ii: cls[ii] for ii in cls.keys()}
@@ -86,11 +86,11 @@ class weights():
             EE_f2 = +np.nan_to_num(np.sqrt(l*(l+1)))
             EE_f3 = +np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slee[:lmax+1]
             EE_f4 = np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slee[:lmax+1]
-            TE_f1 = -0.25*np.ones_like(l,dtype=np.float_)
+            TE_f1 = -0.25*np.ones_like(l,dtype=np.float64)
             TE_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             TE_f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            TE_f5 = -0.50*np.ones_like(l,dtype=np.float_)
+            TE_f5 = -0.50*np.ones_like(l,dtype=np.float64)
             TE_f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*self.slte[:lmax+1]
             self.w[0][0]=TT_f3*clee[:lmax+1]; self.w[0][1]=TT_f1*clee[:lmax+1]; self.w[0][2]=TT_f2; self.s[0][0]=+1; self.s[0][1]=+0; self.s[0][2]=+1
@@ -132,11 +132,11 @@ class weights():
             EE_f2 = +np.nan_to_num(np.sqrt(l*(l+1)))
             EE_f3 = +np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slee[:lmax+1]
             EE_f4 = np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slee[:lmax+1]
-            TE_f1 = -0.25*np.ones_like(l,dtype=np.float_)
+            TE_f1 = -0.25*np.ones_like(l,dtype=np.float64)
             TE_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             TE_f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            TE_f5 = -0.50*np.ones_like(l,dtype=np.float_)
+            TE_f5 = -0.50*np.ones_like(l,dtype=np.float64)
             TE_f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*self.slte[:lmax+1]
             self.w[0][0]=TT_f3*clte[:lmax+1]; self.w[0][1]=TT_f1*clte[:lmax+1]; self.w[0][2]=TT_f2; self.s[0][0]=+1; self.s[0][1]=+0; self.s[0][2]=+1
@@ -200,11 +200,11 @@ class weights():
             EE_f2 = +np.nan_to_num(np.sqrt(l*(l+1)))
             EE_f3 = +np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slee[:lmax+1]
             EE_f4 = np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slee[:lmax+1]
-            TE_f1 = -0.25*np.ones_like(l,dtype=np.float_)
+            TE_f1 = -0.25*np.ones_like(l,dtype=np.float64)
             TE_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             TE_f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            TE_f5 = -0.50*np.ones_like(l,dtype=np.float_)
+            TE_f5 = -0.50*np.ones_like(l,dtype=np.float64)
             TE_f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*self.slte[:lmax+1]
             self.w[0][0]=TT_f3*clee[:lmax+1]; self.w[0][1]=-1*TT_f1*clte[:lmax+1]; self.w[0][2]=TT_f2; self.s[0][0]=+1; self.s[0][1]=+0; self.s[0][2]=+1
@@ -262,11 +262,11 @@ class weights():
             EE_f2 = +np.nan_to_num(np.sqrt(l*(l+1)))
             EE_f3 = +np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slee[:lmax+1]
             EE_f4 = np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slee[:lmax+1]
-            TE_f1 = -0.25*np.ones_like(l,dtype=np.float_)
+            TE_f1 = -0.25*np.ones_like(l,dtype=np.float64)
             TE_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             TE_f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            TE_f5 = -0.50*np.ones_like(l,dtype=np.float_)
+            TE_f5 = -0.50*np.ones_like(l,dtype=np.float64)
             TE_f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TE_f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*self.slte[:lmax+1]
             self.w[0][1]=TT_f3*clee[:lmax+1]; self.w[0][0]=-1*TT_f1*clte[:lmax+1]; self.w[0][2]=TT_f2; self.s[0][1]=+1; self.s[0][0]=+0; self.s[0][2]=+1
@@ -317,11 +317,11 @@ class weights():
             self.ntrm = 12
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            TB_f1 = -0.25j*np.ones_like(l,dtype=np.float_)
+            TB_f1 = -0.25j*np.ones_like(l,dtype=np.float64)
             TB_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TB_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             TB_f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            TB_f5 = +0.25j*np.ones_like(l,dtype=np.float_)
+            TB_f5 = +0.25j*np.ones_like(l,dtype=np.float64)
             EB_f1 =  (-0.25j*np.ones_like(l))
             EB_f2 =  (+0.25j*np.ones_like(l))
             EB_f3 = +np.nan_to_num(np.sqrt(l*(l+1)))
@@ -365,11 +365,11 @@ class weights():
             self.ntrm = 12
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            BT_f1 = -0.25j*np.ones_like(l,dtype=np.float_)
+            BT_f1 = -0.25j*np.ones_like(l,dtype=np.float64)
             BT_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             BT_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             BT_f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            BT_f5 = +0.25j*np.ones_like(l,dtype=np.float_)
+            BT_f5 = +0.25j*np.ones_like(l,dtype=np.float64)
             BE_f1 =  (-0.25j*np.ones_like(l))
             BE_f2 =  (+0.25j*np.ones_like(l))
             BE_f3 = +np.nan_to_num(np.sqrt(l*(l+1)))
@@ -399,11 +399,11 @@ class weights():
             self.ntrm = 12
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            TB_f1 = -0.25j*np.ones_like(l,dtype=np.float_)
+            TB_f1 = -0.25j*np.ones_like(l,dtype=np.float64)
             TB_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             TB_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             TB_f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            TB_f5 = +0.25j*np.ones_like(l,dtype=np.float_)
+            TB_f5 = +0.25j*np.ones_like(l,dtype=np.float64)
             EB_f1 =  (-0.25j*np.ones_like(l))
             EB_f2 =  (+0.25j*np.ones_like(l))
             EB_f3 = +np.nan_to_num(np.sqrt(l*(l+1)))
@@ -457,11 +457,11 @@ class weights():
             self.ntrm = 12
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            BT_f1 = -0.25j*np.ones_like(l,dtype=np.float_)
+            BT_f1 = -0.25j*np.ones_like(l,dtype=np.float64)
             BT_f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             BT_f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             BT_f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            BT_f5 = +0.25j*np.ones_like(l,dtype=np.float_)
+            BT_f5 = +0.25j*np.ones_like(l,dtype=np.float64)
             BE_f1 =  (-0.25j*np.ones_like(l))
             BE_f2 =  (+0.25j*np.ones_like(l))
             BE_f3 = +np.nan_to_num(np.sqrt(l*(l+1)))
@@ -531,12 +531,12 @@ class weights():
             self.ntrm = 6
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            f1 = -0.25*np.ones_like(l,dtype=np.float_)
+            f1 = -0.25*np.ones_like(l,dtype=np.float64)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             #f4 = -np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*slte[:lmax+1]
             f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            f5 = -0.50*np.ones_like(l,dtype=np.float_)
+            f5 = -0.50*np.ones_like(l,dtype=np.float64)
             f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*sl['te'][:lmax+1]
             self.w[0][0]=f3; self.w[0][1]=f1; self.w[0][2]=f2; self.s[0][0]=-1; self.s[0][1]=+2; self.s[0][2]=+1
@@ -551,12 +551,12 @@ class weights():
             self.ntrm = 6
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            f1 = -0.25*np.ones_like(l,dtype=np.float_)
+            f1 = -0.25*np.ones_like(l,dtype=np.float64)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             #f4 = -np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
             f4 = +np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            f5 = -0.50*np.ones_like(l,dtype=np.float_)
+            f5 = -0.50*np.ones_like(l,dtype=np.float64)
             f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*self.slte[:lmax+1]
             self.w[0][1]=f3; self.w[0][0]=f1; self.w[0][2]=f2; self.s[0][1]=-1; self.s[0][0]=+2; self.s[0][2]=+1
@@ -571,11 +571,11 @@ class weights():
             self.ntrm = 4
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            f1 = -0.25j*np.ones_like(l,dtype=np.float_)
+            f1 = -0.25j*np.ones_like(l,dtype=np.float64)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            f5 = +0.25j*np.ones_like(l,dtype=np.float_)
+            f5 = +0.25j*np.ones_like(l,dtype=np.float64)
             #self.w[0][0]=f4; self.w[0][1]=f5; self.w[0][2]=f2; self.s[0][0]=+3; self.s[0][1]=-2; self.s[0][2]=+1 #from QL
             #self.w[1][0]=f4; self.w[1][1]=f1; self.w[1][2]=f2; self.s[1][0]=-3; self.s[1][1]=+2; self.s[1][2]=-1
             #self.w[2][0]=f3; self.w[2][1]=f1; self.w[2][2]=f2; self.s[2][0]=-1; self.s[2][1]=+2; self.s[2][2]=+1
@@ -590,21 +590,21 @@ class weights():
             self.ntrm = 4
             self.w = { i : {} for i in range(0, self.ntrm) }
             self.s = { i : {} for i in range(0, self.ntrm) }
-            #f1 = +0.25*np.ones_like(l,dtype=np.float_)
+            #f1 = +0.25*np.ones_like(l,dtype=np.float64)
             #f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             #f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*sl['te'][:lmax+1]
             #f4 = -np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*sl['te'][:lmax+1]
-            #f5 = -0.25*np.ones_like(l,dtype=np.float_)
+            #f5 = -0.25*np.ones_like(l,dtype=np.float64)
             #self.w[0][1]=f4; self.w[0][0]=f1; self.w[0][2]=f2; self.s[0][1]=+3; self.s[0][0]=-2; self.s[0][2]=+1
             #self.w[1][1]=f4; self.w[1][0]=f5; self.w[1][2]=f2; self.s[1][1]=-3; self.s[1][0]=+2; self.s[1][2]=-1
             #self.w[2][1]=f3; self.w[2][0]=f5; self.w[2][2]=f2; self.s[2][1]=-1; self.s[2][0]=+2; self.s[2][2]=+1
             #self.w[3][1]=f3; self.w[3][0]=f1; self.w[3][2]=f2; self.s[3][1]=+1; self.s[3][0]=-2; self.s[3][2]=-1
             # Yuuki's weights, 3/1/2023
-            f1 = -0.25j*np.ones_like(l,dtype=np.float_)
+            f1 = -0.25j*np.ones_like(l,dtype=np.float64)
             f2 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f3 =  np.nan_to_num(np.sqrt((l+2.)*(l-1.)))*self.slte[:lmax+1]
             f4 =  np.nan_to_num(np.sqrt((l+3.)*(l-2.)))*self.slte[:lmax+1]
-            f5 = +0.25j*np.ones_like(l,dtype=np.float_)
+            f5 = +0.25j*np.ones_like(l,dtype=np.float64)
             #self.w[0][0]=f4; self.w[0][1]=f5; self.w[0][2]=f2; self.s[0][0]=+3; self.s[0][1]=-2; self.s[0][2]=+1 #from QL
             #self.w[1][0]=f4; self.w[1][1]=f1; self.w[1][2]=f2; self.s[1][0]=-3; self.s[1][1]=+2; self.s[1][2]=-1
             #self.w[2][0]=f3; self.w[2][1]=f1; self.w[2][2]=f2; self.s[2][0]=-1; self.s[2][1]=+2; self.s[2][2]=+1
@@ -743,7 +743,7 @@ def weights_TT(idx,sltt,lmax):
     return w1,w2,wL,s1,s2,sL
 
 def weights_EE(idx,slee,lmax):
-    l  = np.arange(lmax+1,dtype=np.float_)
+    l  = np.arange(lmax+1,dtype=np.float64)
     f1 = -0.25*np.ones_like(l)
     f2 = +np.sqrt(l*(l+1))
     f3 = +np.sqrt((l+2.)*(l-1.))*slee[:lmax+1]; f3[:3]=0
@@ -759,12 +759,12 @@ def weights_EE(idx,slee,lmax):
     return w1,w2,wL,s1,s2,sL
 
 def weights_TE(idx,slte,lmax):
-    l  =  np.arange(lmax+1,dtype=np.float_)
+    l  =  np.arange(lmax+1,dtype=np.float64)
     f1 = -0.25*np.ones_like(l)
     f2 =  np.sqrt(l*(l+1))
     f3 =  np.sqrt((l+2.)*(l-1.))*slte[:lmax+1]; f3[:3]=0
     f4 = -np.sqrt((l+3.)*(l-2.))*slte[:lmax+1]; f4[:3]=0
-    f5 = -0.5*np.ones_like(l,dtype=np.float_)
+    f5 = -0.5*np.ones_like(l,dtype=np.float64)
     f6 =  np.sqrt(l*(l+1))
     f7 =  np.sqrt(l*(l+1))*slte[:lmax+1]
     if idx==0: w1=f3; w2=f1; wL=f2; s1=-1; s2=+2; sL=+1

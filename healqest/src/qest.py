@@ -153,6 +153,92 @@ class qest(object):
                 self.glm[qe] = hp.almxfl(glm,nrm*wP1)
                 self.clm[qe] = hp.almxfl(clm,nrm*wP1)
 
+            elif qe=='TT2':
+                q = weights.weights('TT', self.cls[self.cltype], self.lmax, u=u)
+
+                # Hack to get TB/EB working. currently not understanding some factors of j
+                print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
+                print('using est: %s'%qe )
+                wX1,wY1,wP1,sX1,sY1,sP1 = q.w[0][0],q.w[0][1],q.w[0][2],q.s[0][0],q.s[0][1],q.s[0][2]
+                wX3,wY3,wP3,sX3,sY3,sP3 = q.w[2][0],q.w[2][1],q.w[2][2],q.s[2][0],q.s[2][1],q.s[2][2]
+
+                print('USING TOSHIYAS TT ESTIMATOR')
+                #walmbar1 = hp.almxfl(almbar2,wY1)
+                #walmbar3 = hp.almxfl(almbar2,wY3)
+                #walmbar2 = hp.almxfl(almbar1,wX1)
+
+                #SpX1, SmX1 = hp.alm2map_spin([walmbar1,np.zeros_like(walmbar1)], self.nside, 1, self.lmax)
+                #SpX3, SmX3 = hp.alm2map_spin([walmbar3,np.zeros_like(walmbar3)], self.nside, 3, self.lmax)
+                #SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
+                #SpY2, SmY2 = hp.alm2map_spin([np.zeros_like(walmbar2),-1j*walmbar2], self.nside, 2, self.lmax)
+
+                #SpZ =  SpY2*(SpX1-SpX3) + SmY2*(SmX1-SmX3)
+                #SmZ = -SpY2*(SmX1+SmX3) + SmY2*(SpX1+SpX3)
+                X = hp.alm2map(almbar1,self.nside)
+
+                almbar2 = hp.almxfl(almbar2,q.w[0][0])
+                Y,Z = hp.alm2map_spin([almbar2,0*almbar2],self.nside,1,self.lmax  )
+                XY  = X*Y
+                XZ  = X*Z
+
+                glm,clm = hp.map2alm_spin([XY,XZ],1,self.Lmax)#*q.w[0][2]
+                #glm *=q.w[0][2]
+                #clm *=q.w[0][2]
+                
+                #glm,clm = hp.map2alm_spin([SpZ,SmZ],1,self.Lmax)
+
+                if qe=='TT' or qe=='EE' or qe=='TE' or qe=='ET':
+                    nrm=0.5
+                elif qe=='BE':
+                    nrm=-1
+                else:
+                    nrm=1
+
+                self.glm[qe] = hp.almxfl(glm,nrm*wP1)
+                self.clm[qe] = hp.almxfl(clm,nrm*wP1)
+
+                '''
+                allocate(ilk(lmax)); ilk = 1d0
+                if (gtype=='k') then
+                    do l = 1, lmax
+                    ilk(l) = 2d0/dble(l*(l+1))
+                    end do
+                end if
+
+                ! compute convolution
+                allocate(alm1(1,0:rlmax,0:rlmax))
+                alm1 = 0d0
+                do l = rlmin, rlmax
+                    alm1(1,l,0:l) = Tlm1(l,0:l)
+                end do 
+                allocate(at(0:npix-1))
+                call alm2map(nside,rlmax,rlmax,alm1,at)
+                deallocate(alm1)
+
+                allocate(alm1(2,0:rlmax,0:rlmax))
+                alm1 = 0d0
+                do l = rlmin, rlmax
+                    alm1(1,l,0:l) = fC(l)*Tlm2(l,0:l)*dsqrt(dble((l+1)*l))
+                end do 
+                allocate(map(0:npix-1,2))
+                call alm2map_spin(nside,rlmax,rlmax,1,alm1,map)
+                map(:,1) = at*map(:,1)
+                map(:,2) = at*map(:,2)
+                deallocate(at,alm1)
+
+                allocate(blm(2,0:lmax,0:lmax))
+                call map2alm_spin(nside,lmax,lmax,1,map,blm)
+                deallocate(map)
+
+                ! compute glm and clm
+                glm = 0d0
+                clm = 0d0
+                do l = 1, lmax
+                    glm(l,0:l) = ilk(l)*dsqrt(dble(l*(l+1)))*blm(1,l,0:l)
+                    clm(l,0:l) = ilk(l)*dsqrt(dble(l*(l+1)))*blm(2,l,0:l)
+                end do
+                ''';
+
             else:
                 # More traditional quicklens style calculation
                 retglm  = 0
@@ -161,7 +247,7 @@ class qest(object):
                 for i in range(0,q.ntrm):
 
                     wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
-                    print("-- Computing term %d/%d, sj = [%d,%d,%d]"%(i+1,q.ntrm,sX,sY,sP))
+                    #print("-- Computing term %d/%d, sj = [%d,%d,%d]"%(i+1,q.ntrm,sX,sY,sP))
                     walmbar1 = hp.almxfl(almbar1,wX)
                     walmbar2 = hp.almxfl(almbar2,wY)
 
@@ -494,7 +580,7 @@ class qest_gmv(object):
                     # More traditional quicklens style calculation
                     for i in range(0,q.ntrm):
                         wX,wY,wP,sX,sY,sP = q.w[i][0],q.w[i][1],q.w[i][2],q.s[i][0],q.s[i][1],q.s[i][2]
-                        print("Computing term %d/%d sj = [%d,%d,%d] of est %s"%(i+1,q.ntrm,sX,sY,sP,est))
+                        #print("Computing term %d/%d sj = [%d,%d,%d] of est %s"%(i+1,q.ntrm,sX,sY,sP,est))
                         walm1 = hp.almxfl(alm1,wX)
                         walm2 = hp.almxfl(alm2,wY)
 

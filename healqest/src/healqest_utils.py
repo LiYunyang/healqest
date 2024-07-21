@@ -5,6 +5,22 @@ from pathlib import Path
 import yaml,pickle
 import logging as lg
 
+def setup_logger(savelog=False,file_log='test.log'):
+
+    if savelog==False:
+        print("printing to stdout")
+        lg.basicConfig(level = lg.WARNING)
+        formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
+        lg.root.handlers[0].setFormatter(formatter)
+    else:
+        dir_log = str(Path(file_log).parent)
+        Path(dir_log).mkdir(parents=True, exist_ok=True)
+        print('saving log to: %s'%dir_log)
+        lg.basicConfig(filename=file_log, filemode = 'w+', level = lg.WARNING)
+        formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
+        lg.root.handlers[0].setFormatter(formatter)
+
+
 def rebincl(ell,cl, bb):
     #bb   = np.linspace(minell,maxell,Nbins+1)
     Nbins=len(bb)-1
@@ -106,6 +122,15 @@ def parse_yaml(file_yaml):
                            'maptype2': 'cmbmv',
                            'qes'     : ['TT','TE','TB','ET','EE','EB','BT','BE']
                          },
+                'gmvjtp_tteete': {'maptype1': 'cmbmv',
+                                  'maptype2': 'cmbmv',
+                                  'qes'     : ['TT','TE','ET','EE']
+                                 },
+                'gmvjtp_tbeb'  : {'maptype1': 'cmbmv',
+                                  'maptype2': 'cmbmv',
+                                  'qes'     : ['TB','BT','EB','BE']
+                                 },
+
                 'gmvph': {'maptype1': 'cmbmv',
                           'maptype2': 'cmbmv'
                          },
@@ -175,12 +200,6 @@ class RelativeSeconds(lg.Formatter):
         record.relativeCreated = "%02d:%02d:%02d"%(nhrs,nmins,nsecs)#, record.relativeCreated//(1000) )
         #print( dtype(record.relativeCreated//(1000)) )
         return super(RelativeSeconds, self).format(record)
-
-def setup_logger():
-    print("Setting up logging")
-    lg.basicConfig(level = lg.WARNING)
-    formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
-    lg.root.handlers[0].setFormatter(formatter)
 
 
 def reduce_lmax(alm, lmax=4000):

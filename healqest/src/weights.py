@@ -620,7 +620,7 @@ class weights():
             self.w[4][1]=f5; self.w[4][0]=f7; self.w[4][2]=f6; self.s[4][1]=+0; self.s[4][0]=-1; self.s[4][2]=-1
             self.w[5][1]=f5; self.w[5][0]=f7; self.w[5][2]=f6; self.s[5][1]=+0; self.s[5][0]=+1; self.s[5][2]=+1
 
-        if est=='ET':
+        if est=='ETcurl':
             self.slte = sl['te']
             self.ntrm = 6
             self.w = { i : {} for i in range(0, self.ntrm) }

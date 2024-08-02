@@ -143,10 +143,11 @@ class gmv_resp(object):
         Lensing response such that
         <X_l1 Y_{L-l1}> = f_XY(l1, L-l1)*\phi_L
         """
+        l_2 = self.l2(L, l_1, phi1)
         u = self.u
 
         if XY == 'TT':
-            result = u(l_1)
+            result = u(l_1)*u(l_2)/u(L)
         elif XY == 'EE':
             result = np.zeros(len(l_1))
         elif XY == 'TE':

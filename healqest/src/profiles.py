@@ -44,7 +44,7 @@ class profileGaussian(Profile):
     name = 'profileGaussian'
 
     def __init__(self, fwhm, lmax=12000):
-        self.fwhm_arcmin = fwhm*0.00029088
+        self.fwhm_rad = fwhm*0.00029088
         self.lmax        = lmax
         
         super(profileGaussian, self).__init__()
@@ -55,6 +55,6 @@ class profileGaussian(Profile):
 
     def _fourier(self):
         '''Compute Fourier space directly'''
-        sigma = self.fwhm_arcmin/(np.sqrt(8*np.log(2)))
+        sigma = self.fwhm_rad/(np.sqrt(8*np.log(2)))
         return np.exp(-0.5*self.ells*(self.ells+1) * sigma**2)
 

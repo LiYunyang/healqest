@@ -260,7 +260,7 @@ class gmv_resp(object):
         f1[:, 3] = f_TE_asym
         return f1
 
-    def M1_inv(self, L, l_1, phi1):
+    def M1_inv(self, L, l_1, phi1, Minv_zero=False):
 
         l_2 = self.l2(L, l_1, phi1)
         nl2 = len(l_2)
@@ -317,15 +317,20 @@ class gmv_resp(object):
             inv_m1[:, 2, 3] = inv_m1[:, 3, 2] = 0.5*(self.totalEE(l_1)*self.totalTT2(l_2) -
                                                      self.totalTT1(l_1)*self.totalEE(l_2))
 
+        if Minv_zero:
+            inv_m1_c = np.zeros_like(inv_m1)
+            inv_m1_c[:, 0, 0] = inv_m1[:, 0, 0].copy()
+            inv_m1   = inv_m1_c
+
         return inv_m1/det[:, None, None]
 
-    def F1prime(self, L, l_1, phi1):
+    def F1prime(self, L, l_1, phi1, Minv_zero=False):
         """
         F1 = A1(L)*M1^{-1}*f1
         F1prime = M1^{-1}*f1
         """
         f_1 = self.f_1(L, l_1, phi1)
-        M1_inv = self.M1_inv(L, l_1, phi1)
+        M1_inv = self.M1_inv(L, l_1, phi1, Minv_zero)
         M1invf1 = np.einsum('ijk, ij -> ik', M1_inv, f_1)
         return M1invf1
 
@@ -335,7 +340,7 @@ class gmv_resp(object):
         F1prime = M1^{-1}*f1
         """
         f_1 = self.f_1_PRF(L, l_1, phi1)
-        M1_inv = self.M1_inv(L, l_1, phi1)
+        M1_inv = self.M1_inv(L, l_1, phi1, Minv_zero=True)
         M1invf1 = np.einsum('ijk, ij -> ik', M1_inv, f_1)
         return M1invf1
 
@@ -412,10 +417,10 @@ class gmv_resp(object):
 
             if cross:
                 # For R^SKappa
-                M1invf1 = self.F1prime(L, l_1, phil)
+                M1invf1 = self.F1prime(L, l_1, phil, Minv_zero=True) 
             else:
                 # For R^SS
-                M1invf1 = self.F1prime_PRF(L, l_1, phil)
+                M1invf1 = self.F1prime_PRF(L, l_1, phil) 
             if semi:
                 M1 = self.M_1(L, l_1, phil)
                 M1_M1invf1 = np.einsum('ijk, ij -> ik', M1, M1invf1)

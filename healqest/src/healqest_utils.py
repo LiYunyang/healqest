@@ -370,6 +370,54 @@ def add_clsdict(d,key,cltt,clee,clbb,clte=None):
 #    if qetype[1]=='B': blm2 = reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
 #    return almbar1,almbar2,flm1,flm2
 
+def get_totalcls(cls, lmaxT, lmaxP, lmaxTP, lminT, lminP):
+    #return total Cls (signal+fg+noise) for inv-var filtering
+    #enters GMV in various places
+    totalcls = {}
+    totalcls['tt'] = cls['lcmb']['tt'][:lmaxTP+1] + cls['res']['tt'][:lmaxTP+1]
+    totalcls['ee'] = cls['lcmb']['ee'][:lmaxTP+1] + cls['res']['ee'][:lmaxTP+1]
+    totalcls['te'] = cls['lcmb']['te'][:lmaxTP+1] + cls['res']['te'][:lmaxTP+1]
+    totalcls['bb'] = cls['lcmb']['bb'][:lmaxTP+1] + cls['res']['bb'][:lmaxTP+1]
+
+    bignumber = 1e10
+    totalcls['tt'][lmaxT+1:] = bignumber
+    totalcls['te'][lmaxT+1:] = bignumber
+    totalcls['ee'][lmaxP+1:] = bignumber
+    totalcls['bb'][lmaxP+1:] = bignumber
+
+    totalcls['tt'][:lminT] = bignumber
+    totalcls['te'][:lminT] = bignumber
+    totalcls['ee'][:lminP] = bignumber
+    totalcls['bb'][:lminP] = bignumber
+
+    return totalcls
+
+def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, gmvname):
+    '''
+        All aresp are computed using healqest/src/gmv_resp.py via run script
+        pipeline/spt3g_20192020/src/compute_gmvresp.py
+
+        aresp_fname: filename of the analytic GMV response file
+        arespss_fname: filename of the analytic src-src response file
+        arespse_fname: filename of the analytic src-phi response file
+
+    '''
+    dic = {'GMVTTEETE':1, 'GMVTBEB':2, 'GMV':3}
+    assert gmvname != 'GMVTBEB', "zero response to TBEB"
+
+    resp1  = np.load(aresp_fname)[:, dic[gmvname]]
+    resp2  = np.load(arespss_fname)[:,1]  #[:,1] == [:,3]  and [:,2]==0
+    resp12 = np.load(arespse_fname)[:,1] #[:,1] == [:,3]  and [:,2]==0
+
+    weight  = -1*resp12 / resp2
+    resp_tot = resp1 + weight*resp12
+
+    return resp_tot, weight
+
+def harden_est(plm_e, plm_s, weight):
+    #return hardened, unnormalized estimator
+    return plm_e + hp.almxfl(plm_s, weight)
+
 def get_fl(config,mtype,use_unlCls=False):
 
     sdict  = {'T':'tt', 'E':'ee', 'B':'bb' }

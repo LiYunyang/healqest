@@ -1,5 +1,5 @@
 import os,sys
-import utils
+import healqest_utils as hutils
 import healpy as hp
 from tabulate import tabulate
 
@@ -30,7 +30,7 @@ class maps:
         return {'cmbs':self.file_cmb, 'noise':self.file_noise}
     
     def change_alm_lmax(self, alm, lmax):
-        alm = utils.reduce_lmax(alm,lmax=lmax)
+        alm = hutils.reduce_lmax(alm,lmax=lmax)
         return alm
     
     def get_mask(self):

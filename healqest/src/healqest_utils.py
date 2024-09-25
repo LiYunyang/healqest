@@ -5,6 +5,36 @@ from pathlib import Path
 import yaml,pickle
 import logging as lg
 
+def setup_logger(savelog=False,file_log='test.log'):
+
+    if savelog==False:
+        print("printing to stdout")
+        lg.basicConfig(level = lg.WARNING)
+        formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
+        lg.root.handlers[0].setFormatter(formatter)
+    else:
+        dir_log = str(Path(file_log).parent)
+        Path(dir_log).mkdir(parents=True, exist_ok=True)
+        print('saving log to: %s'%dir_log)
+        lg.basicConfig(filename=file_log, filemode = 'w+', level = lg.WARNING)
+        formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
+        lg.root.handlers[0].setFormatter(formatter)
+
+
+def rebincl(ell,cl, bb):
+    #bb   = np.linspace(minell,maxell,Nbins+1)
+    Nbins=len(bb)-1
+    ll   = (bb[:-1]).astype(np.int_)
+    uu   = (bb[1:]).astype(np.int_)
+    ret  = np.zeros(Nbins)
+    retl = np.zeros(Nbins)
+    err  = np.zeros(Nbins)
+    for i in range(0,Nbins):
+        ret[i]  = np.mean(cl[ll[i]:uu[i]])
+        retl[i] = np.mean(ell[ll[i]:uu[i]])
+        err[i]  = np.std(cl[ll[i]:uu[i]])
+    return ret
+
 def extract_patch(mask,patch):
 
     nside  = hp.npix2nside(mask.shape[0])
@@ -89,6 +119,19 @@ def parse_yaml(file_yaml):
                           'maptype2': 'cmbmv',
                           'qes'     : ['TT_GMV','EE_GMV','TE_GMV','ET_GMV','TB_GMV','BT_GMV','EB_GMV','BE_GMV']
                          },
+                'gmvjtp': {'maptype1': 'cmbmv',
+                           'maptype2': 'cmbmv',
+                           'qes'     : ['TT','TE','TB','ET','EE','EB','BT','BE']
+                         },
+                'gmvjtp_tteete': {'maptype1': 'cmbmv',
+                                  'maptype2': 'cmbmv',
+                                  'qes'     : ['TT','TE','ET','EE']
+                                 },
+                'gmvjtp_tbeb'  : {'maptype1': 'cmbmv',
+                                  'maptype2': 'cmbmv',
+                                  'qes'     : ['TB','BT','EB','BE']
+                                 },
+
                 'gmvph': {'maptype1': 'cmbmv',
                           'maptype2': 'cmbmv'
                          },
@@ -159,12 +202,6 @@ class RelativeSeconds(lg.Formatter):
         #print( dtype(record.relativeCreated//(1000)) )
         return super(RelativeSeconds, self).format(record)
 
-def setup_logger():
-    print("Setting up logging")
-    lg.basicConfig(level = lg.WARNING)
-    formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
-    lg.root.handlers[0].setFormatter(formatter)
-
 
 def reduce_lmax(alm, lmax=4000):
     """
@@ -173,7 +210,7 @@ def reduce_lmax(alm, lmax=4000):
     lmaxin  = hp.Alm.getlmax(alm.shape[0])
     print( "-- Reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax) )
     ell,emm = hp.Alm.getlm(lmaxin)
-    almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex_)
+    almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex128)
     oldi=0
     oldf=0
     newi=0
@@ -333,6 +370,54 @@ def add_clsdict(d,key,cltt,clee,clbb,clte=None):
 #    if qetype[1]=='E': elm2 = reduce_lmax(elm2,lmax=lmaxTP); almbar2 = hp.almxfl(elm2,flE); flm2= flE
 #    if qetype[1]=='B': blm2 = reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
 #    return almbar1,almbar2,flm1,flm2
+
+def get_totalcls(cls, lmaxT, lmaxP, lmaxTP, lminT, lminP):
+    #return total Cls (signal+fg+noise) for inv-var filtering
+    #enters GMV in various places
+    totalcls = {}
+    totalcls['tt'] = cls['lcmb']['tt'][:lmaxTP+1] + cls['res']['tt'][:lmaxTP+1]
+    totalcls['ee'] = cls['lcmb']['ee'][:lmaxTP+1] + cls['res']['ee'][:lmaxTP+1]
+    totalcls['te'] = cls['lcmb']['te'][:lmaxTP+1] + cls['res']['te'][:lmaxTP+1]
+    totalcls['bb'] = cls['lcmb']['bb'][:lmaxTP+1] + cls['res']['bb'][:lmaxTP+1]
+
+    bignumber = 1e10
+    totalcls['tt'][lmaxT+1:] = bignumber
+    totalcls['te'][lmaxT+1:] = bignumber
+    totalcls['ee'][lmaxP+1:] = bignumber
+    totalcls['bb'][lmaxP+1:] = bignumber
+
+    totalcls['tt'][:lminT] = bignumber
+    totalcls['te'][:lminT] = bignumber
+    totalcls['ee'][:lminP] = bignumber
+    totalcls['bb'][:lminP] = bignumber
+
+    return totalcls
+
+def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, gmvname):
+    '''
+        All aresp are computed using healqest/src/gmv_resp.py via run script
+        pipeline/spt3g_20192020/src/compute_gmvresp.py
+
+        aresp_fname: filename of the analytic GMV response file
+        arespss_fname: filename of the analytic src-src response file
+        arespse_fname: filename of the analytic src-phi response file
+
+    '''
+    dic = {'GMVTTEETE':1, 'GMVTBEB':2, 'GMV':3}
+    assert gmvname != 'GMVTBEB', "zero response to TBEB"
+
+    resp1  = np.load(aresp_fname)[:, dic[gmvname]]
+    resp2  = np.load(arespss_fname)[:,1]  #[:,1] == [:,3]  and [:,2]==0
+    resp12 = np.load(arespse_fname)[:,1] #[:,1] == [:,3]  and [:,2]==0
+
+    weight  = -1*resp12 / resp2
+    resp_tot = resp1 + weight*resp12
+
+    return resp_tot, weight
+
+def harden_est(plm_e, plm_s, weight):
+    #return hardened, unnormalized estimator
+    return plm_e + hp.almxfl(plm_s, weight)
 
 def get_fl(config,mtype,use_unlCls=False):
 

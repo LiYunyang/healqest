@@ -1,9 +1,38 @@
-import os,sys 
+import os,sys,yaml
 import numpy as np
 import healpy as hp
 from pathlib import Path
 import yaml,pickle
 import logging as lg
+
+def recursive_merge(main_data, included_data):
+    """Recursively merge two dictionaries, with values in main_data taking precedence."""
+    for key, value in included_data.items():
+        if isinstance(value, dict) and key in main_data and isinstance(main_data[key], dict):
+            # If both main_data and included_data have a dictionary at this key, merge recursively
+            recursive_merge(main_data[key], value)
+        else:
+            # Otherwise, if the key is not present in main_data, add it
+            if key not in main_data:
+                main_data[key] = value
+
+def load_yaml(file_path):
+    with open(file_path, 'r') as f:
+        data = yaml.safe_load(f)
+
+    # Check if there is an `includes` key
+    if 'includes' in data:
+        included_file = data['includes']
+        included_file_path = os.path.join(os.path.dirname(file_path), included_file)
+
+        # Recursively load the included file
+        with open(included_file_path, 'r') as included_f:
+            included_data = yaml.safe_load(included_f)
+
+        # Recursively merge included data into the main data, preserving main data values
+        recursive_merge(data, included_data)
+
+    return data
 
 def setup_logger(savelog=False,file_log='test.log'):
 

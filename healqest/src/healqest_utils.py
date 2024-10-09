@@ -23,14 +23,17 @@ def load_yaml(file_path):
     # Check if there is an `includes` key
     if 'includes' in data:
         included_file = data['includes']
-        included_file_path = os.path.join(os.path.dirname(file_path), included_file)
+        if type(included_file) is not list: included_file = [included_file]
 
-        # Recursively load the included file
-        with open(included_file_path, 'r') as included_f:
-            included_data = yaml.safe_load(included_f)
+        for inc_f in included_file:
+            included_file_path = os.path.join(os.path.dirname(file_path), inc_f)
 
-        # Recursively merge included data into the main data, preserving main data values
-        recursive_merge(data, included_data)
+            # Recursively load the included file
+            with open(included_file_path, 'r') as included_f:
+                included_data = yaml.safe_load(included_f)
+
+            # Recursively merge included data into the main data, preserving main data values
+            recursive_merge(data, included_data)
 
     return data
 

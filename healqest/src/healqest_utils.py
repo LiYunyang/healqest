@@ -225,6 +225,50 @@ def parse_yaml(file_yaml):
 
     return dict
 
+def load_cambfiles_dict(dict):
+
+    dict['lensrec']['lmax'] = max(dict['lensrec']['lmaxT'],dict['lensrec']['lmaxP'])
+
+    if "cls" in dict:
+
+        if 'file_lcmb' in dict['cls']:
+            try:
+                f   = dict['cls']['file_lcmb']; print(f)
+                ell = np.loadtxt(f, usecols=[0])
+                dd  = ell*(ell+1)/2/np.pi
+                dict['cls']['lcmb'] = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1] for c, n in enumerate(['tt','ee','bb','te']) }
+                #print("Setting CMB lensed cls")
+            except:
+                print("Couldn't load lensed CMB cls -- not setting CMB Cls")
+
+        if 'file_ucmb' in dict['cls']:
+            try:
+                f   = dict['cls']['file_ucmb']
+                ell = np.loadtxt(f, usecols=[0])
+                dd  = ell*(ell+1)/2/np.pi
+                vv  = (ell*(ell+1))**2/2/np.pi
+                qq  = (ell*(ell+1))**(1.5)/2/np.pi
+                dict['cls']['ucmb']       = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1]  for c, n in enumerate(['tt','ee','bb','te']) }
+                dict['cls']['ucmb']['pp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[5])/vv)[:dict['lensrec']['lmax']+1]
+                dict['cls']['ucmb']['tp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[6])/qq)[:dict['lensrec']['lmax']+1]
+                dict['cls']['ucmb']['ep'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[7])/qq)[:dict['lensrec']['lmax']+1]
+                #print("Setting CMB unlensed cls")
+            except:
+                print("Couldn't load unlensed CMB cls -- not setting CMB Cls")
+
+        if 'file_gcmb' in dict['cls']:
+            try:
+                #TODO: This will change if we use a different file! Currently configured for Abhi's file
+                f   = dict['cls']['file_gcmb']
+                ell = np.loadtxt(f, usecols=[0])
+                dd  = ell*(ell+1)/2/np.pi
+                dict['cls']['gcmb'] = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1]  for c, n in enumerate(['tt','ee','bb','te']) }
+                #print("Setting CMB gradient cls")
+            except:
+                print("Couldn't load gradient CMB cls -- not setting CMB Cls")
+
+    return dict
+
 class RelativeSeconds(lg.Formatter):
     def format(self, record):
         nhrs  = record.relativeCreated//(1000*60*60)

@@ -495,6 +495,8 @@ def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, estname):
         resp2  = np.load(arespss_fname)
         resp12 = np.load(arespse_fname)
 
+    resp2[resp2==0]=np.inf  #prevent NaNs
+
     weight  = -1*resp12 / resp2
     resp_tot = resp1 + weight*resp12
 

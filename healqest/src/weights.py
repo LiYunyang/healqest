@@ -13,7 +13,7 @@ class weights():
           totalcls = signal+noise spectra for GMV weights
           crossilc = True if temperature map T1 != T2 and we're doing GMV
         """
-        if est=='TTprf' or est=='TT_GMV_PRF' or est=='EE_GMV_PRF' or est=='TE_GMV_PRF' or est=='ET_GMV_PRF' or 'TTmask' or 'TTnoise':
+        if est=='TTprf' or est=='TT_GMV_PRF' or est=='EE_GMV_PRF' or est=='TE_GMV_PRF' or est=='ET_GMV_PRF' or est=='TTmask' or est=='TTnoise':
             assert u is not None, "Must provide u(ell)"
         if crossilc and totalcls is not None:
             assert totalcls.shape[1]==11, "If temperature map T1 != T2, must provide corresponding spectra for each T map"

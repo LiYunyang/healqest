@@ -8,12 +8,12 @@ class weights():
           cls  = dictionary with keys 'tt','te','ee','bb'
                  spectra (could be lensed cmb spec, XgradX spec etc.) for weights
           lmax = lmax of Cls for weights
-          u    = f(ell) that describe the power spectrum of a foreground
-                 for profile hardening (can be array of 1s)
+          u    = f(ell) that describe the power spectrum of a foreground or beam function
+                 for profile hardening (can be array of 1s) 
           totalcls = signal+noise spectra for GMV weights
           crossilc = True if temperature map T1 != T2 and we're doing GMV
         """
-        if est=='TTprf' or est=='TT_GMV_PRF' or est=='EE_GMV_PRF' or est=='TE_GMV_PRF' or est=='ET_GMV_PRF':
+        if est=='TTprf' or est=='TT_GMV_PRF' or est=='EE_GMV_PRF' or est=='TE_GMV_PRF' or est=='ET_GMV_PRF' or est=='TTmask' or est=='TTnoise':
             assert u is not None, "Must provide u(ell)"
         if crossilc and totalcls is not None:
             assert totalcls.shape[1]==11, "If temperature map T1 != T2, must provide corresponding spectra for each T map"
@@ -1097,6 +1097,28 @@ class weights():
             f1 = u
             f2 = 1/u
             self.w[0][0]=f1; self.w[0][1]=f1; self.w[0][2]=f2; self.s[0][0]=0; self.s[0][1]=0; self.s[0][2]=0
+
+        if est=="TTmask":
+            # See Eq. C.3 of the Planck 2013 lensing paper astro-ph:1303.5077
+            # here u is the beam profile B_\ell
+            self.ntrm = 2
+            self.w = { i : {} for i in range(0, self.ntrm) }
+            self.s = { i : {} for i in range(0, self.ntrm) }
+            f1 = np.ones_like(l)
+            f2 = sl['tt'][:lmax+1]*u
+            f3 = 1./u
+            self.w[0][0]=f2; self.w[0][1]=f3; self.w[0][2]=f1; self.s[0][0]=0; self.s[0][1]=0; self.s[0][2]=0
+            self.w[1][0]=f3; self.w[1][1]=f2; self.w[1][2]=f1; self.s[1][0]=0; self.s[1][1]=0; self.s[1][2]=0
+
+        if est=="TTnoise":
+            # See Eq. C.4 of the Planck 2013 lensing paper astro-ph:1303.5077
+            # here u is the beam profile B_\ell
+            self.ntrm = 1
+            self.w = { i : {} for i in range(0, self.ntrm) }
+            self.s = { i : {} for i in range(0, self.ntrm) }
+            f1 = np.ones_like(l)
+            f2 = 1/u
+            self.w[0][0]=f2; self.w[0][1]=f2; self.w[0][2]=f2; self.s[0][0]=0; self.s[0][1]=0; self.s[0][2]=0
 
 '''
 def weights_TT(idx,sltt,lmax):

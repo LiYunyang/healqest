@@ -1,9 +1,38 @@
-import os,sys,git,uuid
+import os,sys,yaml
 import numpy as np
 import healpy as hp
 from pathlib import Path
 import yaml,pickle
 import logging as lg
+
+def recursive_merge(main_data, included_data):
+    """Recursively merge two dictionaries, with values in main_data taking precedence."""
+    for key, value in included_data.items():
+        if isinstance(value, dict) and key in main_data and isinstance(main_data[key], dict):
+            # If both main_data and included_data have a dictionary at this key, merge recursively
+            recursive_merge(main_data[key], value)
+        else:
+            # Otherwise, if the key is not present in main_data, add it
+            if key not in main_data:
+                main_data[key] = value
+
+def load_yaml(file_path):
+    with open(file_path, 'r') as f:
+        data = yaml.safe_load(f)
+
+    # Check if there is an `includes` key
+    if 'includes' in data:
+        included_file = data['includes']
+        included_file_path = os.path.join(os.path.dirname(file_path), included_file)
+
+        # Recursively load the included file
+        with open(included_file_path, 'r') as included_f:
+            included_data = yaml.safe_load(included_f)
+
+        # Recursively merge included data into the main data, preserving main data values
+        recursive_merge(data, included_data)
+
+    return data
 
 def setup_logger(savelog=False,file_log='test.log'):
 
@@ -96,6 +125,7 @@ def parse_yaml(file_yaml):
     '''
     Load all settings in yaml
     '''
+    import git
     print('Loading lensing config: %s'%file_yaml)
     # Read the yaml file
     dict  = yaml.safe_load(Path(file_yaml).read_text())
@@ -369,6 +399,54 @@ def add_clsdict(d,key,cltt,clee,clbb,clte=None):
 #    if qetype[1]=='E': elm2 = reduce_lmax(elm2,lmax=lmaxTP); almbar2 = hp.almxfl(elm2,flE); flm2= flE
 #    if qetype[1]=='B': blm2 = reduce_lmax(blm2,lmax=lmaxTP); almbar2 = hp.almxfl(blm2,flB); flm2= flB
 #    return almbar1,almbar2,flm1,flm2
+
+def get_totalcls(cls, lmaxT, lmaxP, lmaxTP, lminT, lminP):
+    #return total Cls (signal+fg+noise) for inv-var filtering
+    #enters GMV in various places
+    totalcls = {}
+    totalcls['tt'] = cls['lcmb']['tt'][:lmaxTP+1] + cls['res']['tt'][:lmaxTP+1]
+    totalcls['ee'] = cls['lcmb']['ee'][:lmaxTP+1] + cls['res']['ee'][:lmaxTP+1]
+    totalcls['te'] = cls['lcmb']['te'][:lmaxTP+1] + cls['res']['te'][:lmaxTP+1]
+    totalcls['bb'] = cls['lcmb']['bb'][:lmaxTP+1] + cls['res']['bb'][:lmaxTP+1]
+
+    bignumber = 1e10
+    totalcls['tt'][lmaxT+1:] = bignumber
+    totalcls['te'][lmaxT+1:] = bignumber
+    totalcls['ee'][lmaxP+1:] = bignumber
+    totalcls['bb'][lmaxP+1:] = bignumber
+
+    totalcls['tt'][:lminT] = bignumber
+    totalcls['te'][:lminT] = bignumber
+    totalcls['ee'][:lminP] = bignumber
+    totalcls['bb'][:lminP] = bignumber
+
+    return totalcls
+
+def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, gmvname):
+    '''
+        All aresp are computed using healqest/src/gmv_resp.py via run script
+        pipeline/spt3g_20192020/src/compute_gmvresp.py
+
+        aresp_fname: filename of the analytic GMV response file
+        arespss_fname: filename of the analytic src-src response file
+        arespse_fname: filename of the analytic src-phi response file
+
+    '''
+    dic = {'GMVTTEETE':1, 'GMVTBEB':2, 'GMV':3}
+    assert gmvname != 'GMVTBEB', "zero response to TBEB"
+
+    resp1  = np.load(aresp_fname)[:, dic[gmvname]]
+    resp2  = np.load(arespss_fname)[:,1]  #[:,1] == [:,3]  and [:,2]==0
+    resp12 = np.load(arespse_fname)[:,1] #[:,1] == [:,3]  and [:,2]==0
+
+    weight  = -1*resp12 / resp2
+    resp_tot = resp1 + weight*resp12
+
+    return resp_tot, weight
+
+def harden_est(plm_e, plm_s, weight):
+    #return hardened, unnormalized estimator
+    return plm_e + hp.almxfl(plm_s, weight)
 
 def get_fl(config,mtype,use_unlCls=False):
 

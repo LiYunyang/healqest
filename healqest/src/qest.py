@@ -82,7 +82,7 @@ class qest(object):
         else:
             #if qe is None:
             #sys.exit('Need to specify estimator')
-            if qe == 'TTprf':
+            if qe == 'TTprf' or qe == 'TTmask' or qe == 'TTnoise':
                 assert u is not None, "Need profile function to compute this estimator"
 
             #def __init__(self,config,cls,est,u=None,totalcls=None):

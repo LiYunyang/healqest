@@ -2,7 +2,7 @@ import numpy as np
 import healqest_utils as utils
 
 class weights():
-    def __init__(self,est,cls,lmax,u=None,totalcls=None,crossilc=False):
+    def __init__(self,est,cls,lmax,u=None,totalcls=None,crossilc=False,withT3=False):
         """
           est  = estimator name 'TT'/'TE'/'EE', etc.
           cls  = dictionary with keys 'tt','te','ee','bb'
@@ -39,9 +39,10 @@ class weights():
                 clee = totalcls[:,1]
                 clbb = totalcls[:,2]
                 clte = totalcls[:,3]
-                #TODO: if with T3...
-                cltt1 = cltt3
-                cltt2 = cltt3
+                #TODO
+                if withT3:
+                    cltt1 = cltt3
+                    cltt2 = cltt3
 
         if est=='TT_GMV_PRF':
             self.ntrm = 1

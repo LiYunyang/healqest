@@ -22,6 +22,7 @@ def calc_prep(m, s_inv_filt, n_inv_filt):
     n_inv_filt.apply_map(tmap)
     alm = map2alm(tmap, lmax=len(n_inv_filt.b_transf) - 1, iter=0)
     if n_inv_filt.tf2d is None:
+        sys.exit('n_inv_filt.tf2d is None')
         hp.almxfl(alm, n_inv_filt.b_transf * (len(m) / (4. * np.pi)), inplace=True)
     else:
         alm *= n_inv_filt.tf2d * (len(m) / (4. * np.pi))
@@ -56,8 +57,9 @@ class ForwardOperator:
         return self.calc(talm)
 
     def calc(self, talm):
-        if np.all(talm == 0):  # do nothing if zero
-            return talm
+        #if np.all(talm == 0):  # do nothing if zero
+        #    sys.exit('np.all(talm == 0)')
+        #    return talm
         nlm = np.copy(talm)
         self.n_inv_filt.apply_alm(nlm)
         slm = self.s_inv_filt.calc(talm)
@@ -69,13 +71,18 @@ class PreOperatorDiag:
         """returns  1/(1/S + 1/N)"""
         cltt = s_cls['tt']
         assert len(cltt) >= len(n_inv_filt.b_transf)
-        n_inv_cl = np.sum(n_inv_filt.n_inv) / (4.0 * np.pi)
+        
+        #n_inv_cl = np.sum(n_inv_filt.n_inv) / (4.0 * np.pi)
+        ninv_ftl = n_inv_filt.get_ftl()
+
+
         lmax = len(n_inv_filt.b_transf) - 1
         assert lmax <= (len(cltt) - 1)
-        if n_cls is None: n_cls = {key: np.zeros(lmax+1) for key in s_cls}
+        if n_cls is None:
+            n_cls = {key: np.zeros(lmax+1) for key in s_cls}
 
         filt = cinv_utils.cli(cltt[:lmax + 1] + n_cls['tt']*cinv_utils.cli(n_inv_filt.b_transf[:lmax + 1] ** 2))
-        filt += n_inv_cl * n_inv_filt.b_transf[:lmax + 1] ** 2
+        filt += ninv_ftl # * n_inv_filt.b_transf[:lmax + 1] ** 2
         self.filt = cinv_utils.cli(filt)
 
     def __call__(self, talm):
@@ -90,7 +97,7 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
        from signal and also 1/ell noise. 
        For non-TT-only cases, does not include TE correlation
     """
-    def __init__(self, s_cls, lmax, n_cls=None, tf2d=None, b_transf=None):
+    def __init__(self, s_cls, lmax, n_cls=None, tf2d=None, b_transf=None,slinv=None):
 
         self.n_cls = n_cls
 
@@ -129,6 +136,7 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
 
         if self.n_cls is not None and tf2d is not None:
             self.ncls1d = {'tt': np.sqrt(hp.alm2cl(n_cls['tt']))}
+
         else: #self.n_cls is None or self.n_cls is 1d
             self.ncls1d = self.n_cls
 
@@ -228,12 +236,14 @@ class NoiseInverseFilter: #alm_filter_ninv(object):
     def __init__(self, n_inv, b_transf, tf2d = None, nlev_ftl=None):
                  #marge_monopole=False, marge_dipole=False, marge_uptolmin=-1, marge_maps=(), nlev_ftl=None):
         if isinstance(n_inv, list):
+            print('isinstance(n_inv, list)')
             n_inv_prod = hp_utils.read_map(n_inv[0])
             if len(n_inv) > 1:
                 for n in n_inv[1:]:
                     n_inv_prod = n_inv_prod * hp_utils.read_map(n)
             n_inv = n_inv_prod
         else:
+            print('n_inv is NOT A LIST')
             n_inv = hp_utils.read_map(n_inv)
 
         print("opfilt_tt: inverse noise map std dev / av = %.3e" % (
@@ -245,15 +255,21 @@ class NoiseInverseFilter: #alm_filter_ninv(object):
         self.npix = len(self.n_inv)
         self.nside = hp.npix2nside(self.npix)
 
-        if nlev_ftl is None:
-            nlev_ftl =  10800. / np.sqrt(np.sum(self.n_inv) / (4.0 * np.pi)) / np.pi
         self.nlev_ftl = nlev_ftl
-        print("ninv_ftl: using %.2f uK-amin noise Cl"%self.nlev_ftl)
+        self._n_inv = n_inv # could be paths or list of paths
+        self._load_ninv()
+
+        ####### This doesnt actually get used anywhere ########
+        #if nlev_ftl is None:
+        #    nlev_ftl =  10800. / np.sqrt(np.sum(self.n_inv) / (4.0 * np.pi)) / np.pi
+        #self.nlev_ftl = nlev_ftl
+        #print("ninv_ftl: using %.2f uK-amin noise Cl"%self.nlev_ftl)
+        #######################################################
 
     def hashdict(self):
         return {'n_inv'   : cinv_utils.clhash(self.n_inv),
                 'b_transf': cinv_utils.clhash(self.b_transf)}
-
+    '''
     def apply_alm(self, alm):
         """Missing doc. """
         npix = len(self.n_inv) #npix of 2048
@@ -272,8 +288,91 @@ class NoiseInverseFilter: #alm_filter_ninv(object):
             sys.exit('bad path ddddd')
             hp.almxfl(alm, self.b_transf  *  (npix / (4. * np.pi)), inplace=True)
         else:
-            alm *= self.tf2d * (npix / (4. * np.pi))
+            alm *= self.tf2d * (npix / (4. * np.pi)) #sr per pixel
 
     def apply_map(self, tmap):
         """Missing doc. """
         tmap *= self.n_inv
+    '''
+
+    def _load_ninv(self):
+        print("==_load_ninv==")
+        if self.n_inv is None:
+            self.n_inv = []
+            for i, tn in enumerate(self._n_inv):
+                if isinstance(tn, list):
+                    sys.exit('BAD PATH -- multiple n_inv')
+                    n_inv_prod = hp_utils.read_map(tn[0])
+                    if len(tn) > 1:
+                        for n in tn[1:]:
+                            n_inv_prod = n_inv_prod * hp_utils.read_map(n)
+                    self.n_inv.append(n_inv_prod)
+                else:
+                    print("Loading single n_inv") 
+                    self.n_inv.append(hp_utils.read_map(self._n_inv[i]))
+            assert len(self.n_inv) in [1, 3], len(self.n_inv)
+            self.nside = hp.npix2nside(len(self.n_inv[0]))
+        else:
+            print('self.n_inv is not None')
+
+
+    def apply_alm(self, alm):
+        """B^dagger N^{-1} B"""
+        print("apply_alm")
+        self._load_ninv()
+        lmax = hp.Alm.getlmax(alm.shape[0])
+
+        if self.tf2d is None:
+            #hp.almxfl(alm.elm, self.b_transf_e, inplace=True)
+            #hp.almxfl(alm.blm, self.b_transf_b, inplace=True)
+            sys.exit('no tf2d supplied')
+        else:
+            alm *= self.tf2d
+            
+        tmap  = alm2map(alm, self.nside)
+        #qmap, umap = alm2map_spin((alm.elm, alm.blm), self.nside, 2, lmax)
+
+        self.apply_map(tmap)  # applies N^{-1}
+        npix = len(tmap)
+
+        ttlm = map2alm(tmap, lmax=lmax, iter=0)
+        alm[:] = ttlm
+        
+        if self.tf2d is None:
+            #hp.almxfl(alm.elm, self.b_transf_e * (npix / (4. * np.pi)), inplace=True)
+            #hp.almxfl(alm.blm, self.b_transf_b * (npix / (4. * np.pi)), inplace=True)
+            sys.exit('no tf2d supplied')
+        else:
+            alm *= self.tf2d * (npix / (4. * np.pi))
+            #alm.blm *= self.tf2d * (npix / (4. * np.pi))
+
+    def apply_map(self, amap):
+        print("apply_map")
+        self._load_ninv()
+        tmap = amap
+        #print( self.n_inv[0])
+        #if len(self.n_inv) == 1:  # TT, QQ=UU
+        #    print('only detected one n_inv map')
+        tmap *= self.n_inv
+        #else:
+        #    assert 0
+
+    def get_ftl(self):
+        print("==get_febl==")
+        if self.nlev_ftl is None:
+            self.nlev_ftl = self._calc_ftl()
+        n_inv_cl_t = self.b_transf ** 2  / (self.nlev_ftl / 180. / 60. * np.pi) ** 2
+        return n_inv_cl_t
+
+    def _calc_ftl(self):
+        print("==_calc_febl==")
+        self._load_ninv()
+        #import pdb;pdb.set_trace()
+        #if len(self.n_inv) == 1:
+        nlev_ftl = 10800. / np.sqrt(np.sum(self.n_inv) / (4.0 * np.pi)) / np.pi
+        #elif len(self.n_inv) == 3:
+        #    nlev_ftl = 10800. / np.sqrt(np.sum(0.5 * (self.n_inv[0] + self.n_inv[2])) / (4.0 * np.pi)) / np.pi
+        #else:
+        #    assert 0
+        print("ninv_febl: using %.2f uK-amin noise Cl"%nlev_ftl)
+        return nlev_ftl

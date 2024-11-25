@@ -13,6 +13,7 @@ import healpy as hp
 from healpy import alm2map_spin, map2alm_spin
 
 sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
+print(os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
 import hp_utils
 import cinv_utils
 
@@ -29,7 +30,7 @@ def calc_prep(maps, s_inv_filt, n_inv_filt):
     n_inv_filt.apply_map([tmap, qmap, umap])
     lmax = len(n_inv_filt.b_transf) - 1
 
-    tlm, elm, blm = hp.map2alm([tmap, qmap, umap], lmax=lmax, iter=0, pol=True,use_pixel_weights=True)
+    tlm, elm, blm = hp.map2alm([tmap, qmap, umap], lmax=lmax, iter=0, pol=True)
     tlm *= npix / (4. * np.pi)
     elm *= npix / (4. * np.pi)
     blm *= npix / (4. * np.pi)
@@ -167,7 +168,7 @@ class SkyInverseFilter: #alm_filter_sinv:
             else:
                 ell,emm=hp.Alm.getlm(4096)
                 slmat_alm = np.zeros((len(tf2d), 3,3))
-                slmat_alm[:, 0, 0] = cmb2d['tt'].real + n_cls['tt']*_cli(tf2d*tf2d)
+                slmat_alm[:, 0, 0] = cmb2d['tt'].real + n_cls['tt']*_cli(tf2d*tf2d); 
                 slmat_alm[:, 0, 1] = cmb2d['te'].real
                 slmat_alm[:, 1, 0] = cmb2d['te'].real
                 slmat_alm[:, 1, 1] = cmb2d['ee'].real + n_cls['ee']*_cli(tf2d_eb*tf2d_eb)
@@ -179,7 +180,7 @@ class SkyInverseFilter: #alm_filter_sinv:
 
             print('--------------------')
             print(np.max(self.slinv_alm))
-            import pdb;pdb.set_trace()
+            #import pdb;pdb.set_trace()
        
         #import pdb; pdb.set_trace()
         if self.n_cls is not None:
@@ -334,7 +335,7 @@ class NoiseInverseFilter:
 
         self.apply_map([tmap, qmap, umap])
 
-        ttlm, telm, tblm = hp.map2alm([tmap, qmap, umap], lmax=lmax, use_pixel_weights=True)
+        ttlm, telm, tblm = hp.map2alm([tmap, qmap, umap], lmax=lmax, iter=0, pol=True)
         alm.tlm[:] = ttlm
         alm.elm[:] = telm
         alm.blm[:] = tblm

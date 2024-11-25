@@ -135,8 +135,8 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
 
             #self.b_slinv = utils.cli(clbb_2d + n_cls['ee'] *utils.cli(tf2d*tf2d))
             #self.e_slinv = utils.cli(clee_2d + n_cls['bb'] *utils.cli(tf2d*tf2d))
-            self.b_slinv = tf2d*tf2d * cinv_utils.cli(clbb_2d*tf2d*tf2d + n_cls['ee'])
-            self.e_slinv = tf2d*tf2d * cinv_utils.cli(clee_2d*tf2d*tf2d + n_cls['bb'])
+            self.b_slinv = tf2d*tf2d * cinv_utils.cli(clbb_2d*tf2d*tf2d + n_cls['bb'])
+            self.e_slinv = tf2d*tf2d * cinv_utils.cli(clee_2d*tf2d*tf2d + n_cls['ee'])
         else:
             '''
             clee = s_cls.get('ee', np.zeros(lmax + 1))[:lmax + 1]
@@ -155,7 +155,7 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
         self.lmax  = lmax
         self.s_cls = s_cls
         self.tf2d  = tf2d
-
+        #import pdb; pdb.set_trace()
         if self.n_cls is not None and tf2d is not None:
             self.ncls1d = {'ee': np.sqrt(hp.alm2cl(n_cls['ee'])),
                            'bb': np.sqrt(hp.alm2cl(n_cls['bb']))}
@@ -199,8 +199,8 @@ class NoiseInverseFilter:
 
         self.b_transf_e = b_transf
         self.b_transf_b = b_transf_b if b_transf_b is not None else b_transf
-        self.b_transf = 0.5 * (self.b_transf_e + self.b_transf_b)
-        self.tf2d    = tf2d
+        self.b_transf   = 0.5 * (self.b_transf_e + self.b_transf_b)
+        self.tf2d       = tf2d
 
         # These three things will be instantiated later on
         self.nside = None

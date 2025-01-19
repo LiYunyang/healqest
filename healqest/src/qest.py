@@ -705,3 +705,173 @@ class qest_gmv(object):
         resp   = ee + weight*es
 
         return plm, resp
+
+
+class qest_plus(qest):
+    """
+    QE estimator following the cmblensplus convention.
+    """
+
+    @staticmethod
+    def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None):
+        """ convert a spin-0 alm into a complex spin field (Q +/- iU): out = SUM [alm sYlm] """
+        if spin == 0:
+            walm = hp.almxfl(alm, fell)
+            # alm2map is recommended over alm2map_spin for spin=0
+            out = hp.alm2map(walm, nside=nside, lmax=lmax, )
+        else:
+            zero = np.zeros_like(alm)
+            _fell = (-1) ** spin * np.conj(fell) if spin < 0 else fell
+            _fell *= -1
+            if np.all(fell.imag == 0):
+                E = hp.almxfl(alm, _fell.real)
+                B = zero
+            elif np.all(fell.real == 0):
+                E = zero
+                B = hp.almxfl(alm, _fell.imag)
+            else:
+                raise ValueError("Fell must be real or imaginary")
+            q, u = hp.alm2map_spin([E, B], nside=nside, spin=np.abs(spin), lmax=lmax, mmax=mmax)
+            if spin > 0:
+                out = q + u * 1j
+            else:
+                out = q - u * 1j
+        return out
+
+    def eval(self, qe, almbar1, almbar2, u=None):
+        """
+        Compute quadratic estimator
+
+        Parameters
+        ----------
+        qe : str
+          Quadratic estimator type: 'TT'/'EE'/'TE'/'EB'/'TB'/'TTprf'
+        almbar1: complex array healpy alm
+          First filtered alm
+        almbar2: complex array healpy alm
+          Second filtered alm
+        u  : profile
+          Profile instance
+
+        Returns
+        ----------
+        glm: complex
+          Gradient component of the plm
+        clm:
+          Curl component of the plm
+        """
+
+        if qe in self.glm:
+            print("We've already computed this!")
+            return self.glm[qe], self.clm[qe]
+
+        if qe in ['TTprf', 'TTmask', 'TTnoise']:
+            assert u is not None, "Need profile function to compute this estimator"
+
+        q = weights.weights_plus(qe, self.cls[self.cltype], self.lmax, u=u)
+
+        print('Running lensing reconstruction')
+
+        retglm = 0
+        retclm = 0
+
+        for i in range(0, q.ntrm//2):
+            # skipping second half of reducant terms
+            wX, wY, wP, sX, sY, sP = q.w[i][0], q.w[i][1], q.w[i][2], q.s[i][0], q.s[i][1], q.s[i][2]
+
+            X = self.alm2map_spin(almbar1, fell=wX, nside=self.nside, spin=sX, lmax=self.lmax)
+            Y = self.alm2map_spin(almbar2, fell=wY, nside=self.nside, spin=sY, lmax=self.lmax)
+            XY = X*Y
+
+            if np.all(wP.imag == 0):
+                _wP = wP
+            elif np.all(wP.real == 0):
+                # swap grad/curl mode such that glm is curl and clm is grad
+                _wP = wP*1j  # wP has an -1j factor, here we move the factor from wP to XY.
+                XY *= -1j
+            else:
+                raise ValueError("wP must be real or imaginary")
+            if sP < 0:
+                XY = np.conj(XY) * (-1) ** sP  # because wP has a (-1)**sP factor, here we are canceling it.
+
+            glm, clm = hp.map2alm_spin([XY.real, XY.imag], np.abs(sP), self.Lmax)
+            glm = hp.almxfl(glm, _wP)
+            clm = hp.almxfl(clm, _wP)  # for curl est, this will be -grad.
+
+            retglm += glm
+            retclm += clm
+
+        self.glm[qe] = retglm
+        self.clm[qe] = retclm
+
+        return self.glm[qe], self.clm[qe]
+
+    def get_aresp(self, flX, flY, qe1=None, qe2=None, u=None):
+        """
+        Compute analytical response function for 1D filtering
+
+        Parameters
+        ----------
+        flX, flY
+          1D real arrays representing the filter functions for the X and Y fields
+        qe1: string
+          First estimator
+        qe2: string
+          Second estimator; if None, assumes it is the same as qe1
+
+        Returns
+        ----------
+        aresp:
+          Analytical response function
+        """
+        # raise NotImplementedError("This function has not been tested yet")
+        if qe1 is None:
+            assert 0, "qe1 must be defined"
+
+        qeXY = weights.weights_plus(qe1, self.cls[self.cltype], self.lmax, u=u)
+
+        if qe2 is None or qe2 == qe1:
+            qeZA = None
+        else:
+            qeZA = weights.weights_plus(qe2, self.cls[self.cltype], self.lmax, u=u)
+
+        aresp = resp.fill_resp(qeXY, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, qeZA=qeZA)
+
+        return aresp
+
+    def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='TTprf'):
+        """
+        Get the source hardened glm and the response function.
+        Need arguments flX, flY in order to compute the analytical response
+        needed for hardening.
+
+        Parameters
+        ----------
+        qe: string
+          Quadratic estimator type, only 'TT' is supported
+        flX, flY
+          1D real arrays representing the filter functions for the X and Y fields
+
+        Returns
+        ----------
+        plm :
+          Source hardened glm
+        resp :
+          Response function
+        """
+        assert qe == 'TT', f"We only harden for qe 'TT', got: {qe}"
+
+        ss = self.get_aresp(flX, flY, qe1=qe_hrd, u=u)
+        es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=qe, u=u)
+        ee = self.get_aresp(flX, flY, qe1=qe)
+
+        plm1, _ = self.eval(qe, almbar1, almbar2)
+        plm2, _ = self.eval(qe_hrd, almbar1, almbar2, u)
+
+        weight = -1 * es / ss
+        plm = plm1 + hp.almxfl(plm2, weight)
+        resp = ee + weight * es
+
+        return plm, resp
+
+

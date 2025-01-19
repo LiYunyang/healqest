@@ -1120,6 +1120,201 @@ class weights():
             f2 = 1/u
             self.w[0][0]=f2; self.w[0][1]=f2; self.w[0][2]=f2; self.s[0][0]=0; self.s[0][1]=0; self.s[0][2]=0
 
+
+class weights_plus:
+    def __init__(self, est, cls, lmax, u=None, totalcls=None, crossilc=False, withT3=False):
+        """
+        Parameters
+
+        est: estimator name 'TT'/'TE'/'EE', etc.
+        cls: dictionary with keys 'tt','te','ee','bb'
+               spectra (could be lensed cmb spec, XgradX spec etc.) for weights
+        lmax: lmax of Cls for weights
+        u: f(ell) that describe the power spectrum of a foreground or beam function
+               for profile hardening (can be array of 1s)
+        totalcls: signal+noise spectra for GMV weights
+        crossilc: True if temperature map T1 != T2 and we're doing GMV
+        """
+
+        if est in ['TTprf', 'TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF', 'ET_GMV_PRF', 'ET_GMV_PRF', 'TTmask',
+                   'TTnoise']:
+            assert u is not None, "Must provide u(ell)"
+        if crossilc and totalcls is not None:
+            assert totalcls.shape[1] == 11, ("If temperature map T1 != T2, must provide corresponding spectra for "
+                                             "each T map")
+
+        self.lmax = lmax
+
+        print('Computing weights -- cmblensplus style')
+
+        sl = {ii: cls[ii] for ii in cls.keys()}
+
+        if totalcls is not None:
+            if not crossilc:
+                cltt = totalcls[:, 0]
+                clee = totalcls[:, 1]
+                clbb = totalcls[:, 2]
+                clte = totalcls[:, 3]
+            else:
+                # totalcls: T3T3, EE, BB, T3E, T1T1, T2T2, T1T2, T1T3, T2T3, T1E, T2E
+                cltt3 = totalcls[:, 0]
+                cltt1 = totalcls[:, 4]
+                cltt2 = totalcls[:, 5]
+                clttx = totalcls[:, 6]
+                clee = totalcls[:, 1]
+                clbb = totalcls[:, 2]
+                clte = totalcls[:, 3]
+                # TODO
+                if withT3:
+                    cltt1 = cltt3
+
+        self.w = dict()
+        self.s = dict()
+        self.ntrm = None
+        self.l = np.arange(self.lmax + 1, dtype=np.float64)
+
+        if est in ['TT', 'EE', 'BB', 'TE', 'TB', 'EB', 'T2', 'T1']:
+            self.init_weights(est, sl=sl)
+        elif est in ['TTcurl', 'EEcurl', 'BBcurl', 'TEcurl', 'TBcurl', 'EBcurl', 'T2curl', 'T1curl']:
+            self.init_weights(est[:2], sl=sl, curl=True)
+        elif est in ['ET', 'BT', 'BE']:
+            self.init_weights(est[::-1], sl=sl, swap=True)
+        elif est in ['ETcurl', 'BTcurl', 'BEcurl']:
+            self.init_weights(est[:2][::-1], sl=sl, swap=True, curl=True)
+        else:
+            raise NotImplementedError(f"{est} is not implemented yet")
+
+    def add_term(self, ws1, ws2):
+        idx = len(self.w)
+        w1, s1 = ws1
+        w2, s2 = ws2
+        self.w[idx] = {0: w1, 1: w2}
+        self.s[idx] = {0: s1, 1: s2}
+
+    def w_X0(self, X, conj=False):
+        """
+        coefficients for spin 0 fields \bar{Theta}, \bar{P}E and \bar{P}B in cmblensplus document.
+        """
+
+        if X == 'T':
+            w = np.ones_like(self.l)
+            s = 0
+        elif X == 'E':
+            w = -np.ones_like(self.l)
+            s = 2
+        elif X == 'B':
+            w = -1j*np.ones_like(self.l)
+            s= 2
+        else:
+            raise ValueError("X must be 'T', 'E' or 'B'")
+        if conj:
+            s = -s
+            w = np.conj(w)*(-1)**s
+        return w, s
+
+    def w_X01(self, cl, s):
+        """
+        coefficients for spin 0+1 fields and spin 2+-1 fields (eq 169/170)
+        """
+        assert s in [-1, 1]
+        w = -np.sqrt(self.l*(self.l+1))*cl
+        if s<0:
+            w *= (-1)**s
+        return w, s
+
+    def w_X21(self, cl, s, factor:complex = 1):
+        """
+        these correspond to spin 2+1 fields. (eq 171)
+        """
+        if np.abs(s) == 1:
+            f = np.nan_to_num(np.sqrt((self.l+2)*(self.l-1)))
+        elif np.abs(s) == 3:
+            f = np.nan_to_num(np.sqrt((self.l+3)*(self.l-2)))
+        else:
+            raise ValueError("|s| must be 1 or 3")
+        w = -f*cl*factor
+        if s<0:
+            w = np.conj(w)*(-1)**s
+        return w, s
+
+    def init_weights(self, est, sl, swap=False, curl=False):
+        """
+        Initialize weights for the base estimators: TT/EE/BB/TE/TB/EB
+
+        Parameters:
+        -----------
+        est: str
+        sl: dictionary with keys 'tt','te','ee' ('bb')
+        swap: bool=False
+            swap the weights for map1 and map2, so TE -> ET
+        curl: bool=False
+            modify the weights such that "grad" gives the curl estimator and vice versa (off by -1).
+        """
+        if est == 'TT':
+            self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['tt'], 1))
+            self.add_term(self.w_X01(sl['tt'], 1), self.w_X0('T', conj=False))  # swap 1-2
+        elif est == 'TE':
+            self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['te'], 1))
+            self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('E', conj=False))
+            self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('E', conj=True))
+        elif est == 'TB':
+            self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('B', conj=False))
+            self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('B', conj=True))
+        elif est == 'EE':
+            self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['ee'], -1, factor=0.5))
+            self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['ee'], 3, factor=-0.5))
+            self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('E', conj=False))  # swap 1-2
+            self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('E', conj=True))  # swap 1-2
+        elif est == 'BB':
+            pass
+            # if 'bb' in sl:
+            #     self.add_term(self.w_X0('B', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
+            #     self.add_term(self.w_X0('B', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
+            #     self.add_term(self.w_X21(sl['bb'], -1, factor=1j), self.w_X0('B', conj=False), )  # swap 1-2
+            #     self.add_term(self.w_X21(sl['bb'], 3, factor=-1j), self.w_X0('B', conj=True), )  # swap 1-2
+        elif est == 'EB':
+            self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('B', conj=False))
+            self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('B', conj=True))
+            if 'bb' in sl:
+                self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
+                self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
+        else:
+            raise NotImplementedError(f"{est} is not implemented yet")
+
+        if swap:
+            # flip the weights for asymmetric estimators
+            for k, w in self.w.items():
+                s = self.s[k]
+                self.w[k][0], self.w[k][1] = w[1], w[0]
+                self.s[k][0], self.s[k][1] = s[1], s[0]
+
+        f3 = np.sqrt(self.l * (self.l+1)) * 0.5
+        # YL doesn't understand the 0.5 factor. But this is consistent with old implementation (also doesn't matter)
+        if curl:
+            f3 = -f3*1j
+        s3 = 1
+
+        for k, w in self.w.items():
+            self.w[k][2] = f3
+            self.s[k][2] = s3
+
+        # adding the second half "redundant" terms.
+        ntrm = len(self.w)
+        new_w = dict()
+        new_s = dict()
+        for k, w in self.w.items():
+            s = self.s[k]
+            new_w[k+ntrm] = dict()
+            new_s[k+ntrm] = dict()
+            for i in range(3):
+                new_w[k+ntrm][i] = np.conj(w[i])*(-1)**s[i]
+                new_s[k+ntrm][i] = -s[i]
+
+        self.w.update(new_w)
+        self.s.update(new_s)
+        self.ntrm = len(self.w)
+
+
 '''
 def weights_TT(idx,sltt,lmax):
     f1 = -0.5*np.ones_like(l)

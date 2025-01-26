@@ -47,7 +47,7 @@ class qest(object):
             print("-- Overwrite default nside")
             self.nside = self.config['lensrec']['nside'] # Overwrite automatic setting of nside<2*lmax
         else:
-            self.nside   = utils.get_nside(self.Lmax)
+            self.nside   = utils.get_nside(self.lmax)
 
         print("-- Nside to project: %d"%self.nside)
         print("-- lmax:%d"%self.lmax)

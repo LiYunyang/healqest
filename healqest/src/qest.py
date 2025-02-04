@@ -46,8 +46,9 @@ class qest(object):
         if 'nside' in self.config['lensrec']:
             print("-- Overwrite default nside")
             self.nside = self.config['lensrec']['nside'] # Overwrite automatic setting of nside<2*lmax
+            assert self.lmax < 2.0*self.nside, "lmax must be less that 2*nside"
         else:
-            self.nside   = utils.get_nside(self.Lmax)
+            self.nside   = utils.get_nside(self.lmax)
 
         print("-- Nside to project: %d"%self.nside)
         print("-- lmax:%d"%self.lmax)
@@ -404,9 +405,10 @@ class qest_gmv(object):
 
         if 'nside' in self.config['lensrec']:
             print("-- Overwrite default nside")
-            self.nside = self.config['lensrec']['nside'] # Overwrite automatic setting of nside<2*lmax
+            self.nside = self.config['lensrec']['nside']
+            assert self.lmax < 2.0*self.nside, "lmax must be less that 2*nside"
         else:
-            self.nside   = utils.get_nside(self.Lmax)
+            self.nside   = utils.get_nside(self.lmax)
 
         print("-- Nside to project: %d"%self.nside)
         print("-- lmax:%d"%self.lmax)

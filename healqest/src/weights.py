@@ -2,7 +2,7 @@ import numpy as np
 import healqest_utils as utils
 
 class weights():
-    def __init__(self,est,cls,lmax,u=None,totalcls=None,crossilc=False):
+    def __init__(self,est,cls,lmax,u=None,totalcls=None,crossilc=False,withT3=False):
         """
           est  = estimator name 'TT'/'TE'/'EE', etc.
           cls  = dictionary with keys 'tt','te','ee','bb'
@@ -39,9 +39,10 @@ class weights():
                 clee = totalcls[:,1]
                 clbb = totalcls[:,2]
                 clte = totalcls[:,3]
-                #TODO: if with T3...
-                cltt1 = cltt3
-                cltt2 = cltt3
+                #TODO
+                if withT3:
+                    cltt1 = cltt3
+                    cltt2 = cltt3
 
         if est=='TT_GMV_PRF':
             self.ntrm = 1
@@ -829,10 +830,10 @@ class weights():
             f5 = -0.50*np.ones_like(l,dtype=np.float_)*1j
             f6 =  np.nan_to_num(np.sqrt(l*(l+1)))
             f7 =  np.nan_to_num(np.sqrt(l*(l+1)))*self.slte[:lmax+1]
-            self.w[0][1]= f3; self.w[0][0]= f1; self.w[0][2]=f2; self.s[0][1]=-1; self.s[0][0]=+2; self.s[0][2]=+1
-            self.w[1][1]= f4; self.w[1][0]=-f1; self.w[1][2]=f2; self.s[1][1]=-3; self.s[1][0]=+2; self.s[1][2]=-1
-            self.w[2][1]= f4; self.w[2][0]= f1; self.w[2][2]=f2; self.s[2][1]=+3; self.s[2][0]=-2; self.s[2][2]=+1
-            self.w[3][1]= f3; self.w[3][0]=-f1; self.w[3][2]=f2; self.s[3][1]=+1; self.s[3][0]=-2; self.s[3][2]=-1
+            self.w[0][1]= f3; self.w[0][0]=-f1; self.w[0][2]=f2; self.s[0][1]=-1; self.s[0][0]=+2; self.s[0][2]=+1
+            self.w[1][1]= f4; self.w[1][0]= f1; self.w[1][2]=f2; self.s[1][1]=-3; self.s[1][0]=+2; self.s[1][2]=-1
+            self.w[2][1]= f4; self.w[2][0]=-f1; self.w[2][2]=f2; self.s[2][1]=+3; self.s[2][0]=-2; self.s[2][2]=+1
+            self.w[3][1]= f3; self.w[3][0]= f1; self.w[3][2]=f2; self.s[3][1]=+1; self.s[3][0]=-2; self.s[3][2]=-1
             self.w[4][1]= f5; self.w[4][0]= f7; self.w[4][2]=f6; self.s[4][1]=+0; self.s[4][0]=-1; self.s[4][2]=-1
             self.w[5][1]=-f5; self.w[5][0]= f7; self.w[5][2]=f6; self.s[5][1]=+0; self.s[5][0]=+1; self.s[5][2]=+1
 

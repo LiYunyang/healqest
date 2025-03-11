@@ -5,54 +5,59 @@ https://github.com/SouthPoleTelescope/spt3g_software/blob/curvlens/lensing/pytho
 but with additional cleaning/formatting and commenting.
 """
 
-import os,sys
+import os, sys
 import healpy as hp
-import numpy  as np
+import numpy as np
 import pickle as pk
-sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "./")))
 import utils, hp_utils, cinv_utils
 import opfilt_hp_p, opfilt_hp_t, opfilt_hp_tp, cd_solve, cd_monitors
-# disable mpi
+
 
 class cinv(object):
     def __init__(self, lib_dir, lmax, eps_min, use_mpi=False):
-        self.lib_dir = lib_dir # Output directory
-        self.lmax    = lmax    # Lmax to use for filtering
-        self.eps_min = eps_min # Tolerance
+        self.lib_dir = lib_dir  # Output directory
+        self.lmax = lmax  # Lmax to use for filtering
+        self.eps_min = eps_min  # Tolerance
 
-        if use_mpi==True:
+        if use_mpi == True:
             from cinv_utils import mpi
 
     def get_tal(self, a, lmax=None):
-        if lmax is None: lmax = self.lmax
-        assert a.lower() in ['t', 'e', 'b'], a
+        if lmax is None:
+            lmax = self.lmax
+        assert a.lower() in ["t", "e", "b"], a
         ret = np.loadtxt(os.path.join(self.lib_dir, "tal.dat"))
         assert len(ret) > lmax, (len(ret), lmax)
-        return ret[:lmax +1 ]
+        return ret[: lmax + 1]
 
     def get_fmask(self):
         return hp.read_map(os.path.join(self.lib_dir, "fmask.fits.gz"))
 
     def get_ftl(self, lmax=None):
-        if lmax is None: lmax = self.lmax
+        if lmax is None:
+            lmax = self.lmax
         ret = np.loadtxt(os.path.join(self.lib_dir, "ftl.dat"))
         assert len(ret) > lmax, (len(ret), lmax)
-        return ret[:lmax + 1]
+        return ret[: lmax + 1]
 
     def get_fel(self, lmax=None):
-        if lmax is None: lmax = self.lmax
+        if lmax is None:
+            lmax = self.lmax
         ret = np.loadtxt(os.path.join(self.lib_dir, "fel.dat"))
         assert len(ret) > lmax, (len(ret), lmax)
-        return ret[:lmax + 1]
+        return ret[: lmax + 1]
 
     def get_fbl(self, lmax=None):
-        if lmax is None: lmax = self.lmax
+        if lmax is None:
+            lmax = self.lmax
         ret = np.loadtxt(os.path.join(self.lib_dir, "fbl.dat"))
         assert len(ret) > lmax, (len(ret), lmax)
-        return ret[:lmax + 1]
+        return ret[: lmax + 1]
 
     def solve(self, soltn, tpn_map):
-        finifunc = getattr(self.opfilt, 'calc_fini') 
+        finifunc = getattr(self.opfilt, "calc_fini")
         self.iter_tot = 0
         self.prev_eps = None
         dot_op = self.opfilt.DotOperator()
@@ -60,119 +65,149 @@ class cinv(object):
 
         tpn_alm = self.opfilt.calc_prep(tpn_map, self.s_inv_filt, self.n_inv_filt)
         monitor = cd_monitors.MonitorBasic(
-                                        dot_op, 
-                                        logger=logger, 
-                                        iter_max=np.inf,
-                                        eps_min=self.eps_min) 
+            dot_op, logger=logger, iter_max=np.inf, eps_min=self.eps_min
+        )
 
         fwd_op = self.opfilt.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
 
-        pre_op = self.opfilt.PreOperatorDiag(self.s_inv_filt.s_cls, 
-                                             self.n_inv_filt,
-                                             nl_res=self.s_inv_filt.nl_res)
-        
-        cd_solve.cd_solve(soltn, b=tpn_alm,
-                                     fwd_op=fwd_op, 
-                                     pre_ops=[pre_op],
-                                     dot_op=dot_op,
-                                     criterion=monitor,
-                                     tr=cinv_utils.cd_solve.tr_cg, 
-                                     cache=cinv_utils.cd_solve.CacheMemory())
+        pre_op = self.opfilt.PreOperatorDiag(
+            self.s_inv_filt.s_cls, self.n_inv_filt, nl_res=self.s_inv_filt.nl_res
+        )
+
+        cd_solve.cd_solve(
+            soltn,
+            b=tpn_alm,
+            fwd_op=fwd_op,
+            pre_ops=[pre_op],
+            dot_op=dot_op,
+            criterion=monitor,
+            tr=cinv_utils.cd_solve.tr_cg,
+            cache=cinv_utils.cd_solve.CacheMemory(),
+        )
 
         finifunc(soltn, self.s_inv_filt, self.n_inv_filt)
 
+
 class cinv_t(cinv):
-    r"""Temperature-only inverse-variance (or Wiener-)filtering instance.
+    """
+    Polarization-only inverse-variance (or Wiener-) filtering instance.
 
-        Args:
-            lib_dir: mask and other things will be cached there
-            lmax   : filtered alm's are reconstructed up to lmax
-            nside  : healpy resolution of maps to filter
-            cl     : fiducial CMB spectra used to filter the data (dict with 'tt' key)
-            transf : CMB maps transfer function (array)
-            ninv   : inverse pixel variance map. Must be a list of paths or of healpy maps with consistent nside.
-            rescal_cl: isotropic rescaling of the map prior the cg inversion. This just makes the convergence criterium change a bit
-            nl: 1/ell noise spec (dict with 'tt' key), with ninv-levels in uK^2 subtracted
-            tf2d: transfer function in alms
-        Note:
+    This class performs polarization-only filtering of CMB maps using inverse-variance
+    (or Wiener-) filtering. The implementation supports template projection.
 
-            The only difference of the original plancklens filter is the rescaling of the maps. In effect, the modes of :math'`D_\ell` rather than :math'`C_\ell` are reconstructed
-            This changes nothing to the iterations, but gives the dot product testing for convergence more sensitvity to relevant scales
+    Parameters
+    ----------
+    lib_dir : str
+        Directory where masks and other ancillary data will be cached.
+    lmax : int
+        Maximum multipole at which the filtered alm's are reconstructed.
+    nside : int
+        Healpy resolution of the maps to be filtered.
+    cl : dict
+        Fiducial CMB power spectra used for filtering.
+    nl_res : array_like
+        Dictionary of noise residual used in the filtering.
+        (Additional details on the expected format should be provided.)
+    ninv : list
+        Inverse pixel variance maps. Must be a list containing either 3 elements
+        (for QQ, QU, and UU noise) or 1 element (for QQ = UU noise). Each element
+        can be a file path or a Healpy map, and they must be consistent with the given nside.
+    tf1d : array_like
+        1d transfer function.
+    tf2d : array_like
+        2d trasnfer function.
+    eps_min : float, optional
+        Minimum epsilon value for the filtering procedure, by default 1.0e-5.
+    ellscale : bool, optional
+        Whether to scale by multipole ell, by default True.
 
     """
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d, eps_min = 1.0e-5):
 
-
-        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (lib_dir, lmax, nside)
+    def __init__(
+        self,
+        lib_dir,
+        lmax,
+        nside,
+        cl,
+        nl_res,
+        ninv,
+        tf1d,
+        tf2d,
+        eps_min=1.0e-5,
+        ellscale=True,
+    ):
+        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
+            lib_dir,
+            lmax,
+            nside,
+        )
         assert isinstance(ninv, list)
         super(cinv_t, self).__init__(lib_dir, lmax, eps_min)
-        print('cinv_t')
-        rescal_cl = np.sqrt(np.arange(lmax + 1, dtype=float) * np.arange(1, lmax + 2, dtype=float) / 2. / np.pi)
-        rescal_cl[0]=1
-        #rescal_cl =np.ones(lmax+1)
-        # mutltiply Cls and tf with l(l+1)/2/pi factor
-        dl        = {k: rescal_cl ** 2 * cl[k][:lmax + 1] for k in cl.keys()}  # rescaled cls (Dls by default)
-        
-        # Do not scale nl_red here. forward model has 1/(cltt+nltt/tf^2).
-        # cltt has l^2 and tf^2 has 1/tf^2 factor already so no need to scale nltt.
-        #nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}  # rescaled cls (Dls by default)
-        
-        tf1d  = tf1d[:lmax + 1] * cinv_utils.cli(rescal_cl)
-        tf2d  = hp.almxfl(tf2d, cinv_utils.cli(rescal_cl))
-        # tf1d  = tf1d[:lmax + 1] #* (rescal_cl)
-        # tf2d  = hp.almxfl(tf2d, (rescal_cl))
-        
-        #self.rescaled_tf2d = tf2d_dl
-        #else:
-        #    tf2d_dl = tf2d
 
-        '''
-        if nl is not None:
-            print('nl was provided, applying rescal_cl')
-            print(rescal_cl)
-            nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl)) for key in nl}
-            self.rescaled_nl   = nl_dl
+        print("Initializing cinv_t")
+
+        # Scaling factor
+        ell = np.arange(lmax + 1, dtype=float)
+
+        if ellscale:
+            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
+            rescal_cl[0] = 1
         else:
-            sys.exit('nl was NOT provided')
-            nl_dl = nl
-        '''
-        
+            rescal_cl = np.ones_like(ell)
+
+        self.rescal_cl = rescal_cl
+
+        # rescaled cls (Dls by default)
+        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
+
+        # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
+        # cltt has l^2 and tf^2 has 1/l^2 factor already.
+        # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
+        # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
+
+        tf1d = tf1d[: lmax + 1] * cinv_utils.cli(rescal_cl)
+        tf2d = hp.almxfl(tf2d, cinv_utils.cli(rescal_cl))
 
         self.nside = nside
 
         self.cl = cl
         self.dl = dl
-
-        self.tf1d = tf1d[:lmax + 1]
-        
-        self.rescal_cl = rescal_cl
-      
         self.nl_res = nl_res
-        self.tf2d = tf2d
         self.ninv = ninv
 
-        n_inv_filt = hp_utils.jit(opfilt_hp_t.NoiseInverseFilter, ninv,tf1d, tf2d=tf2d)
-        s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter, dl, nl_res, lmax, tf2d=tf2d, b_transf=tf1d)
-        self.n_inv_filt = n_inv_filt
-        self.s_inv_filt = s_inv_filt
+        self.tf1d = tf1d
+        self.tf2d = tf2d
+
+        # Set up s_inv_filt and n_inv_filt
+        self.s_inv_filt = hp_utils.jit(
+            opfilt_hp_t.SkyInverseFilter, dl, nl_res, lmax, tf1d, tf2d=tf2d
+        )
+        self.n_inv_filt = hp_utils.jit(
+            opfilt_hp_t.NoiseInverseFilter, ninv, tf1d, tf2d=tf2d
+        )
         self.opfilt = opfilt_hp_t
 
-
-    
     def _calc_ftl(self):
         ninv = self.n_inv_filt.n_inv
         npix = len(ninv[:])
-        NlevT_uKamin = np.sqrt(4. * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0])) * 180. * 60. / np.pi
-        print("cinv_t::noiseT_uk_arcmin = %.3f"%NlevT_uKamin)
+        NlevT_uKamin = (
+            np.sqrt(4.0 * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0]))
+            * 180.0
+            * 60.0
+            / np.pi
+        )
+        print("cinv_t::noiseT_uk_arcmin = %.3f" % NlevT_uKamin)
 
         s_cls = self.cl
-        b_transf = self.transf
+        tf1d = self.tf1d
 
-        ftl = cinv_utils.cli(s_cls['tt'][0:self.lmax + 1] + (NlevT_uKamin * np.pi / 180. / 60.) ** 2 / b_transf[0:self.lmax + 1] ** 2)
+        ftl = cinv_utils.cli(
+            s_cls["tt"][0 : self.lmax + 1]
+            + (NlevT_uKamin * np.pi / 180.0 / 60.0) ** 2 / tf1d[0 : self.lmax + 1] ** 2
+        )
         ftl[0:2] = 0.0
 
-        return ftl 
-
+        return ftl
 
     def apply_ivf(self, tmap, soltn=None):
         if soltn is None:
@@ -185,85 +220,186 @@ class cinv_t(cinv):
 
 
 class cinv_p(cinv):
-    r"""Polarization-only inverse-variance (or Wiener-)filtering instance.
+    """
+    Polarization-only inverse-variance (or Wiener-) filtering instance.
 
-        Args:
-            lib_dir : mask and other things will be cached there
-            lmax    : filtered alm's are reconstructed up to lmax
-            nside   : healpy resolution of maps to filter
-            cl      : fiducial CMB spectra used to filter the data (dict with 'tt' key)
-            transf  : CMB E-mode polarization transfer function (array)
-            ninv    : inverse pixel variance maps. Must be a list of either 3 (QQ, QU, UU) or 1 (QQ = UU noise) elements.
-                      These element are themselves list of paths or of healpy maps with consistent nside.
-            transf_blm(optional): B-polarization transfer function (if different from E-mode one)
+    This class performs polarization-only filtering of CMB maps using inverse-variance
+    (or Wiener-) filtering. The implementation supports template projection.
 
-        Note:
-            This implementation now supports template projection
+    Parameters
+    ----------
+    lib_dir : str
+        Directory where masks and other ancillary data will be cached.
+    lmax : int
+        Maximum multipole at which the filtered alm's are reconstructed.
+    nside : int
+        Healpy resolution of the maps to be filtered.
+    cl : dict
+        Fiducial CMB power spectra used for filtering.
+    nl_res : array_like
+        Dictionary of noise residual used in the filtering.
+        (Additional details on the expected format should be provided.)
+    ninv : list
+        Inverse pixel variance maps. Must be a list containing either 3 elements
+        (for QQ, QU, and UU noise) or 1 element (for QQ = UU noise). Each element
+        can be a file path or a Healpy map, and they must be consistent with the given nside.
+    tf1d : array_like
+        1d transfer function.
+    tf2d : array_like
+        2d trasnfer function.
+    eps_min : float, optional
+        Minimum epsilon value for the filtering procedure, by default 1.0e-5.
+    ellscale : bool, optional
+        Whether to scale by multipole ell, by default True.
 
     """
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d, eps_min = 1.0e-5):
 
-        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (lib_dir, lmax, nside)
+    def __init__(
+        self,
+        lib_dir,
+        lmax,
+        nside,
+        cl,
+        nl_res,
+        ninv,
+        tf1d,
+        tf2d,
+        eps_min=1.0e-5,
+        ellscale=True,
+    ):
+        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
+            lib_dir,
+            lmax,
+            nside,
+        )
+        assert isinstance(ninv, list)
         super(cinv_p, self).__init__(lib_dir, lmax, eps_min)
-        print('cinv_p')
+
+        print("Initializing cinv_p")
+
+        # Scaling factor
+        ell = np.arange(lmax + 1, dtype=float)
+
+        if ellscale:
+            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
+            rescal_cl[0] = 1
+        else:
+            rescal_cl = np.ones_like(ell)
+
+        self.rescal_cl = rescal_cl
+
+        # rescaled cls (Dls by default)
+        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
+
+        # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
+        # cltt has l^2 and tf^2 has 1/l^2 factor already.
+        # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
+        # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
+
+        tf1d = tf1d[: lmax + 1] * cinv_utils.cli(rescal_cl)
+        tf2d = hp.almxfl(tf2d, cinv_utils.cli(rescal_cl))
 
         self.nside = nside
         self.cl = cl
+        self.dl = dl
         self.tf1d = tf1d
-        self.transf_e = tf1d
-        self.transf_b = tf1d#transf if transf_blm is None else transf_blm
-        self.transf = tf1d#transf if transf_blm is None else 0.5 * self.transf_e + 0.5 * self.transf_b
         self.tf2d = tf2d
         self.ninv = ninv
         self.nl_res = nl_res
 
-        self.n_inv_filt = hp_utils.jit(opfilt_hp_p.NoiseInverseFilter, ninv, tf1d, tf2d=tf2d)
-        self.s_inv_filt = hp_utils.jit(opfilt_hp_p.SkyInverseFilter, cl, nl_res, lmax, tf2d=tf2d, b_transf=tf1d)
+        # Set up s_inv_filt and n_inv_filt
+        self.s_inv_filt = hp_utils.jit(
+            opfilt_hp_p.SkyInverseFilter, dl, nl_res, lmax, tf1d, tf2d=tf2d
+        )
+        self.n_inv_filt = hp_utils.jit(
+            opfilt_hp_p.NoiseInverseFilter, ninv, tf1d, tf2d=tf2d
+        )
         self.opfilt = opfilt_hp_p
-        
 
     def apply_ivf(self, tmap, soltn=None):
         if soltn is not None:
-            print('soltn is not None')
+            print("soltn is not None")
             assert len(soltn) == 2
-            assert hp.Alm.getlmax(soltn[0].size) == self.lmax, (hp.Alm.getlmax(soltn[0].size), self.lmax)
-            assert hp.Alm.getlmax(soltn[1].size) == self.lmax, (hp.Alm.getlmax(soltn[1].size), self.lmax)
+            assert hp.Alm.getlmax(soltn[0].size) == self.lmax, (
+                hp.Alm.getlmax(soltn[0].size),
+                self.lmax,
+            )
+            assert hp.Alm.getlmax(soltn[1].size) == self.lmax, (
+                hp.Alm.getlmax(soltn[1].size),
+                self.lmax,
+            )
             talm = hp_utils.eblm([soltn[0], soltn[1]])
         else:
-            print('soltn is None')
+            print("soltn is None")
             telm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
             tblm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
             talm = hp_utils.eblm([telm, tblm])
 
         assert len(tmap) == 2
-        print('cinv_p.solve')
+        print("cinv_p.solve")
         self.solve(talm, [tmap[0], tmap[1]])
-
+        hp.almxfl(talm.elm, self.rescal_cl, inplace=True)
+        hp.almxfl(talm.blm, self.rescal_cl, inplace=True)
         return talm.elm, talm.blm
 
     def _calc_febl(self):
-        assert not 'eb' in self.cl.keys()
+        assert not "eb" in self.cl.keys()
 
         if len(self.ninv) == 1:
             ninv = self.n_inv_filt.n_inv[0]
             npix = len(ninv)
-            NlevP_uKamin = np.sqrt(
-                4. * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0])) * 180. * 60. / np.pi
+            NlevP_uKamin = (
+                np.sqrt(
+                    4.0 * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0])
+                )
+                * 180.0
+                * 60.0
+                / np.pi
+            )
         else:
             assert len(self.ninv) == 3
             ninv = self.n_inv_filt.n_inv
-            NlevP_uKamin= 0.5 * np.sqrt(
-                4. * np.pi / len(ninv[0]) / np.sum(ninv[0]) * len(np.where(ninv[0] != 0.0)[0])) * 180. * 60. / np.pi
-            NlevP_uKamin += 0.5 * np.sqrt(
-                4. * np.pi / len(ninv[2]) / np.sum(ninv[2]) * len(np.where(ninv[2] != 0.0)[0])) * 180. * 60. / np.pi
+            NlevP_uKamin = (
+                0.5
+                * np.sqrt(
+                    4.0
+                    * np.pi
+                    / len(ninv[0])
+                    / np.sum(ninv[0])
+                    * len(np.where(ninv[0] != 0.0)[0])
+                )
+                * 180.0
+                * 60.0
+                / np.pi
+            )
+            NlevP_uKamin += (
+                0.5
+                * np.sqrt(
+                    4.0
+                    * np.pi
+                    / len(ninv[2])
+                    / np.sum(ninv[2])
+                    * len(np.where(ninv[2] != 0.0)[0])
+                )
+                * 180.0
+                * 60.0
+                / np.pi
+            )
 
-        print("cinv_p::noiseP_uk_arcmin = %.3f"%NlevP_uKamin)
+        print("cinv_p::noiseP_uk_arcmin = %.3f" % NlevP_uKamin)
 
         s_cls = self.cl
-        b_transf_e = self.n_inv_filt.b_transf_e
-        b_transf_b = self.n_inv_filt.b_transf_b
-        fel = cinv_utils.cli(s_cls['ee'][:self.lmax + 1] + (NlevP_uKamin * np.pi / 180. / 60.) ** 2 * cinv_utils.cli(b_transf_e[0:self.lmax + 1] ** 2))
-        fbl = cinv_utils.cli(s_cls['bb'][:self.lmax + 1] + (NlevP_uKamin * np.pi / 180. / 60.) ** 2 * cinv_utils.cli(b_transf_b[0:self.lmax + 1] ** 2))
+        tf1d = self.n_inv_filt.tf1d
+        fel = cinv_utils.cli(
+            s_cls["ee"][: self.lmax + 1]
+            + (NlevP_uKamin * np.pi / 180.0 / 60.0) ** 2
+            * cinv_utils.cli(tf1d[0 : self.lmax + 1] ** 2)
+        )
+        fbl = cinv_utils.cli(
+            s_cls["bb"][: self.lmax + 1]
+            + (NlevP_uKamin * np.pi / 180.0 / 60.0) ** 2
+            * cinv_utils.cli(tf1d[0 : self.lmax + 1] ** 2)
+        )
 
         fel[0:2] *= 0.0
         fbl[0:2] *= 0.0
@@ -271,36 +407,110 @@ class cinv_p(cinv):
         return fel, fbl
 
     def _calc_tal(self):
-        return cinv_utils.cli(self.transf)
+        return cinv_utils.cli(self.tf1d)
 
     def _calc_mask(self):
         mask = np.ones(hp.nside2npix(self.nside), dtype=float)
         for ninv in self.ninv:
             assert hp.npix2nside(len(ninv)) == self.nside
-            mask *= (ninv > 0.)
+            mask *= ninv > 0.0
         return mask
 
 
-
 class cinv_tp(cinv):
-    '''
-    def __init__(self, lib_dir, lmax, nside, cl, transf, ninv,
-                 eps_min = 1.0e-5,
-                 nl=None,
-                 tf2d=None, tf2d_p=None,
-                 #marge_maps_t=(), marge_monopole=False, marge_dipole=False, pcf='default', 
-                 rescal_cl='default', 
-                 #chain_descr=None, 
-                 transf_p=None):
-    '''
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d_t, tf1d_p, tf2d_t, tf2d_p, eps_min = 1.0e-5):
+    """
+    Initialize a polarization-only inverse-variance (or Wiener-) filtering instance with
+    separate transfer functions for temperature and polarization.
 
-        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (lib_dir, lmax, nside)
+    This constructor sets up the filtering instance for processing CMB maps using
+    inverse-variance filtering. In this version, separate
+    transfer functions are provided for temperature and polarization channels in both
+    one-dimensional (1d) and two-dimensional (2d) forms.
+
+    Parameters
+    ----------
+    lib_dir : str
+        Directory where masks and other ancillary data will be cached.
+    lmax : int
+        Maximum multipole at which the filtered alm's are reconstructed.
+    nside : int
+        Healpy resolution of the maps to be filtered.
+    cl : dict
+        Fiducial CMB power spectra used for filtering.
+    nl_res : array_like
+        Dictionary of noise residuals used in the filtering.
+        (Additional details on the expected format should be provided.)
+    ninv : list
+        Inverse pixel variance maps. Must be a list containing either 3 elements
+        (for QQ, QU, and UU noise) or 1 element (for QQ = UU noise). Each element
+        can be a file path or a Healpy map, and they must be consistent with the given nside.
+    tf1d_t : array_like
+        One-dimensional transfer function for temperature.
+    tf1d_p : array_like
+        One-dimensional transfer function for polarization.
+    tf2d_t : array_like
+        Two-dimensional transfer function for temperature.
+    tf2d_p : array_like
+        Two-dimensional transfer function for polarization.
+    eps_min : float, optional
+        Minimum epsilon value for the filtering procedure, by default 1.0e-5.
+    ellscale : bool, optional
+        Whether to scale by multipole ell, by default True.
+    """
+
+    def __init__(
+        self,
+        lib_dir,
+        lmax,
+        nside,
+        cl,
+        nl_res,
+        ninv,
+        tf1d_t,
+        tf1d_p,
+        tf2d_t,
+        tf2d_p,
+        eps_min=1.0e-5,
+        ellscale=False,
+    ):
+        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
+            lib_dir,
+            lmax,
+            nside,
+        )
         assert len(ninv) == 2 or len(ninv) == 4  # TT, (QQ + UU)/2 or TT,QQ,QU,UU
         super(cinv_tp, self).__init__(lib_dir, lmax, eps_min)
 
+        print("Initializing cinv_tp")
+
+        # Scaling factor
+        ell = np.arange(lmax + 1, dtype=float)
+
+        if ellscale:
+            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
+            rescal_cl[0] = 1
+        else:
+            rescal_cl = np.ones_like(ell)
+
+        self.rescal_cl = rescal_cl
+
+        # rescaled cls (Dls by default)
+        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
+
+        # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
+        # cltt has l^2 and tf^2 has 1/l^2 factor already.
+        # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
+        # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
+
+        tf1d_t = tf1d_t[: lmax + 1] * cinv_utils.cli(rescal_cl)
+        tf1d_p = tf1d_p[: lmax + 1] * cinv_utils.cli(rescal_cl)
+
+        tf2d_t = hp.almxfl(tf2d_t, cinv_utils.cli(rescal_cl))
+        tf2d_p = hp.almxfl(tf2d_p, cinv_utils.cli(rescal_cl))
+
         self.nside = nside
         self.cl = cl
+        self.dl = dl
         self.tf1d_t = tf1d_t
         self.tf1d_p = tf1d_p
         self.tf2d_t = tf2d_t
@@ -308,94 +518,38 @@ class cinv_tp(cinv):
         self.ninv = ninv
         self.nl_res = nl_res
 
-        # Scaling factor to enhance small scales
-        ell = np.arange(lmax + 1, dtype=float)
-        rescal_cl = np.sqrt(ell * (ell + 1) / 2. / np.pi)
-        rescal_cl[0] = 1
-        self.rescal_cl = rescal_cl
-        
-        # Apply scaling factor to theory Cls
-        dl = {k: rescal_cl ** 2 * cl[k][:lmax + 1] for k in cl.keys()} 
+        self.s_inv_filt = hp_utils.jit(
+            opfilt_hp_tp.SkyInverseFilter,
+            dl,
+            nl_res,
+            lmax,
+            tf1d_t,
+            tf1d_p,
+            tf2d_t,
+            tf2d_p,
+        )
 
-        # Apply scaling factor to 1d/2d transfer function
-        tf1d_t = tf1d_t[:lmax + 1] * cinv_utils.cli(rescal_cl)
-        tf1d_p = tf1d_p[:lmax + 1] * cinv_utils.cli(rescal_cl)
-        
-        tf2d_t = hp.almxfl(tf2d_t, cinv_utils.cli(rescal_cl))
-        tf2d_p = hp.almxfl(tf2d_p, cinv_utils.cli(rescal_cl))
-
-
-        self.n_inv_filt = hp_utils.jit(opfilt_hp_tp.NoiseInverseFilter, ninv, tf1d_t, 
-                                 tf1d_p, tf2d_t, tf2d_p)
-        self.s_inv_filt = hp_utils.jit(opfilt_hp_tp.SkyInverseFilter, cl, nl_res, lmax,
-                               tf1d_t, tf1d_p, tf2d_t, tf2d_p)
+        self.n_inv_filt = hp_utils.jit(
+            opfilt_hp_tp.NoiseInverseFilter, ninv, tf1d_t, tf1d_p, tf2d_t, tf2d_p
+        )
 
         self.opfilt = opfilt_hp_tp
 
-        '''
-        if 1:
-            if not os.path.exists(lib_dir):
-                os.makedirs(lib_dir)
-
-            if not os.path.exists(os.path.join(lib_dir,  "filt_hash.pk")):
-                pk.dump(self.hashdict(), open(os.path.join(lib_dir,  "filt_hash.pk"), 'wb'), protocol=2)
-
-            #commenting out because _calc_fal() can't run pinv on np.inf (when transf is 0)
-            #if not os.path.exists(os.path.join(lib_dir,  "fal.pk")):
-            #    pk.dump(self._calc_fal(), open(os.path.join(lib_dir,  "fal.pk"), 'wb'), protocol=2)
-
-            if not os.path.exists(os.path.join(self.lib_dir,  "fmask.fits.gz")):
-                fmask = self.calc_mask()
-                hp.write_map(os.path.join(self.lib_dir,  "fmask.fits.gz"), fmask)
-
-        cinv_utils.hash_check(pk.load(open(os.path.join(lib_dir, "filt_hash.pk"), 'rb')), self.hashdict())
-        '''
-    '''
-    def hashdict(self):
-        ret = {'lmax': self.lmax,
-                'nside': self.nside,
-                'rescal_cl':{k: cinv_utils.clhash(self.rescal_cl[k]) for k in self.rescal_cl.keys()},
-                'cls':{k : cinv_utils.clhash(self.cl[k]) for k in self.cl.keys()},
-                'transf': cinv_utils.clhash(self.transf_t),
-                'ninv': self._ninv_hash(),
-                }
-        if self.transf_p is not self.transf_t:
-            ret['transf_p'] = cinv_utils.clhash(self.transf_p)
-        return ret
-
-    def _ninv_hash(self):
-        ret = []
-        for ninv_comp in self.ninv:
-            if isinstance(ninv_comp, np.ndarray) and ninv_comp.size > 1:
-                ret.append(cinv_utils.clhash(ninv_comp))
-            else:
-                ret.append(ninv_comp)
-        return [ret]
-
-    def calc_mask(self):
-        mask = np.ones(hp.nside2npix(self.nside), dtype=float)
-        for ninv in self.n_inv_filt.n_inv:
-            assert hp.npix2nside(len(ninv)) == self.nside
-            mask *= (ninv > 0.)
-        return mask
-    '''
-    def apply_ivf(self, tqumap, soltn=None): #, apply_fini=''):
-        assert (len(tqumap) == 3)
+    def apply_ivf(self, tqumap, soltn=None):  # , apply_fini=''):
+        assert len(tqumap) == 3
         if soltn is not None:
             ttlm, telm, tblm = soltn
         else:
             ttlm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
             telm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
             tblm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
-    
+
         talm = hp_utils.teblm([ttlm, telm, tblm])
-        self.solve(talm, [tqumap[0], tqumap[1], tqumap[2]]) #, apply_fini=apply_fini)
+        self.solve(talm, [tqumap[0], tqumap[1], tqumap[2]])  # , apply_fini=apply_fini)
         hp.almxfl(talm.tlm, self.rescal_cl, inplace=True)
         hp.almxfl(talm.elm, self.rescal_cl, inplace=True)
         hp.almxfl(talm.blm, self.rescal_cl, inplace=True)
         return talm.tlm, talm.elm, talm.blm
-
-
 
 
 class library_sepTP(object):
@@ -410,32 +564,17 @@ class library_sepTP(object):
         lfilt        : 1d lmin/lmax cuts to the output inverse-variance-filtered/Wiener-filtered maps (same for T,E,B)
 
     """
-    def __init__(self, lib_dir, sim_lib, cl_weights, lfilt = None, soltn_lib = None, cache = True, add_noise=False):
 
-        self.lib_dir   = lib_dir
-        self.sim_lib   = sim_lib
-        self.cl        = cl_weights
-        self.lfilt     = lfilt
+    def __init__(
+        self, lib_dir, sim_lib, cl_weights, lfilt=None, soltn_lib=None, add_noise=False
+    ):
+        self.lib_dir = lib_dir
+        self.sim_lib = sim_lib
+        self.cl = cl_weights
+        self.lfilt = lfilt
         self.add_noise = add_noise
 
         self.soltn_lib = soltn_lib
-        self.cache     = cache
-        fn_hash        = os.path.join(lib_dir, 'filt_hash.pk')
-
-        Y=1
-        if Y==0:
-        #if mpi.rank == 0:
-            if not os.path.exists(lib_dir):
-                os.makedirs(lib_dir)
-            if not os.path.exists(fn_hash):
-                pk.dump(self.hashdict(), open(fn_hash, 'wb'), protocol=2)
-        #mpi.barrier()
-        #cinv_utils.hash_check(pk.load(open(fn_hash, 'rb')), self.hashdict())
-
-    #def _apply_ivf_t(self, tmap, soltn=None):
-    #    assert 0, 'override this'
-    #def _apply_ivf_p(self, pmap, soltn=None):
-    #    assert 0, 'override this'
 
     def get_sim_teblm(self, idx):
         """
@@ -444,37 +583,43 @@ class library_sepTP(object):
         Args: idx    : simulation index
               Returns: inverse-filtered temperature healpy alm array
         """
-        tfname = os.path.join(self.lib_dir, 'sim_%04d_tlm.fits'%idx if idx >= 0 else 'dat_tlm.fits')
+        tfname = os.path.join(
+            self.lib_dir, "sim_%04d_tlm.fits" % idx if idx >= 0 else "dat_tlm.fits"
+        )
 
         if not os.path.exists(tfname):
-            print("no idea what its supposed to do here")
-            #tlm = self._apply_ivf_t(self.sim_lib.get_sim_tmap(idx), soltn=None if self.soltn_lib is None else self.soltn_lib.get_sim_tmliklm(idx))
-            #if self.cache: hp.write_alm(tfname, tlm, overwrite=True)
+            pass
         else:
-            print('Loading file: %s'%tfname)
-            tlm,elm,blm = hp.read_alm(tfname,hdu=[1,2,3])
+            print("Loading file: %s" % tfname)
+            tlm, elm, blm = hp.read_alm(tfname, hdu=[1, 2, 3])
 
         if self.lfilt is not None:
             hp.almxfl(tlm, self.lfilt, inplace=True)
             hp.almxfl(elm, self.lfilt, inplace=True)
             hp.almxfl(blm, self.lfilt, inplace=True)
 
-        return tlm,elm,blm
+        return tlm, elm, blm
 
     def get_sim_tlm(self, idx):
         """
         Returns an inverse-filtered temperature simulation.
-        
+
         Args: idx    : simulation index
               Returns: inverse-filtered temperature healpy alm array
         """
-        tfname = os.path.join(self.lib_dir, 'sim_%04d_tlm.fits'%idx if idx >= 0 else 'dat_tlm.fits')
+        tfname = os.path.join(
+            self.lib_dir, "sim_%04d_tlm.fits" % idx if idx >= 0 else "dat_tlm.fits"
+        )
         if not os.path.exists(tfname):
             print("tlm file doesnt exit so creating one")
-            tlm = self._apply_ivf_t(self.sim_lib.get_tmap(idx, add_noise=self.add_noise), soltn=None if self.soltn_lib is None else self.soltn_lib.get_sim_tmliklm(idx))
-            #if self.cache: hp.write_alm(tfname, tlm, overwrite=True)
+            tlm = self._apply_ivf_t(
+                self.sim_lib.get_tmap(idx, add_noise=self.add_noise),
+                soltn=None
+                if self.soltn_lib is None
+                else self.soltn_lib.get_sim_tmliklm(idx),
+            )
         else:
-            print("Loading file: %s"%tfname)
+            print("Loading file: %s" % tfname)
             tlm = hp.read_alm(tfname)
         if self.lfilt is not None:
             hp.almxfl(tlm, self.lfilt, inplace=True)
@@ -482,44 +627,66 @@ class library_sepTP(object):
 
     def get_sim_elm(self, idx):
         """Returns an inverse-filtered E-polarization simulation.
-            Args:idx: simulation index
-            Returns: inverse-filtered E-polarization healpy alm array
+        Args:idx: simulation index
+        Returns: inverse-filtered E-polarization healpy alm array
         """
-        print('library_sepTP.get_sim_elm')
-        tfname = os.path.join(self.lib_dir, 'sim_%04d_elm.fits'%idx  if idx >= 0 else 'dat_elm.fits')
-        Y=0
-        if Y==0:
-            print('Creating new')
+        print("library_sepTP.get_sim_elm")
+        tfname = os.path.join(
+            self.lib_dir, "sim_%04d_elm.fits" % idx if idx >= 0 else "dat_elm.fits"
+        )
+        Y = 0
+        if Y == 0:
+            print("Creating new")
             if self.soltn_lib is None:
                 soltn = None
             else:
-                soltn = np.array([self.soltn_lib.get_sim_emliklm(idx), self.soltn_lib.get_sim_bmliklm(idx)])
+                soltn = np.array(
+                    [
+                        self.soltn_lib.get_sim_emliklm(idx),
+                        self.soltn_lib.get_sim_bmliklm(idx),
+                    ]
+                )
 
-            elm, blm = self._apply_ivf_p(self.sim_lib.get_pmap(idx,add_noise=self.add_noise), soltn=soltn)
+            elm, blm = self._apply_ivf_p(
+                self.sim_lib.get_pmap(idx, add_noise=self.add_noise), soltn=soltn
+            )
 
         else:
-            sys.exit('Failed to load alm')
-        #    print('Load')
-        #    elm = hp.read_alm(tfname)
+            sys.exit("Failed to load alm")
+
         if self.lfilt is not None:
             hp.almxfl(elm, self.lfilt, inplace=True)
         return elm
 
     def get_sim_blm(self, idx):
         """Returns an inverse-filtered B-polarization simulation.
-            Args: idx: simulation index
-            Returns: inverse-filtered B-polarization healpy alm array
+        Args: idx: simulation index
+        Returns: inverse-filtered B-polarization healpy alm array
         """
-        tfname = os.path.join(self.lib_dir, 'sim_%04d_blm.fits'%idx  if idx >= 0 else 'dat_blm.fits')
+        tfname = os.path.join(
+            self.lib_dir, "sim_%04d_blm.fits" % idx if idx >= 0 else "dat_blm.fits"
+        )
         if not os.path.exists(tfname):
             if self.soltn_lib is None:
                 soltn = None
             else:
-                soltn = np.array([self.soltn_lib.get_sim_emliklm(idx), self.soltn_lib.get_sim_bmliklm(idx)])
+                soltn = np.array(
+                    [
+                        self.soltn_lib.get_sim_emliklm(idx),
+                        self.soltn_lib.get_sim_bmliklm(idx),
+                    ]
+                )
             elm, blm = self._apply_ivf_p(self.sim_lib.get_pmap(idx), soltn=soltn)
             if self.cache:
                 hp.write_alm(tfname, blm, overwrite=True)
-                hp.write_alm(os.path.join(self.lib_dir, 'sim_%04d_elm.fits'%idx if idx >= 0 else 'dat_elm.fits'), elm, overwrite=True)
+                hp.write_alm(
+                    os.path.join(
+                        self.lib_dir,
+                        "sim_%04d_elm.fits" % idx if idx >= 0 else "dat_elm.fits",
+                    ),
+                    elm,
+                    overwrite=True,
+                )
         else:
             blm = hp.read_alm(tfname)
         if self.lfilt is not None:
@@ -533,16 +700,16 @@ class library_sepTP(object):
         Args: idx    : simulation index
               Returns: inverse-filtered temperature healpy alm array
         """
-        tfname = os.path.join(self.lib_dir, 'sim_%04d_tlm.fits'%idx if idx >= 0 else 'dat_tlm.fits')
+        tfname = os.path.join(
+            self.lib_dir, "sim_%04d_tlm.fits" % idx if idx >= 0 else "dat_tlm.fits"
+        )
 
         # Loading unfiltered alms
         if not os.path.exists(tfname):
-            print("no idea what its supposed to do here")
-            #tlm = self._apply_ivf_t(self.sim_lib.get_sim_tmap(idx), soltn=None if self.soltn_lib is None else self.soltn_lib.get_sim_tmliklm(idx))
-            #if self.cache: hp.write_alm(tfname, tlm, overwrite=True)
+            pass
         else:
-            print('Loading file: %s'%tfname)
-            tlm,elm,blm = hp.read_alm(tfname,hdu=[1,2,3])
+            print("Loading file: %s" % tfname)
+            tlm, elm, blm = hp.read_alm(tfname, hdu=[1, 2, 3])
 
         # Apply lmin/lmax cuts in 1d
         if self.lfilt is not None:
@@ -550,137 +717,138 @@ class library_sepTP(object):
             hp.almxfl(elm, self.lfilt, inplace=True)
             hp.almxfl(blm, self.lfilt, inplace=True)
 
-        return tlm,elm,blm
+        return tlm, elm, blm
 
     def get_sim_eblm(self, idx):
         """Returns an inverse-filtered E-polarization simulation.
-            Args:idx: simulation index
-            Returns: inverse-filtered E-polarization healpy alm array
+        Args:idx: simulation index
+        Returns: inverse-filtered E-polarization healpy alm array
         """
         if self.soltn_lib is None:
             soltn = None
         else:
-            soltn = np.array([self.soltn_lib.get_sim_emliklm(idx), self.soltn_lib.get_sim_bmliklm(idx)])
+            soltn = np.array(
+                [
+                    self.soltn_lib.get_sim_emliklm(idx),
+                    self.soltn_lib.get_sim_bmliklm(idx),
+                ]
+            )
 
-        elm, blm = self._apply_ivf_p(self.sim_lib.get_pmap(idx,add_noise=self.add_noise), soltn=soltn)
+        elm, blm = self._apply_ivf_p(
+            self.sim_lib.get_pmap(idx, add_noise=self.add_noise), soltn=soltn
+        )
 
         if self.lfilt is not None:
             hp.almxfl(elm, self.lfilt, inplace=True)
             hp.almxfl(blm, self.lfilt, inplace=True)
-        return elm,blm
-
-
+        return elm, blm
 
     def get_sim_tmliklm(self, idx):
         """Returns a Wiener-filtered temperature simulation.
-            Args: idx: simulation index
-            Returns: Wiener-filtered temperature healpy alm array
+        Args: idx: simulation index
+        Returns: Wiener-filtered temperature healpy alm array
         """
-        cltt = self.cl['tt'][:len(self.lfilt)]*self.lfilt if self.lfilt is not None else self.cl['tt']
+        cltt = (
+            self.cl["tt"][: len(self.lfilt)] * self.lfilt
+            if self.lfilt is not None
+            else self.cl["tt"]
+        )
         return hp.almxfl(self.get_sim_tlm(idx), cltt)
 
     def get_sim_emliklm(self, idx):
         """Returns a Wiener-filtered E-polarization simulation.
-            Args: idx: simulation index
-            Returns: Wiener-filtered E-polarization healpy alm array
+        Args: idx: simulation index
+        Returns: Wiener-filtered E-polarization healpy alm array
         """
-        print('library_sepTP.get_sim_emliklm')
-        clee = self.cl['ee'][:len(self.lfilt)]*self.lfilt if self.lfilt is not None else self.cl['ee']
+        print("library_sepTP.get_sim_emliklm")
+        clee = (
+            self.cl["ee"][: len(self.lfilt)] * self.lfilt
+            if self.lfilt is not None
+            else self.cl["ee"]
+        )
         return hp.almxfl(self.get_sim_elm(idx), clee)
 
     def get_sim_bmliklm(self, idx):
         """Returns a Wiener-filtered B-polarization simulation.
-            Args: idx: simulation index
-            Returns: Wiener-filtered B-polarization healpy alm array
+        Args: idx: simulation index
+        Returns: Wiener-filtered B-polarization healpy alm array
         """
-        clbb = self.cl['bb'][:len(self.lfilt)]*self.lfilt if self.lfilt is not None else self.cl['bb']
+        clbb = (
+            self.cl["bb"][: len(self.lfilt)] * self.lfilt
+            if self.lfilt is not None
+            else self.cl["bb"]
+        )
         return hp.almxfl(self.get_sim_blm(idx), clbb)
 
     def get_sim_tlmivf(self, idx):
         """Returns an inverse variance temperature simulation.
-            Args: idx: simulation index
-            Returns: Wiener-filtered temperature healpy alm array
+        Args: idx: simulation index
+        Returns: Wiener-filtered temperature healpy alm array
         """
         print("Returning inverse variance filtered tlm")
-        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['tt'])
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl["tt"])
         return hp.almxfl(self.get_sim_tlm(idx), fl)
 
     def get_sim_eblmivf(self, idx):
         """Returns an inverse variance filtered E-polarization simulation.
-            Args: idx: simulation index
-            Returns: Wiener-filtered E-polarization healpy alm array
+        Args: idx: simulation index
+        Returns: Wiener-filtered E-polarization healpy alm array
         """
-        print("library_sepTP.get_sim_eblmivf -- Returning inverse variance filtered eblm")
-        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['ee'])
-        elm,blm = self.get_sim_eblm(idx)
+        print(
+            "library_sepTP.get_sim_eblmivf -- Returning inverse variance filtered eblm"
+        )
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl["ee"])
+        elm, blm = self.get_sim_eblm(idx)
         return hp.almxfl(elm, fl), hp.almxfl(blm, fl)
+
 
 class library_cinv_sepTP(library_sepTP):
     """Library to perform inverse-variance filtering of a simulation library.
 
-        Suitable for separate temperature and polarization filtering.
+    Suitable for separate temperature and polarization filtering.
 
-        Args:
-            lib_dir (str): a
-            sim_lib: simulation library instance (requires get_sim_tmap, get_sim_pmap methods)
-            cinvt: temperature-only filtering library
-            cinvp: poalrization-only filtering library
-            soltn_lib (optional): simulation libary providing starting guesses for the filtering.
+    Args:
+        lib_dir (str): a
+        sim_lib: simulation library instance (requires get_sim_tmap, get_sim_pmap methods)
+        cinvt: temperature-only filtering library
+        cinvp: poalrization-only filtering library
+        soltn_lib (optional): simulation libary providing starting guesses for the filtering.
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cinvt:cinv_t, cinvp:cinv_p, 
-                 cl_weights:dict, soltn_lib=None, lfilt=None):
+    def __init__(
+        self,
+        lib_dir,
+        sim_lib,
+        cinvt,
+        cinvp,
+        cl_weights,
+        soltn_lib=None,
+        lfilt=None,
+    ):
         self.cinv_t = cinvt
         self.cinv_p = cinvp
-        super(library_cinv_sepTP, self).__init__(lib_dir, sim_lib, cl_weights, 
-                                                 soltn_lib=soltn_lib,
-                                                 lfilt=lfilt)
-        Y=1
-        if Y==0:
-        #if mpi.rank == 0:
-            fname_mask = os.path.join(self.lib_dir, "fmask.fits.gz")
-            if not os.path.exists(fname_mask):
-                fmask = self.cinv_t.get_fmask()
-                assert np.all(fmask == self.cinv_p.get_fmask())
-                hp.write_map(fname_mask, fmask)
-
-        #mpi.barrier()
-        #cinv_utils.hash_check(pk.load(open(os.path.join(lib_dir, "filt_hash.pk"), 'rb')), self.hashdict())
-
-    def hashdict(self):
-        return {'cinv_t': self.cinv_t.hashdict(),
-                'cinv_p': self.cinv_p.hashdict()
-                #,
-                #'sim_lib': self.sim_lib.hashdict()
-                }
+        super(library_cinv_sepTP, self).__init__(
+            lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt
+        )
 
     def get_fmask(self):
         return hp.read_map(os.path.join(self.lib_dir, "fmask.fits.gz"))
 
     def get_tal(self, a, lmax=None):
-        assert (a.lower() in ['t', 'e', 'b']), a
-        if a.lower() == 't':
+        assert a.lower() in ["t", "e", "b"], a
+        if a.lower() == "t":
             return self.cinv_t.get_tal(a, lmax=lmax)
         else:
             return self.cinv_p.get_tal(a, lmax=lmax)
 
     def get_ftl(self, lmax=None):
-        """Isotropic approximation to temperature inverse variance filtering.
-            :math:`F^{T}_\ell = (C_\ell^{TT} + N^{T}_\ell / b_\ell^2)^{-1}`
-        """
         return self.cinv_t.get_ftl(lmax=lmax)
 
     def get_fel(self, lmax=None):
-        """Isotropic approximation to E-polarization inverse variance filtering.
-            :math:`F^{E}_\ell = (C_\ell^{EE} + N^{E}_\ell / b_\ell^2)^{-1}`
-        """
         return self.cinv_p.get_fel(lmax=lmax)
 
     def get_fbl(self, lmax=None):
-        """Isotropic approximation to B-polarization inverse variance filtering.
-            :math:`F^{B}_\ell = (C_\ell^{BB} + N^{B}_\ell / b_\ell^2)^{-1}`
-        """
         return self.cinv_p.get_fbl(lmax=lmax)
 
     def _apply_ivf_t(self, tmap, soltn=None):
@@ -689,59 +857,36 @@ class library_cinv_sepTP(library_sepTP):
     def _apply_ivf_p(self, pmap, soltn=None):
         return self.cinv_p.apply_ivf(pmap, soltn=soltn)
 
-    '''
-    def get_tmliklm(self, idx):
-        return  hp.almxfl(self.get_sim_tlm(idx), self.cinv_t.cl['tt'])
-
-    def get_emliklm(self, idx):
-        assert not hasattr(self.cinv_p.cl, 'eb')
-        return  hp.almxfl(self.get_sim_elm(idx), self.cinv_t.cl['ee'])
-
-    def get_bmliklm(self, idx):
-        assert not hasattr(self.cinv_p.cl, 'eb')
-        return  hp.almxfl(self.get_sim_blm(idx), self.cinv_t.cl['bb'])
-    '''
 
 
 class library_jTP(object):
     """Template class for CMB inverse-variance and Wiener-filtering library.
-            
+
     This one is suitable whenever the temperature and polarization maps are jointly filtered.
-            
-    Args:       
+
+    Args:
         lib_dir (str): directory where hashes and filtered maps will be cached.
         sim_lib : simulation library instance. *sim_lib* must have *get_sim_tmap* and *get_sim_pmap* methods.
         cl_weights: CMB spectra (gCMB or lCMB), used to compute the Wiener-filtered CMB from the inverse variance filtered maps.
 
-    """     
-    def __init__(self, lib_dir, sim_lib, cl_weights, lfilt = None, soltn_lib=None):
-                
-        #assert np.all([k in cl_weights.keys() for k in ['tt', 'ee', 'bb']])
+    """
+
+    def __init__(self, lib_dir, sim_lib, cl_weights, lfilt=None, soltn_lib=None):
+        # assert np.all([k in cl_weights.keys() for k in ['tt', 'ee', 'bb']])
         self.lib_dir = lib_dir
         self.sim_lib = sim_lib
         self.cl = cl_weights
         self.lfilt = lfilt
         self.soltn_lib = soltn_lib
-    '''
-    def get_fmask(self):
-        assert 0, 'override this'
 
-    def _apply_ivf(self, tqumap, soltn=None):
-        assert 0, 'override this'
 
-    def get_fal(self):
-        """Isotropic matrix approximation to inverse variance filtering
-            :math:`F_\ell \sim (C_\ell + N_\ell / b_\ell^2)^{-1}`
-            Output is dictionary with the usual 'tt', 'ee', 'te', 'bb', ... keys.
-        """
-        assert 0, 'override this'
-    '''
     def _get_alms(self, a, idx):
-        assert a in ['t', 'e', 'b', 'teb']
-        tfname = os.path.join(self.lib_dir, 'sim_%04d_tlm.fits' % idx if idx >= 0 else 'dat_tlm.fits')
-        fname = tfname.replace('tlm.fits', a + 'lm.fits')
+        assert a in ["t", "e", "b", "teb"]
+        tfname = os.path.join(
+            self.lib_dir, "sim_%04d_tlm.fits" % idx if idx >= 0 else "dat_tlm.fits"
+        )
+        fname = tfname.replace("tlm.fits", a + "lm.fits")
         if not os.path.exists(fname):
-            
             T = self.sim_lib.get_tmap(idx)
             Q, U = self.sim_lib.get_pmap(idx)
             if self.soltn_lib is None:
@@ -751,125 +896,113 @@ class library_jTP(object):
                 elm = self.soltn_lib.get_sim_emliklm(idx)
                 blm = self.soltn_lib.get_sim_bmliklm(idx)
                 soltn = (tlm, elm, blm)
-            tlm, elm, blm = self._apply_ivf([T, Q, U],  soltn=soltn)
-            
+            tlm, elm, blm = self._apply_ivf([T, Q, U], soltn=soltn)
+
         else:
-            tlm, elm, blm = hp.read_alm(tfname, hdu=[1,2,3])
+            tlm, elm, blm = hp.read_alm(tfname, hdu=[1, 2, 3])
 
         if self.lfilt is not None:
             hp.almxfl(tlm, self.lfilt, inplace=True)
             hp.almxfl(elm, self.lfilt, inplace=True)
             hp.almxfl(blm, self.lfilt, inplace=True)
-            
-        return {'teb': (tlm, elm, blm), 't': tlm, 'e': elm, 'b': blm}[a]
 
+        return {"teb": (tlm, elm, blm), "t": tlm, "e": elm, "b": blm}[a]
 
     def get_sim_teblm(self, idx):
-        return self._get_alms('teb', idx)
+        return self._get_alms("teb", idx)
 
     def get_sim_eblm(self, idx):
-        elm = self._get_alms('e', idx)
-        blm = self._get_alms('b', idx)
-        return elm,blm
+        elm = self._get_alms("e", idx)
+        blm = self._get_alms("b", idx)
+        return elm, blm
 
     def get_sim_tlm(self, idx):
-        return self._get_alms('t', idx)
+        return self._get_alms("t", idx)
 
     def get_sim_elm(self, idx):
-        return self._get_alms('e', idx)
+        return self._get_alms("e", idx)
 
     def get_sim_blm(self, idx):
-        return self._get_alms('b', idx)
-
+        return self._get_alms("b", idx)
 
     def get_sim_tmliklm(self, idx):
-        """Returns a Wiener-filtered temperature simulation.
-            Args:
-                idx: simulation index
-            Returns:
-                Wiener-filtered temperature healpy alm array
-        """
-        ret = hp.almxfl(self.get_sim_tlm(idx), self.cl['tt'])
-        for k in ['te', 'tb']:
+        ret = hp.almxfl(self.get_sim_tlm(idx), self.cl["tt"])
+        for k in ["te", "tb"]:
             cl = self.cl.get(k[0] + k[1], self.cl.get(k[1] + k[0], None))
             if cl is not None:
                 ret += hp.almxfl(self._get_alms(k[1], idx), cl)
         return ret
 
     def get_sim_emliklm(self, idx):
-        """Returns a Wiener-filtered E-polarization simulation.
-            Args:
-                idx: simulation index
-            Returns:
-                Wiener-filtered E-polarization healpy alm array
-        """
-        ret = hp.almxfl(self.get_sim_elm(idx), self.cl['ee'])
-        for k in ['et', 'eb']:
+        ret = hp.almxfl(self.get_sim_elm(idx), self.cl["ee"])
+        for k in ["et", "eb"]:
             cl = self.cl.get(k[0] + k[1], self.cl.get(k[1] + k[0], None))
             if cl is not None:
                 ret += hp.almxfl(self._get_alms(k[1], idx), cl)
         return ret
 
     def get_sim_bmliklm(self, idx):
-        """Returns a Wiener-filtered B-polarization simulation.
-            Args:
-                idx: simulation index
-            Returns:
-                Wiener-filtered B-polarization healpy alm array
-        """
-        ret = hp.almxfl(self.get_sim_blm(idx), self.cl['bb'])
-        for k in ['bt', 'be']:
+        ret = hp.almxfl(self.get_sim_blm(idx), self.cl["bb"])
+        for k in ["bt", "be"]:
             cl = self.cl.get(k[0] + k[1], self.cl.get(k[1] + k[0], None))
             if cl is not None:
                 ret += hp.almxfl(self._get_alms(k[1], idx), cl)
         return ret
 
     def get_sim_tlmivf(self, idx):
-        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['tt'])
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl["tt"])
         return hp.almxfl(self.get_sim_tlm(idx), fl)
 
     def get_sim_elmivf(self, idx):
-        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['ee'])
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl["ee"])
         return hp.almxfl(self.get_sim_elm(idx), fl)
 
     def get_sim_blmivf(self, idx):
-        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['bb'])
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl["bb"])
         return hp.almxfl(self.get_sim_blm(idx), fl)
 
     def get_sim_eblmivf(self, idx):
-        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['ee'])
-        elm,blm = self.get_sim_eblm(idx)
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl["ee"])
+        elm, blm = self.get_sim_eblm(idx)
         return hp.almxfl(elm, fl), hp.almxfl(blm, fl)
 
     def get_sim_teblmivf(self, idx):
-        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl['ee'])
-        tlm,elm,blm = self.get_sim_teblm(idx)
+        fl = self.lfilt if self.lfilt is not None else np.ones_like(self.cl["ee"])
+        tlm, elm, blm = self.get_sim_teblm(idx)
         return hp.almxfl(tlm, fl), hp.almxfl(elm, fl), hp.almxfl(blm, fl)
 
 
 class library_cinv_jTP(library_jTP):
     """Library to perform inverse-variance filtering of a simulation library.
 
-        Suitable for joint temperature and polarization filtering.
+    Suitable for joint temperature and polarization filtering.
 
-        Args:
-            lib_dir (str): a place to cache the maps
-            sim_lib: simulation library instance (requires get_sim_tmap, get_sim_pmap methods)
-            cinv_jtp: temperature and pol joint filtering library
-            cl_weights: spectra used to build the Wiener filtered leg from the inverse-variance maps
-            soltn_lib (optional): simulation libary providing starting guesses for the filtering.
+    Args:
+        lib_dir (str): a place to cache the maps
+        sim_lib: simulation library instance (requires get_sim_tmap, get_sim_pmap methods)
+        cinv_jtp: temperature and pol joint filtering library
+        cl_weights: spectra used to build the Wiener filtered leg from the inverse-variance maps
+        soltn_lib (optional): simulation libary providing starting guesses for the filtering.
 
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cinv_jtp:cinv_tp, cl_weights:dict, soltn_lib=None, lfilt=None):
+    def __init__(
+        self,
+        lib_dir,
+        sim_lib,
+        cinv_jtp: cinv_tp,
+        cl_weights: dict,
+        soltn_lib=None,
+        lfilt=None,
+    ):
         self.cinv_tp = cinv_jtp
-        super(library_cinv_jTP, self).__init__(lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib,lfilt=lfilt)
+        super(library_cinv_jTP, self).__init__(
+            lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt
+        )
 
     def get_fal(self, lmax=None):
         return self.cinv_tp.get_fal(lmax=lmax)
-    
+
     def _apply_ivf(self, tqumap, soltn=None):
-        # Apply the inverse variance filter defined in cinv_tp
         return self.cinv_tp.apply_ivf(tqumap, soltn=soltn)
-    

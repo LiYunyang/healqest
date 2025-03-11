@@ -110,6 +110,50 @@ class eblm:
     def __mul__(self, other):
         return eblm([self.elm * other, self.blm * other])
 
+
+
+class teblm:
+    def __init__(self, alm):
+        [tlm, elm, blm] = alm
+        assert len(elm) == len(blm), (len(elm), len(blm))
+        assert len(tlm) == len(elm), (len(tlm), len(elm))
+
+        self.lmax = hp.Alm.getlmax(len(elm))
+        self.lmaxt = hp.Alm.getlmax(len(tlm))
+        self.lmaxe = hp.Alm.getlmax(len(elm))
+        self.lmaxb = hp.Alm.getlmax(len(blm))
+        
+        
+        self.tlm = tlm
+        self.elm = elm
+        self.blm = blm
+
+    def __add__(self, other):
+        assert self.lmax == other.lmax
+        return teblm([self.tlm + other.tlm, self.elm + other.elm, self.blm + other.blm])
+
+    def __sub__(self, other):
+        assert self.lmax == other.lmax
+        return teblm([self.tlm - other.tlm, self.elm - other.elm, self.blm - other.blm])
+
+    def __iadd__(self, other):
+        assert self.lmax == other.lmax
+        self.tlm += other.tlm
+        self.elm += other.elm
+        self.blm += other.blm
+        return self
+
+    def __isub__(self, other):
+        assert self.lmax == other.lmax
+        self.tlm -= other.tlm
+        self.elm -= other.elm
+        self.blm -= other.blm
+        return self
+
+    def __mul__(self, other):
+        return teblm([self.tlm * other, self.elm * other, self.blm * other])
+
+
 def read_map(m):
     """Reads a map whether given as (list of) string (with ',f' denoting field f), array or callable        
     """

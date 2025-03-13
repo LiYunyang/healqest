@@ -676,8 +676,8 @@ def get_qes(qetype):
         qetype == "GMV"
         or qetype == "GMVTTEETE"
         or qetype == "GMVTBEB"
-        or qetype == "GMVbhTTprf"
-        or qetype == "GMVTTEETEbhTTprf"
+        #or qetype == "GMVbhTTprf"
+        #or qetype == "GMVTTEETEbhTTprf"
     ):
         qes = ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"]
 
@@ -696,6 +696,9 @@ def get_qes(qetype):
         or qetype == "ET"
         or qetype == "BE"
         or qetype == "BT"
+        or qetype == "TTbhTTprf"
+        or qetype == "GMVbhTTprf"
+        or qetype == "GMVTTEETEbhTTprf"
     ):
         qes = [qetype]
 

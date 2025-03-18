@@ -20,13 +20,13 @@ Requirements
 Install
 ------------
 
-There is no install script. The only thing you need to do is either add the following line at the beginning of your code::
-
-    sys.path.append("path_to_this_directory/healqest/src/")
+There is no install script. The only thing you need to do is add the correct path:
     
-or on a terminal do::
+    export PYTHONPATH=${PYTHONPATH}:PATH_TO_THIS_DIRECTORY/healqest/src
 
-    export PYTHON_PATH=${PYTHON_PATH}:PATH_TO_THIS_DIRECTORY/healqest/src
+You should also clone the spt3g_software repo and add the following path:
+    
+    export PYTHONPATH=$DIR_SPT3G_SOFTWARE/scratch/yomori:$PYTHONPATH
 
 You need to compile the cython code if you want to compute the analytic response function. This can be done by simply running::
 

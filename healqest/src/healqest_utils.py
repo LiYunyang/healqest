@@ -1293,7 +1293,18 @@ def get_SAN0(dir, qe, nsims, N0=None, lmax=4000, mode="grad"):
     return np.nan_to_num(SAN0arr, nan=0)
 
 
-def get_bpwf(dir_cls, bine, nsims, N0, N1, ellfac=1, curl=False, qe="gmv", lmax=4000):
+def get_bpwf(
+    dir_cls,
+    bine,
+    nsims,
+    qe,
+    N0,
+    N1,
+    ellfac=1,
+    curl=False,
+    lmax=4000,
+    use_cache=False,
+):
     """
     Return band power window function, based on the scatter measured
     from an ensemble of simulations.
@@ -1322,14 +1333,27 @@ def get_bpwf(dir_cls, bine, nsims, N0, N1, ellfac=1, curl=False, qe="gmv", lmax=
     # Compute variance for every ell, over nsims
     arr = np.zeros((lmax + 1, nsims))
 
-    for i in tqdm(range(1, nsims + 1)):
-        x = np.load(dir_cls + f"cl{spec}_k{qe}_{i}a_{i}a_{i}a_{i}a.npz")["cls"][
-            : lmax + 1, 1
-        ]
-        if ellfac >= 0:
-            arr[:, i - 1] = l ** (ellfac) * (x - N0[: lmax + 1] - N1[: lmax + 1])
-        else:
-            arr[:, i - 1] = (x - N0[: lmax + 1] - N1[: lmax + 1]) / v
+    f1 = dir_cls + f"all_cl{spec}_{qe}_xxxx.npy"
+
+    if use_cache and os.path.exists(f1):
+        xx = np.load(f1)
+        for i in tqdm(range(1, nsims + 1)):
+            if ellfac >= 0:
+                arr[:, i - 1] = l ** (ellfac) * (
+                    xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1]
+                )
+            else:
+                arr[:, i - 1] = (xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1]) / v
+
+    else:
+        for i in tqdm(range(1, nsims + 1)):
+            x = np.load(dir_cls + f"cl{spec}_k{qe}_{i}a_{i}a_{i}a_{i}a.npz")["cls"][
+                : lmax + 1, 1
+            ]
+            if ellfac >= 0:
+                arr[:, i - 1] = l ** (ellfac) * (x - N0[: lmax + 1] - N1[: lmax + 1])
+            else:
+                arr[:, i - 1] = (x - N0[: lmax + 1] - N1[: lmax + 1]) / v
 
     # Compute bandpower window function
     vv = np.std(arr, axis=1)

@@ -152,23 +152,73 @@ class Geometry:
             out['epsilon'] = kwargs['rtol']
         return out
 
+    def format_maps(self, maps, check=True, use_weights=False, use_pixel_weights=False):
+        """Formating maps to be compatible as input to `map2alm`.
+
+        The new maps will be reshaped to (nmaps, npix), and masked if there are bad pixels, and applied with
+        weights. If no weights is required and the map has no bad pixels, an view of the original map will be
+        returned, otherwise a copy will be returned.
+        """
+        maps = np.atleast_2d(maps)
+        mask = None
+        masked = None
+        if check:
+            mask = hp.mask_bad(maps)
+            masked = np.any(mask)
+            if masked:
+                maps = maps.copy()
+        if use_weights or use_pixel_weights:
+            w = 1
+            if use_weights:
+                w = self.ring_weights
+            if use_pixel_weights:
+                assert not use_weights
+                w = self.pixel_weights
+            maps = maps * w.astype(maps.dtype)
+        if check:
+            if masked:
+                maps[mask] = 0
+        return maps
+
     def map2alm(self, maps, lmax=None, mmax=None, iter=0, pol=True, use_weights=False, use_pixel_weights=False,
-                nthreads=None,  rtol=1e-5, **kwargs):
+                nthreads=None,  rtol=1e-5, check=True, **kwargs):
+        """
+        Computes the alm of a Healpix map. The input maps must all be in ring ordering.
+
+        Parameters
+        maps : array-like, shape (Npix,) or (n, Npix)
+            The input map or a list of n input maps. Must be in ring ordering.
+        lmax : int, scalar, optional
+            Maximum l of the power spectrum. Default: 3*nside-1
+        mmax : int, scalar, optional
+            Maximum m of the alm. Default: lmax
+        iter : int, scalar, optional
+            Number of iteration (default: 0). If set to non-zero, this will call pseudo_analysis to solve for the
+            alm iteratively.
+        pol : bool, optional
+            If True, assumes input maps are TQU. Output will be TEB alm's. (input must be 1, 2 or 3 maps)
+            If False, apply spin 0 harmonic transform to each map. (input can be any number of maps)
+            If there is only one input map, it has no effect. Default: True.
+        use_weights: bool, scalar, optional
+            If True, use the ring weighting. Default: False.
+        use_pixel_weights: bool, optional
+            If True, use pixel by pixel weighting, healpy will automatically download the weights, if needed
+        nthreads: int=None
+            Controls the number of threads used in the computation. If None, it will use the value of
+            `OMP_NUM_THREADS`.
+        rtol: float, scalar, optional
+            Relative tolerance for iterative solution.
+        check: bool=True
+            Check if there are bad pixels in the input maps and set them to zero for computation (a copy is made
+            and the input array is not mutted). If you are certain that there are no bad pixels, you can set this
+            to False to save overhead. Default: True.
+        """
         assert hp.get_nside(maps) == self.nside
 
-        maps = np.atleast_2d(maps)
+        maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
         nmaps = maps.shape[0]
         dtype = maps.dtype
         assert dtype in [np.float32, np.float64]
-
-        w = None
-        if use_weights:
-            w = self.ring_weights
-        if use_pixel_weights:
-            assert not use_weights
-            w = self.pixel_weights
-        if w is not None:
-            maps *= w.astype(dtype)
 
         ctype = np.complex64 if dtype == np.float32 else np.complex128
         kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
@@ -189,6 +239,32 @@ class Geometry:
         return np.squeeze(alms)
 
     def alm2map(self, alms, lmax=None, mmax=None, pol=True, nthreads=None, maps=None, **kwargs):
+        """
+        Computes a Healpix map given the alm.
+
+        The alm are given as a complex array. You can specify lmax and mmax, or they will be computed from array
+        size (assuming lmax==mmax).
+
+        Parameters
+        ----------
+        alms: complex, array or sequence of arrays
+            A complex array or a sequence of complex arrays.
+            Each array must have a size of the form: mmax * (2 * lmax + 1 - mmax) / 2 + lmax + 1
+        lmax: None or int, scalar, optional
+            Explicitly define lmax (needed if mmax!=lmax)
+        mmax: None or int, scalar, optional
+            Explicitly define mmax (needed if mmax!=lmax)
+        pol: bool, optional
+            If True, assumes input alms are TEB. Output will be TQU maps. (input must be 1/2 or 3 alms)
+            If False, apply spin 0 harmonic transform to each alm. (input can be any number of alms)
+            If there is only one input alm, it has no effect. Default: True.
+        nthreads: int=None
+            Controls the number of threads used in the computation. If None, it will use the value of
+            `OMP_NUM_THREADS`.
+        maps: array-like, shape (Npix,) or (nmaps, Npix)
+            The output maps buffer. If None, a new array will be created.
+
+        """
         alms = np.atleast_2d(alms)
         nmaps = alms.shape[0]
 
@@ -216,27 +292,18 @@ class Geometry:
         return np.squeeze(maps)
 
     def map2alm_spin(self, maps, spin, lmax=None, mmax=None, *, iter=0, use_weights=False, use_pixel_weights=False,
-                     nthreads=None,  rtol=1e-5, **kwargs):
+                     nthreads=None,  rtol=1e-5, check=True, **kwargs):
         if spin == 0:
             return list(-self.map2alm(maps, lmax=lmax, mmax=mmax, pol=False, iter=iter, use_weights=use_weights,
-                                      use_pixel_weights=use_pixel_weights, nthreads=nthreads,  rtol=rtol, **kwargs))
+                                      use_pixel_weights=use_pixel_weights, nthreads=nthreads,  rtol=rtol,
+                                      check=check, **kwargs))
         else:
             assert hp.get_nside(maps) == self.nside
-
-            maps = np.atleast_2d(maps)
+            maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
             nmaps = maps.shape[0]
             assert nmaps == 2, "spin function only accepts 2 maps"
             dtype = maps.dtype
             assert dtype in [np.float32, np.float64]
-
-            w = None
-            if use_weights:
-                w = self.ring_weights
-            if use_pixel_weights:
-                assert not use_weights
-                w = self.pixel_weights
-            if w is not None:
-                maps *= w.astype(dtype)
 
             ctype = np.complex64 if dtype == np.float32 else np.complex128
             kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
@@ -247,9 +314,13 @@ class Geometry:
                 alms *= self.pixelarea
             return list(alms)
 
-    def alm2map_spin(self, alms, spin, lmax=None, mmax=None, *, nthreads=None, **kwargs):
+    def alm2map_spin(self, alms, spin, lmax=None, mmax=None, *, nthreads=None, maps=None, **kwargs):
         if spin ==0:
-            return list(-self.alm2map(alms, lmax=lmax, mmax=mmax, pol=False, nthreads=nthreads, **kwargs))
+            out = list(-self.alm2map(alms, lmax=lmax, mmax=mmax, pol=False, nthreads=nthreads, maps=maps, **kwargs))
+            if maps is not None:
+                # inplace mutation if maps is sent in as a buffer.
+                maps *= -1
+            return out
         else:
             alms = np.atleast_2d(alms)
             nmaps = alms.shape[0]
@@ -257,8 +328,10 @@ class Geometry:
             ctype = alms.dtype
             assert ctype in [np.complex64, np.complex128]
             dtype = np.float64 if ctype == np.complex128 else np.float32
-
-            maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=dtype)
+            if maps is None:
+                maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=dtype)
+            else:
+                assert maps.shape[0] == 2
             func = ducc0.sht.synthesis
             if lmax is None:
                 lmax = hp.Alm.getlmax(alms.shape[-1])

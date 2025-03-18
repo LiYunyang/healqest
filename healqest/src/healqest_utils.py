@@ -707,7 +707,7 @@ def make_almmask(alm_lmax, mmin=0, lmin=0, lmax=6000):
     return w
 
 
-def get_qes(qetype):
+def get_qes(qeset):
     """
     Retrieve the estimators needed to compute a given QE set.
 

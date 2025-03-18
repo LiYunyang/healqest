@@ -47,7 +47,7 @@ class gmv_resp(object):
 
         self.crossilc = crossilc
         self.Lmax = config['lensrec']['Lmax']
-        self.l1Min = config['lensrec']['lmin']
+        self.l1Min = min(config['lensrec']['lminT'],config['lensrec']['lmaxP'])
         # Max value for l1 and l2 is taken to be same
         self.l1Max = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
         self.u = interp1d(np.arange(len(u)), u, kind='linear', bounds_error=False, fill_value=0.) if u is not None else None

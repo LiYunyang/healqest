@@ -30,16 +30,19 @@ def load_yaml(file_path):
         data = yaml.safe_load(f)
 
     # Check if there is an `includes` key
-    if "includes" in data:
-        included_file = data["includes"]
-        included_file_path = os.path.join(os.path.dirname(file_path), included_file)
+    if 'includes' in data:
+        included_file = data['includes']
+        if type(included_file) is not list: included_file = [included_file]
 
-        # Recursively load the included file
-        with open(included_file_path, "r") as included_f:
-            included_data = yaml.safe_load(included_f)
+        for inc_f in included_file:
+            included_file_path = os.path.join(os.path.dirname(file_path), inc_f)
 
-        # Recursively merge included data into the main data, preserving main data values
-        recursive_merge(data, included_data)
+            # Recursively load the included file
+            with open(included_file_path, 'r') as included_f:
+                included_data = yaml.safe_load(included_f)
+
+            # Recursively merge included data into the main data, preserving main data values
+            recursive_merge(data, included_data)
 
     return data
 
@@ -270,6 +273,49 @@ def parse_yaml(file_yaml):
 
     return dict
 
+def load_cambfiles_dict(dict):
+
+    dict['lensrec']['lmax'] = max(dict['lensrec']['lmaxT'],dict['lensrec']['lmaxP'])
+
+    if "cls" in dict:
+
+        if 'file_lcmb' in dict['cls']:
+            try:
+                f   = dict['cls']['file_lcmb']; print(f)
+                ell = np.loadtxt(f, usecols=[0])
+                dd  = ell*(ell+1)/2/np.pi
+                dict['cls']['lcmb'] = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1] for c, n in enumerate(['tt','ee','bb','te']) }
+                #print("Setting CMB lensed cls")
+            except:
+                print("Couldn't load lensed CMB cls -- not setting CMB Cls")
+
+        if 'file_ucmb' in dict['cls']:
+            try:
+                f   = dict['cls']['file_ucmb']
+                ell = np.loadtxt(f, usecols=[0])
+                dd  = ell*(ell+1)/2/np.pi
+                vv  = (ell*(ell+1))**2/2/np.pi
+                qq  = (ell*(ell+1))**(1.5)/2/np.pi
+                dict['cls']['ucmb']       = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1]  for c, n in enumerate(['tt','ee','bb','te']) }
+                dict['cls']['ucmb']['pp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[5])/vv)[:dict['lensrec']['lmax']+1]
+                dict['cls']['ucmb']['tp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[6])/qq)[:dict['lensrec']['lmax']+1]
+                dict['cls']['ucmb']['ep'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[7])/qq)[:dict['lensrec']['lmax']+1]
+                #print("Setting CMB unlensed cls")
+            except:
+                print("Couldn't load unlensed CMB cls -- not setting CMB Cls")
+
+        if 'file_gcmb' in dict['cls']:
+            try:
+                #TODO: This will change if we use a different file! Currently configured for Abhi's file
+                f   = dict['cls']['file_gcmb']
+                ell = np.loadtxt(f, usecols=[0])
+                dd  = ell*(ell+1)/2/np.pi
+                dict['cls']['gcmb'] = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1]  for c, n in enumerate(['tt','ee','bb','te']) }
+                #print("Setting CMB gradient cls")
+            except:
+                print("Couldn't load gradient CMB cls -- not setting CMB Cls")
+
+    return dict
 
 class RelativeSeconds(lg.Formatter):
     def format(self, record):
@@ -502,23 +548,32 @@ def get_totalcls(cls, lmaxT, lmaxP, lmaxTP, lminT, lminP):
 
     return totalcls
 
-
-def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, gmvname):
-    """
+def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, estname):
+    '''
     All aresp are computed using healqest/src/gmv_resp.py via run script
     pipeline/spt3g_20192020/src/compute_gmvresp.py
 
-    aresp_fname: filename of the analytic GMV response file
+    aresp_fname: filename of the analytic GMV/SQE-TT response file
     arespss_fname: filename of the analytic src-src response file
     arespse_fname: filename of the analytic src-phi response file
+    '''
+    if 'GMV' in estname:
+        print("loading %s response"%estname)
+        dic = {'GMVTTEETE':1, 'GMVTBEB':2, 'GMV':3}
+        assert estname != 'GMVTBEB', "zero response to TBEB"
 
-    """
-    dic = {"GMVTTEETE": 1, "GMVTBEB": 2, "GMV": 3}
-    assert gmvname != "GMVTBEB", "zero response to TBEB"
+        resp1  = np.load(aresp_fname)[:, dic[estname]]
+        resp2  = np.load(arespss_fname)[:,1]  #[:,1] == [:,3]  and [:,2]==0
+        resp12 = np.load(arespse_fname)[:,1] #[:,1] == [:,3]  and [:,2]==0
+    else:
+        print("loading SQE %s response"%estname)
+        assert estname == 'TT', "not hardening non-TT SQE phi"
 
-    resp1 = np.load(aresp_fname)[:, dic[gmvname]]
-    resp2 = np.load(arespss_fname)[:, 1]  # [:,1] == [:,3]  and [:,2]==0
-    resp12 = np.load(arespse_fname)[:, 1]  # [:,1] == [:,3]  and [:,2]==0
+        resp1  = np.load(aresp_fname)
+        resp2  = np.load(arespss_fname)
+        resp12 = np.load(arespse_fname)
+
+    resp2[resp2==0]=np.inf  #prevent NaNs
 
     weight = -1 * resp12 / resp2
     resp_tot = resp1 + weight * resp12
@@ -527,7 +582,16 @@ def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, gmvname):
 
 
 def harden_est(plm_e, plm_s, weight):
-    # return hardened, unnormalized estimator
+    #return hardened, unnormalized estimator
+    Lmax     = hp.Alm.getlmax(len(plm_s))
+    resplmax = len(weight)-1
+    if Lmax > resplmax: 
+        weight_l = np.zeros(Lmax+1)
+        weight_l[:resplmax+1] = weight
+        weight   = weight_l.copy()
+        print("resp lmax: %i; src-lm Lmax: %i"%(resplmax, Lmax))
+        print("zero-pad weight to match src-lm lmax")
+
     return plm_e + hp.almxfl(plm_s, weight)
 
 
@@ -614,10 +678,7 @@ def get_qes(qetype):
     if (qetype == "GMV"):
         qes = ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"]
     
-    elif qetype == "GMVbhTTprf":
-        qes = ["TT", "EE", "TE", "ET"]
-
-    elif qetype == "GMVTTEETE" or qetype =="GMVbhTTprf" or qetype =="GMVTTEETEbhTTprf":
+    elif qetype == "GMVTTEETE" :
         qes = ["TT", "EE", "TE", "ET"]
 
     elif qetype == "GMVTBEB":
@@ -638,6 +699,9 @@ def get_qes(qetype):
         or qetype == "ET"
         or qetype == "BE"
         or qetype == "BT"
+        or qetype == "TTbhTTprf"
+        or qetype == "GMVbhTTprf"
+        or qetype == "GMVTTEETEbhTTprf"
     ):
         qes = [qetype]
 

@@ -30,15 +30,16 @@ def load_yaml(file_path):
         data = yaml.safe_load(f)
 
     # Check if there is an `includes` key
-    if 'includes' in data:
-        included_file = data['includes']
-        if type(included_file) is not list: included_file = [included_file]
+    if "includes" in data:
+        included_file = data["includes"]
+        if type(included_file) is not list:
+            included_file = [included_file]
 
         for inc_f in included_file:
             included_file_path = os.path.join(os.path.dirname(file_path), inc_f)
 
             # Recursively load the included file
-            with open(included_file_path, 'r') as included_f:
+            with open(included_file_path, "r") as included_f:
                 included_data = yaml.safe_load(included_f)
 
             # Recursively merge included data into the main data, preserving main data values
@@ -63,7 +64,16 @@ def setup_logger(savelog=False, file_log="test.log"):
 
 
 def parse_dirname(config):
-    return config['lensrec']['dir_out'].format(runname=runname,rectype=rectype,lminT=lminT,lminP=lminP,lmaxT=lmaxT,lmaxP=lmaxP,mmin=mmin)
+    return config["lensrec"]["dir_out"].format(
+        runname=runname,
+        rectype=rectype,
+        lminT=lminT,
+        lminP=lminP,
+        lmaxT=lmaxT,
+        lmaxP=lmaxP,
+        mmin=mmin,
+    )
+
 
 def rebincl(ell, cl, bb, return_ell=False):
     # bb   = np.linspace(minell,maxell,Nbins+1)
@@ -78,7 +88,7 @@ def rebincl(ell, cl, bb, return_ell=False):
         retl[i] = np.mean(ell[ll[i] : uu[i]])
         err[i] = np.std(cl[ll[i] : uu[i]])
     if return_ell:
-        return retl,ret
+        return retl, ret
     else:
         return ret
 
@@ -273,49 +283,71 @@ def parse_yaml(file_yaml):
 
     return dict
 
-def load_cambfiles_dict(dict):
 
-    dict['lensrec']['lmax'] = max(dict['lensrec']['lmaxT'],dict['lensrec']['lmaxP'])
+def load_cambfiles_dict(dict):
+    dict["lensrec"]["lmax"] = max(dict["lensrec"]["lmaxT"], dict["lensrec"]["lmaxP"])
 
     if "cls" in dict:
-
-        if 'file_lcmb' in dict['cls']:
+        if "file_lcmb" in dict["cls"]:
             try:
-                f   = dict['cls']['file_lcmb']; print(f)
+                f = dict["cls"]["file_lcmb"]
+                print(f)
                 ell = np.loadtxt(f, usecols=[0])
-                dd  = ell*(ell+1)/2/np.pi
-                dict['cls']['lcmb'] = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1] for c, n in enumerate(['tt','ee','bb','te']) }
-                #print("Setting CMB lensed cls")
+                dd = ell * (ell + 1) / 2 / np.pi
+                dict["cls"]["lcmb"] = {
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                        : dict["lensrec"]["lmax"] + 1
+                    ]
+                    for c, n in enumerate(["tt", "ee", "bb", "te"])
+                }
+                # print("Setting CMB lensed cls")
             except:
                 print("Couldn't load lensed CMB cls -- not setting CMB Cls")
 
-        if 'file_ucmb' in dict['cls']:
+        if "file_ucmb" in dict["cls"]:
             try:
-                f   = dict['cls']['file_ucmb']
+                f = dict["cls"]["file_ucmb"]
                 ell = np.loadtxt(f, usecols=[0])
-                dd  = ell*(ell+1)/2/np.pi
-                vv  = (ell*(ell+1))**2/2/np.pi
-                qq  = (ell*(ell+1))**(1.5)/2/np.pi
-                dict['cls']['ucmb']       = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1]  for c, n in enumerate(['tt','ee','bb','te']) }
-                dict['cls']['ucmb']['pp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[5])/vv)[:dict['lensrec']['lmax']+1]
-                dict['cls']['ucmb']['tp'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[6])/qq)[:dict['lensrec']['lmax']+1]
-                dict['cls']['ucmb']['ep'] = zeropad(np.loadtxt(dict['cls']['file_ucmb'], usecols=[7])/qq)[:dict['lensrec']['lmax']+1]
-                #print("Setting CMB unlensed cls")
+                dd = ell * (ell + 1) / 2 / np.pi
+                vv = (ell * (ell + 1)) ** 2 / 2 / np.pi
+                qq = (ell * (ell + 1)) ** (1.5) / 2 / np.pi
+                dict["cls"]["ucmb"] = {
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                        : dict["lensrec"]["lmax"] + 1
+                    ]
+                    for c, n in enumerate(["tt", "ee", "bb", "te"])
+                }
+                dict["cls"]["ucmb"]["pp"] = zeropad(
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[5]) / vv
+                )[: dict["lensrec"]["lmax"] + 1]
+                dict["cls"]["ucmb"]["tp"] = zeropad(
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[6]) / qq
+                )[: dict["lensrec"]["lmax"] + 1]
+                dict["cls"]["ucmb"]["ep"] = zeropad(
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[7]) / qq
+                )[: dict["lensrec"]["lmax"] + 1]
+                # print("Setting CMB unlensed cls")
             except:
                 print("Couldn't load unlensed CMB cls -- not setting CMB Cls")
 
-        if 'file_gcmb' in dict['cls']:
+        if "file_gcmb" in dict["cls"]:
             try:
-                #TODO: This will change if we use a different file! Currently configured for Abhi's file
-                f   = dict['cls']['file_gcmb']
+                # TODO: This will change if we use a different file! Currently configured for Abhi's file
+                f = dict["cls"]["file_gcmb"]
                 ell = np.loadtxt(f, usecols=[0])
-                dd  = ell*(ell+1)/2/np.pi
-                dict['cls']['gcmb'] = {n: zeropad(np.loadtxt(f, usecols=[c+1])/dd)[:dict['lensrec']['lmax']+1]  for c, n in enumerate(['tt','ee','bb','te']) }
-                #print("Setting CMB gradient cls")
+                dd = ell * (ell + 1) / 2 / np.pi
+                dict["cls"]["gcmb"] = {
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                        : dict["lensrec"]["lmax"] + 1
+                    ]
+                    for c, n in enumerate(["tt", "ee", "bb", "te"])
+                }
+                # print("Setting CMB gradient cls")
             except:
                 print("Couldn't load gradient CMB cls -- not setting CMB Cls")
 
     return dict
+
 
 class RelativeSeconds(lg.Formatter):
     def format(self, record):
@@ -548,32 +580,33 @@ def get_totalcls(cls, lmaxT, lmaxP, lmaxTP, lminT, lminP):
 
     return totalcls
 
+
 def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, estname):
-    '''
+    """
     All aresp are computed using healqest/src/gmv_resp.py via run script
     pipeline/spt3g_20192020/src/compute_gmvresp.py
 
     aresp_fname: filename of the analytic GMV/SQE-TT response file
     arespss_fname: filename of the analytic src-src response file
     arespse_fname: filename of the analytic src-phi response file
-    '''
-    if 'GMV' in estname:
-        print("loading %s response"%estname)
-        dic = {'GMVTTEETE':1, 'GMVTBEB':2, 'GMV':3}
-        assert estname != 'GMVTBEB', "zero response to TBEB"
+    """
+    if "GMV" in estname:
+        print("loading %s response" % estname)
+        dic = {"GMVTTEETE": 1, "GMVTBEB": 2, "GMV": 3}
+        assert estname != "GMVTBEB", "zero response to TBEB"
 
-        resp1  = np.load(aresp_fname)[:, dic[estname]]
-        resp2  = np.load(arespss_fname)[:,1]  #[:,1] == [:,3]  and [:,2]==0
-        resp12 = np.load(arespse_fname)[:,1] #[:,1] == [:,3]  and [:,2]==0
+        resp1 = np.load(aresp_fname)[:, dic[estname]]
+        resp2 = np.load(arespss_fname)[:, 1]  # [:,1] == [:,3]  and [:,2]==0
+        resp12 = np.load(arespse_fname)[:, 1]  # [:,1] == [:,3]  and [:,2]==0
     else:
-        print("loading SQE %s response"%estname)
-        assert estname == 'TT', "not hardening non-TT SQE phi"
+        print("loading SQE %s response" % estname)
+        assert estname == "TT", "not hardening non-TT SQE phi"
 
-        resp1  = np.load(aresp_fname)
-        resp2  = np.load(arespss_fname)
+        resp1 = np.load(aresp_fname)
+        resp2 = np.load(arespss_fname)
         resp12 = np.load(arespse_fname)
 
-    resp2[resp2==0]=np.inf  #prevent NaNs
+    resp2[resp2 == 0] = np.inf  # prevent NaNs
 
     weight = -1 * resp12 / resp2
     resp_tot = resp1 + weight * resp12
@@ -582,14 +615,14 @@ def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, estname):
 
 
 def harden_est(plm_e, plm_s, weight):
-    #return hardened, unnormalized estimator
-    Lmax     = hp.Alm.getlmax(len(plm_s))
-    resplmax = len(weight)-1
-    if Lmax > resplmax: 
-        weight_l = np.zeros(Lmax+1)
-        weight_l[:resplmax+1] = weight
-        weight   = weight_l.copy()
-        print("resp lmax: %i; src-lm Lmax: %i"%(resplmax, Lmax))
+    # return hardened, unnormalized estimator
+    Lmax = hp.Alm.getlmax(len(plm_s))
+    resplmax = len(weight) - 1
+    if Lmax > resplmax:
+        weight_l = np.zeros(Lmax + 1)
+        weight_l[: resplmax + 1] = weight
+        weight = weight_l.copy()
+        print("resp lmax: %i; src-lm Lmax: %i" % (resplmax, Lmax))
         print("zero-pad weight to match src-lm lmax")
 
     return plm_e + hp.almxfl(plm_s, weight)
@@ -675,69 +708,56 @@ def make_almmask(alm_lmax, mmin=0, lmin=0, lmax=6000):
 
 
 def get_qes(qetype):
-    if (qetype == "GMV"):
-        qes = ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"]
-    
-    elif qetype == "GMVTTEETE" :
-        qes = ["TT", "EE", "TE", "ET"]
+    """
+    Retrieve the estimators needed to compute a given QE set.
 
-    elif qetype == "GMVTBEB":
-        qes = ["TB", "BT", "EB", "BE"]
+    Parameters
+    ----------
+    qeset : str
+        A string representing the QE set.
 
-    elif qetype == "MV":
-        qes = ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"]
+    Returns
+    -------
+    list or None
+        A list of estimators neesed.
+    """
 
-    elif qetype == "PP":
-        qes = ["EE", "EB", "BE"]
+    single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT"}
 
-    elif (
-        qetype == "TT"
-        or qetype == "EE"
-        or qetype == "TE"
-        or qetype == "EB"
-        or qetype == "TB"
-        or qetype == "ET"
-        or qetype == "BE"
-        or qetype == "BT"
-        or qetype == "TTbhTTprf"
-        or qetype == "GMVbhTTprf"
-        or qetype == "GMVTTEETEbhTTprf"
-    ):
-        qes = [qetype]
+    composite = {
+        "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
+        "GMVTTEETE": ["TT", "EE", "TE", "ET"],
+        "GMVTBEB": ["TB", "BT", "EB", "BE"],
+        "MV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
+        "qMV": ["TT", "EE", "EB", "TE", "TB"],
+        "PP": ["EE", "EB", "BE"],
+        "qPP": ["EE", "EB"],
+        "TEET": ["TE", "ET"],
+        "EBBE": ["EB", "BE"],
+        "TBBT": ["TB", "BT"],
+        "qTEET": ["TE"],
+        "qEBBE": ["EB"],
+        "qTBBT": ["TB"],
+    }
 
-    elif qetype == "TEET":
-        qes = ["TE", "ET"]
+    harden = {"TTbhTTprf", "GMVbhTTprf", "GMVTTEETEbhTTprf"}
 
-    elif qetype == "EBBE":
-        qes = ["EB", "BE"]
+    if qeset in composite:
+        return composite[qeset]
 
-    elif qetype == "TBBT":
-        qes = ["TB", "BT"]
+    # For any qetype that is one of the single entry codes.
+    elif qeset in single or qeset in harden:
+        return [qeset]
 
-    elif qetype == 'qPP':
-        '''x2 on asymmetric terms'''
-        qes = ["EE", "EB"]
-
-    elif qetype == 'qMV':
-        '''x2 on asymmetric terms'''
-        qes = ["TT", "EE", "EB", "TE", "TB"]
-
-    elif qetype == "qTEET":
-        qes = ["TE"]
-
-    elif qetype == "qEBBE":
-        qes = ["EB"]
-
-    elif qetype == "qTBBT":
-        qes = ["TB"]
-
-    return qes
+    else:
+        sys.exit("Undefined qeset")
 
 
 def get_dvec(
     dir,
     bine,
     nsims,
+    qe,
     N0,
     N1,
     RDN0=None,
@@ -746,89 +766,141 @@ def get_dvec(
     ratio=False,
     curl=False,
     bpwf=None,
-    qe="gmv",
     didx=0,
     theory=None,
     R=1,
     dd=None,
     startidx=1,
     unl=False,
+    lmax=4000,
+    use_cache=False,
 ):
     """
-    Returns datavector and covariance
-    dir   : directory where the simulations are stored
-    bine  : bin edges
-    nsims : number of simulations
-    N0    : Noise spectra
-    N1    :
-    RDN0:
+    Returns data vector and covariance.
+
+    Parameters
+    ----------
+    dir : str
+        Directory where the simulations are stored.
+    bine : array_like
+        Bin edges.
+    nsims : int
+        Number of simulations.
+    qe : str
+        QE to use.
+    N0 : array_like
+        N0 spectra.
+    N1 : array_like
+        N1 spectra.
+    RDN0 : array_like, optional
+        RDN0 spectra. Default is None.
+    SAN0 : array_like, optional
+        Semi-analytic N0 spectra array. Default is None.
+    ellfac : int, optional
+        Scale by ell factor. Default is 0.
+    ratio : bool, optional
+        Compute ratio with respect to theory. Default is False.
+    curl : bool, optional
+        Curl mode flag. Default is False.
+    bpwf : array_like, optional
+        Band power window function. Default is None.
+    didx : int
+        Data index.
+    theory : array_like, optional
+        Theory spectra; only used when ratio is True. Default is None.
+    R : float
+        Arbitrary scaling factor to multiply.
+    dd : array_like, optional
+        Data spectra. Default is None.
+    startidx : int, optional
+        Start index. Default is 1.
+    unl : bool, optional
+        If True, assume unlensed realization. Default is False.
+    lmax : int, optional
+        Maximum ell to use. Default is 4000.
+    use_cache : bool, optional
+        Load from packed file. Default is False.
+
+    Returns
+    -------
+    dict
+        A dictionary containing the following keys:
+
+        'rl' : array_like
+            Binned ell
+        'rdl' : array_like
+            Binned data Cl.
+        'rcl' : array_like
+            Binned sim mean Cl.
+        'err' : array_like
+            Standard deviation of the rcl.
+        'arr' : array_like
+            Full array storing all rcl
+        'rdl_corr' : array_like
+            Sim mean correct data Cl.
     """
-    if curl:
-        spec = "ww"
-    else:
-        spec = "kk"
+
+    spec = "ww" if curl else "kk"
 
     if SAN0 is not None:
         print("Using SAN0 instead of N0")
 
-    lmax = len(np.load(dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, 0, 0, 0, 0))["cls"][:, 1])-1
-
-    l = np.arange(lmax+1)
+    l = np.arange(lmax + 1)
     arr = np.zeros((len(bine) - 1, nsims))
-    farr = np.zeros((lmax+1, nsims))
+    farr = np.zeros((lmax + 1, nsims))
     xx = 0
     c = 0
 
-    if theory is None:
-        with open(
-            "/lcrc/project/SPT3G/users/ac.yomori/repo/spt3g_software_base/spt3g_software_051223/scratch/yomori/midell/sims/lensed_cmb/camb/planck2018_base_plikHM_TTTEEE_lowl_lowE_lensing_rawCls.pickle",
-            "rb",
-        ) as handle:
-            clsa = pickle.load(handle)
-        
-        # Convert raw clpp to clkk
-        ell = np.arange(lmax+1)
-        tlkk = (ell * (ell + 1) / 2) ** 2 * clsa["lens_potential"][:lmax+1, 0]
-        tlkk[:2] = np.inf
+    if theory is not None:
+        print("Using provided cls")
+        assert len(theory) >= lmax + 1, "Length of theory must be >= lmax+1"
+        tlkk = theory[: lmax + 1]
 
-    else:
-        print('Using provided cls')
-        assert len(theory) >= lmax+1, 'length of theory must be >= lmax+1'
-        tlkk = theory[:lmax+1]
-
-    l = np.arange(lmax+1)
+    l = np.arange(lmax + 1)
     t = lambda l: (l * (l + 1)) ** 2 / 4
-    v = (0.5 * l[:lmax+1] * (l[:lmax+1] + 1)) ** 2
+    v = (0.5 * l[: lmax + 1] * (l[: lmax + 1] + 1)) ** 2
     v[:2] = np.inf
 
     rl = rebincl(l, l, bine)
 
     # ----------Simulation part--------------
+    if use_cache:
+        if unl:
+            # For unlensed, array should be list of N0
+            f1 = dir + f"all_cl{spec}_{qe}_xyxy.npy"
+            f2 = dir + f"all_cl{spec}_{qe}_xyyx.npy"
+            x1 = np.load(f1)
+            x2 = np.load(f2)
+            uu = x1 + x2
+        else:
+            xx = np.load(dir + f"all_cl{spec}_{qe}_xxxx.npy")
 
     for i in tqdm(range(startidx, nsims + startidx)):
         if unl:
-            if i==startidx: print('Loading N0 as data')
-            a = np.load(
-                dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
-            )["cls"][: lmax + 1, 1]
-            b = np.load(
-                dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i + 1, i)
-            )["cls"][: lmax + 1, 1]
-            x = a + b
+            if use_cache:
+                x = uu[: lmax + 1, i - startidx]
+            else:
+                f1 = dir + f"cl{spec}_k{qe}_{i}a_{i + 1}a_{i}a_{i + 1}a.npz"
+                f2 = dir + f"cl{spec}_k{qe}_{i}a_{i + 1}a_{i + 1}a_{i}a.npz"
+                x1 = np.load(f1)["cls"][: lmax + 1, 1]
+                x2 = np.load(f2)["cls"][: lmax + 1, 1]
+                x = x1 + x2
         else:
-            x = np.load(dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i, i, i))[
-                "cls"
-            ][:lmax+1, 1]
+            if use_cache:
+                x = xx[:, i - startidx]
+            else:
+                f = dir + f"cl{spec}_k{qe}_{i}a_{i}a_{i}a_{i}a.npz"
+                x = np.load(f)["cls"][: lmax + 1, 1]
 
         if SAN0 is not None:
             # If an array of semi-analytic N0 is provided, use that instead
             N0 = SAN0[:, i - startidx]
 
         # Debiased spectra
-        debiased = (x[:lmax+1] - N0[:lmax+1] - N1[:lmax+1]) * R
+        debiased = (x[: lmax + 1] - N0[: lmax + 1] - N1[: lmax + 1]) * R
 
         # Array of residuals
-        farr[:, i - startidx] = debiased - tlkk[:lmax+1]
+        farr[:, i - startidx] = debiased - tlkk[: lmax + 1]
         farr[:4, i - startidx] = 0
 
         if ratio:
@@ -837,10 +909,12 @@ def get_dvec(
             # In this case, sim-based correction terms are set to 0.
 
             if bpwf is None:
-                rl, rcl = rebincl(l[:lmax+1], debiased / tlkk[:lmax+1], bine, return_ell=True)
+                rl, rcl = rebincl(
+                    l[: lmax + 1], debiased / tlkk[: lmax + 1], bine, return_ell=True
+                )
                 corr = np.zeros_like(rl)
             else:
-                rcl = (debiased / tlkk[:lmax+1]) @ bpwf
+                rcl = (debiased / tlkk[: lmax + 1]) @ bpwf
                 corr = np.zeros_like(rl)
 
         else:
@@ -851,14 +925,21 @@ def get_dvec(
 
             if bpwf is None:
                 if ellfac >= 0:
-                    rl, rcl = rebincl(l[:lmax+1], l[:lmax+1] ** (ellfac) * debiased, bine, return_ell=True)
+                    rl, rcl = rebincl(
+                        l[: lmax + 1],
+                        l[: lmax + 1] ** (ellfac) * debiased,
+                        bine,
+                        return_ell=True,
+                    )
                 else:
-                    rl, rcl = rebincl(l[:lmax+1], debiased / v, bine, return_ell=True)
+                    rl, rcl = rebincl(
+                        l[: lmax + 1], debiased / v, bine, return_ell=True
+                    )
             else:
                 if ellfac >= 0:
-                    rcl = (l[:lmax+1] ** (ellfac) * debiased)[:lmax+1] @ bpwf
+                    rcl = (l[: lmax + 1] ** (ellfac) * debiased)[: lmax + 1] @ bpwf
                 if ellfac < 0:
-                    rcl = ((debiased)[:lmax+1] / v) @ bpwf
+                    rcl = ((debiased)[: lmax + 1] / v) @ bpwf
 
         arr[:, c] = rcl
         c += 1
@@ -871,79 +952,107 @@ def get_dvec(
 
     if dd is not None:
         print("Using provided data spectra instead of loading")
-        x=dd
+        x = dd
     else:
-        print(dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx))
-        x = np.load(
-            dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx)
-        )["cls"][:, 1]
+        if use_cache:
+            x = np.load(dir + f"all_cl{spec}_{qe}_dddd_didx{didx}.npy")
+        else:
+            print(
+                dir
+                + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx)
+            )
+            x = np.load(
+                dir
+                + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx)
+            )["cls"][:, 1]
 
-    debiased = (x[:lmax+1] - RDN0[:lmax+1] - N1[:lmax+1]) * R
+    debiased = (x[: lmax + 1] - RDN0[: lmax + 1] - N1[: lmax + 1]) * R
 
     if ratio:
         # Ratio against fiducial theory, no correction is applied
         if bpwf is None:
-            rl, rdl = rebincl(l[:lmax+1], debiased / tlkk[:lmax+1], bine, return_ell=True)
+            rl, rdl = rebincl(
+                l[: lmax + 1], debiased / tlkk[: lmax + 1], bine, return_ell=True
+            )
             rdl_corr = np.copy(rdl)
         else:
             rl = (
                 np.repeat(
-                    np.arange(lmax+1, dtype=np.float64)[:, np.newaxis],
+                    np.arange(lmax + 1, dtype=np.float64)[:, np.newaxis],
                     len(bine) - 1,
                     axis=1,
                 ).T
                 @ bpwf
             )[0]
-            rdl = (debiased / tlkk[:lmax+1]) @ bpwf
+            rdl = (debiased / tlkk[: lmax + 1]) @ bpwf
             rdl_corr = np.copy(rdl)
     else:
         # Measured power spectra
         if bpwf is None:
             if ellfac >= 0:
-                rl, rdl = rebincl(l[:lmax+1], l[:lmax+1] ** (ellfac) * (debiased), bine, return_ell=True)
+                rl, rdl = rebincl(
+                    l[: lmax + 1],
+                    l[: lmax + 1] ** (ellfac) * (debiased),
+                    bine,
+                    return_ell=True,
+                )
                 _, rdl_corr = rebincl(
-                    l[:lmax+1], l[:lmax+1] ** (ellfac) * (debiased - sim_mean), bine, return_ell=True
+                    l[: lmax + 1],
+                    l[: lmax + 1] ** (ellfac) * (debiased - sim_mean),
+                    bine,
+                    return_ell=True,
                 )
 
             else:
-                rl, rdl = rebincl(l[:lmax+1], (debiased) / v, bine, return_ell=True)
-                _, rdl_corr = rebincl(l[:lmax+1], (debiased - sim_mean) / v, bine, return_ell=True)
+                rl, rdl = rebincl(l[: lmax + 1], (debiased) / v, bine, return_ell=True)
+                _, rdl_corr = rebincl(
+                    l[: lmax + 1], (debiased - sim_mean) / v, bine, return_ell=True
+                )
 
         else:
             rl = (
                 np.repeat(
-                    np.arange(lmax+1, dtype=np.float64)[:, np.newaxis],
+                    np.arange(lmax + 1, dtype=np.float64)[:, np.newaxis],
                     len(bine) - 1,
                     axis=1,
                 ).T
                 @ bpwf
             )[0]
             if ellfac >= 0:
-                rdl = (l[:lmax+1] ** (ellfac) * (debiased))[:lmax+1] @ bpwf
-                rdl_corr = (l[:lmax+1] ** (ellfac) * (debiased - sim_mean))[:lmax+1] @ bpwf
+                rdl = (l[: lmax + 1] ** (ellfac) * (debiased))[: lmax + 1] @ bpwf
+                rdl_corr = (l[: lmax + 1] ** (ellfac) * (debiased - sim_mean))[
+                    : lmax + 1
+                ] @ bpwf
             else:
-                rdl_corr = ((debiased - np.mean(farr, axis=1))[:lmax+1] / v) @ bpwf
-                rdl = ((debiased - 0 * np.mean(farr, axis=1))[:lmax+1] / v) @ bpwf
+                rdl_corr = ((debiased - np.mean(farr, axis=1))[: lmax + 1] / v) @ bpwf
+                rdl = ((debiased - 0 * np.mean(farr, axis=1))[: lmax + 1] / v) @ bpwf
 
-    #return rl, rdl, np.mean(arr, axis=1), np.std(arr, axis=1), arr, rdl_corr
-    return {'rl':rl, 'rdl':rdl, 'rcl':np.mean(arr, axis=1),'err':np.std(arr, axis=1), 'arr':arr, 'rdl_corr':rdl_corr}
-    
+    # return rl, rdl, np.mean(arr, axis=1), np.std(arr, axis=1), arr, rdl_corr
+    return {
+        "rl": rl,
+        "rdl": rdl,
+        "rcl": np.mean(arr, axis=1),
+        "err": np.std(arr, axis=1),
+        "arr": arr,
+        "rdl_corr": rdl_corr,
+    }
+
 
 def loadcls(
     dir,
     nsims,
+    qe,
     cltype,
     N0=None,
     Lmin=0,
     Lmax=4000,
     curl=False,
     R=1,
-    qe="gmv",
     SAN0tf=None,
     lmax=4000,
     didx=0,
     startidx=1,
-    use_cache=False
+    use_cache=False,
 ):
     if use_cache:
         print("\033[31mWARNING: Using cached file\033[0m")
@@ -957,80 +1066,93 @@ def loadcls(
 
     if cltype == "dd":
         print("Loading dd")
+
+        f1 = dir + f"all_cl{spec}_{qe}_dddd_didx{didx}.npy"
+
+        print(f1)
+        if use_cache and os.path.exists(f1):
+            return np.load(f1)
+
         return np.load(
             dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx)
         )["cls"][: lmax + 1, 1]
 
     elif cltype == "xx":
-        print("Loading xx [%d->%d]"%(startidx, nsims + startidx-1) )
-        if use_cache and os.path.exists(dir+f'xx_{qe}_nsims{nsims}.npy'):
-            xx = np.load(dir+f'xx_{qe}_nsims{nsims}.npy')
+        print("Loading xx [%d->%d]" % (startidx, nsims + startidx - 1))
+
+        f1 = dir + f"all_cl{spec}_{qe}_xxxx.npy"
+
+        if use_cache and os.path.exists(f1):
+            xx = np.mean(np.load(f1), axis=1)
+
         else:
             xx = 0
             for i in tqdm(range(startidx, nsims + startidx)):
                 xx += np.load(
                     dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
-            xx = xx/nsims
-            np.save(dir+f'xx_{qe}_nsims{nsims}.npy', xx )
-        return xx 
+            xx = xx / nsims
+
+        return xx
 
     elif cltype == "uu":
         startidx = 3001
-        print("Loading uu [%d->%d]"%(startidx, nsims + startidx-1) )
-        if use_cache and os.path.exists(dir+f'uu_{qe}_nsims{nsims}.npy'):
-            xx = np.load(dir+f'uu_{qe}_nsims{nsims}.npy')
+        print("Loading uu [%d->%d]" % (startidx, nsims + startidx - 1))
+
+        f1 = dir + f"all_cl{spec}_{qe}_uuuu.npy"
+
+        if use_cache and os.path.exists(f1):
+            print(np.load(f1).shape)
+            xx = np.mean(np.load(f1), axis=1)
+
         else:
             xx = 0
             for i in tqdm(range(startidx, nsims + startidx)):
                 xx += np.load(
                     dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
-            xx = xx/nsims
-            np.save(dir+f'uu_{qe}_nsims{nsims}.npy', xx )
-        return xx 
+            xx = xx / nsims
 
+        return xx
 
     elif cltype == "N0":
-        print("Loading N0 [%d->%d]"%(startidx, nsims + startidx-1))
-        if use_cache and os.path.exists(dir+f'N0_{qe}_nsims{nsims}.npy'):
-            N0 = np.load(dir+f'N0_{qe}_nsims{nsims}.npy')
+        print("Loading N0 [%d->%d]" % (startidx, nsims + startidx - 1))
+
+        f1 = dir + f"all_cl{spec}_{qe}_xyxy.npy"
+        f2 = dir + f"all_cl{spec}_{qe}_xyyx.npy"
+
+        if use_cache and os.path.exists(f1) and os.path.exists(f2):
+            x1 = np.load(f1)
+            x2 = np.load(f2)
+            N0 = np.mean(x1 + x2, axis=1)
+
         else:
             N0 = 0
             for i in tqdm(range(startidx, nsims + startidx)):
                 a = np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
+                    dir
+                    + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
                 )["cls"][: lmax + 1, 1]
                 b = np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i + 1, i)
+                    dir
+                    + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i + 1, i)
                 )["cls"][: lmax + 1, 1]
                 N0 += a + b
-            N0 = N0/nsims
-            np.save(dir+f'N0_{qe}_nsims{nsims}.npy', N0)
-        return N0 
+            N0 = N0 / nsims
 
-    elif cltype == "N0x":
-        print("Loading N0x [%d->%d]"%(startidx, nsims + startidx-1))
-        if use_cache and os.path.exists(dir+f'N0x_{qe}_nsims{nsims}.npy'):
-            N0x = np.load(dir+f'N0x_{qe}_nsims{nsims}.npy')
-        else:
-            N0x = 0
-            for i in tqdm(range(startidx, nsims + startidx)):
-                ayay = np.load(
-                    dir + "cl%s_k%s_%da_%db_%da_%db.npz" % (spec, qe, i, i+1, i, i+1)
-                )["cls"][: lmax + 1, 1]
-                ayya = np.load(
-                    dir + "cl%s_k%s_%da_%db_%db_%da.npz" % (spec, qe, i, i+1, i+1, i)
-                )["cls"][: lmax + 1, 1]
-                N0x += (ayay + ayya)
-            N0x = N0x/nsims
-            np.save(dir+f'N0x_{qe}_nsims{nsims}.npy', N0)
-        return N0x
+        return N0
 
     elif cltype == "N1":
-        print("Loading N1 [%d->%d]"%(startidx, nsims + startidx-1))
-        if use_cache and os.path.exists(dir+f'N1_{qe}_nsims{nsims}.npy'): 
-            N1 = np.load(dir+f'N1_{qe}_nsims{nsims}.npy')
+        print("Loading N1 [%d->%d]" % (startidx, nsims + startidx - 1))
+        f1 = dir + f"all_cl{spec}_{qe}_abab.npy"
+        f2 = dir + f"all_cl{spec}_{qe}_abba.npy"
+
+        if use_cache and os.path.exists(f1) and os.path.exists(f2):
+            assert N0 is not None
+            x1 = np.load(f1)
+            x2 = np.load(f2)
+            N1 = np.mean(x1 + x2, axis=1) - N0
+
         else:
             assert N0 is not None
             N1 = 0
@@ -1042,50 +1164,32 @@ def loadcls(
                     dir + "cl%s_k%s_%da_%db_%db_%da.npz" % (spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
                 N1 += (abab + abba) - N0
-            N1 = N1/nsims
-            np.save(dir+f'N1_{qe}_nsims{nsims}.npy', N1)
-        return N1 
-
-    elif cltype == "N1x":
-        print("Loading N1x  [%d->%d]"%(startidx, nsims + startidx-1))
-        assert N0 is not None
-        NX = 0
-        for i in tqdm(range(startidx, nsims + startidx)):
-            abab = np.load(
-                dir + "cl%s_k%s_%da_%db_%da_%db.npz" % (spec, qe, i, i, i, i)
-            )["cls"][: lmax + 1, 1]
-            abba = np.load(
-                dir + "cl%s_k%s_%da_%db_%db_%da.npz" % (spec, qe, i, i, i, i)
-            )["cls"][: lmax + 1, 1]
-            NX += abab + abba  # -N0
-        return NX / nsims
-
-    elif cltype == "abab":
-        assert N0 is not None
-        NX = 0
-        for i in tqdm(range(startidx, nsims + startidx)):
-            abab = np.load(
-                dir + "cl%s_k%s_%da_%db_%da_%db.npz" % (spec, qe, i, i, i, i)
-            )["cls"][: lmax + 1, 1]
-            # abba = np.load(dir+'cl%s_k%s_%da_%db_%db_%da.npz'%(spec,qe,i,i,i,i))['cls'][:lmax+1,1]
-            NX += abab  # -N0
-        return NX / nsims
-
-    elif cltype == "abba":
-        assert N0 is not None
-        NX = 0
-        for i in tqdm(range(startidx, nsims + startidx)):
-            # abab = np.load(dir+'cl%s_k%s_%da_%db_%da_%db.npz'%(spec,qe,i,i,i,i))['cls'][:lmax+1,1]
-            abba = np.load(
-                dir + "cl%s_k%s_%da_%db_%db_%da.npz" % (spec, qe, i, i, i, i)
-            )["cls"][: lmax + 1, 1]
-            NX += abba  # -N0
-        return NX / nsims
+            N1 = N1 / nsims
+            np.save(dir + f"N1_{qe}_nsims{nsims}.npy", N1)
+        return N1
 
     elif cltype == "RDN0":
-        print("Loading RDN0 [%d->%d]"%(startidx, nsims + startidx-1))
-        if use_cache and os.path.exists(dir+f'RDN0_{qe}_nsims{nsims}.npy'):
-            RDN0 = np.load(dir+f'RDN0_{qe}_nsims{nsims}.npy')
+        print("Loading RDN0 [%d->%d]" % (startidx, nsims + startidx - 1))
+
+        f1 = dir + f"all_cl{spec}_{qe}_xdxd_didx{didx}.npy"
+        f2 = dir + f"all_cl{spec}_{qe}_xddx_didx{didx}.npy"
+        f3 = dir + f"all_cl{spec}_{qe}_dxdx_didx{didx}.npy"
+        f4 = dir + f"all_cl{spec}_{qe}_dxxd_didx{didx}.npy"
+
+        if (
+            use_cache
+            and os.path.exists(f1)
+            and os.path.exists(f2)
+            and os.path.exists(f3)
+            and os.path.exists(f4)
+        ):
+            assert N0 is not None
+            x1 = np.load(f1)
+            x2 = np.load(f2)
+            x3 = np.load(f3)
+            x4 = np.load(f4)
+            RDN0 = np.mean(x1 + x2 + x3 + x4, axis=1) - N0
+
         else:
             assert N0 is not None
             RDN0 = 0
@@ -1103,73 +1207,9 @@ def loadcls(
                     dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, i, i, didx)
                 )["cls"][: lmax + 1, 1]
                 RDN0 += (xdxd + xddx + dxdx + dxxd) - N0
-            RDN0 = RDN0/nsims
-            np.save(dir+f'RDN0_{qe}_nsims{nsims}.npy', RDN0)
+            RDN0 = RDN0 / nsims
 
         return RDN0
-
-    elif cltype == "SAN0c":
-        didx = 0
-
-        if qe == "tt":
-            aresp = np.load(dir + "/..//SAN0/aresp_%s.npy" % qe.upper())
-
-        if qe == "pp":
-            aresp = 0
-            qes = ["ee", "eb", "eb"]
-            for qei in qes:
-                aresp += np.load(dir + "/..//SAN0/aresp_%s.npy" % qei.upper())
-
-        l = np.arange(len(aresp))
-        v = (0.5 * (l * (l + 1))) ** 2
-        ret = np.zeros((4101, nsims))
-        for i in tqdm(range(1, nsims + 1)):
-            clqq = np.load(dir + "/../SAN0/clqq_%s_curl_%d.npy" % (qe.upper(), i))
-            ret[:, i - 1] = v * clqq / aresp**2 * SAN0tf
-
-        print(dir + "/../SAN0/clqq_%s_curl_%d.npy" % (qe.upper(), i))
-        return ret  # *lmask
-
-    elif cltype == "SAN0g":
-        """ SAN0 for the gradient part """
-
-        assert N0 is not None
-
-        lmax = len(N0) - 1
-
-        dirR = str(Path(dir).parent)
-
-        aresp = 0
-        if qe == "tt":
-            qes = ["tt"]
-        elif qe == "pp":
-            qes = ["ee", "eb", "be"]
-
-        for qei in qes:
-            aresp = np.load(
-                dirR + "_noinpaint/%s/respavg%s.npz" % (qei.upper(), qei.upper())
-            )["resp"][: lmax + 1]
-
-        aresp[:10] = np.inf
-        aresp[-100:] = np.inf
-        aresp[aresp == 0] = np.inf
-
-        l = np.arange(lmax + 1)
-        v = (0.5 * (l * (l + 1))) ** 2
-
-        ret = np.zeros((lmax + 1, nsims))
-
-        for i in tqdm(range(1, nsims + 1)):
-            ret[:, i - 1] = (
-                v
-                * np.load(dir + "/../SAN0/clqq_%s_grad_%d.npy" % (qe.upper(), i))[
-                    : lmax + 1
-                ]
-                / aresp**2
-                * SAN0tf[: lmax + 1]
-            )
-
-        return ret
 
 
 def loadcls_unlcov(
@@ -1185,9 +1225,9 @@ def loadcls_unlcov(
     SAN0tf=None,
     lmax=4000,
     didx=0,
-    startidx=1
+    startidx=1,
 ):
-    print(f'starting from index {startidx}')
+    print(f"starting from index {startidx}")
     if curl:
         spec = "ww"
     else:
@@ -1196,7 +1236,7 @@ def loadcls_unlcov(
     Lmin, Lmax = np.int32(Lmin), np.int32(Lmax)
 
     if cltype == "N0":
-        N0 = np.zeros((lmax+1,nsims))
+        N0 = np.zeros((lmax + 1, nsims))
         for i in tqdm(range(startidx, nsims + startidx)):
             a = np.load(
                 dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
@@ -1204,9 +1244,8 @@ def loadcls_unlcov(
             b = np.load(
                 dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i + 1, i)
             )["cls"][: lmax + 1, 1]
-            N0[:,i-startidx] = a + b
+            N0[:, i - startidx] = a + b
         return N0
-
 
 
 def get_SAN0(dir, qe, nsims, N0=None, lmax=4000, mode="grad"):
@@ -1284,7 +1323,9 @@ def get_bpwf(dir_cls, bine, nsims, N0, N1, ellfac=1, curl=False, qe="gmv", lmax=
     arr = np.zeros((lmax + 1, nsims))
 
     for i in tqdm(range(1, nsims + 1)):
-        x = np.load(dir_cls + f"cl{spec}_k{qe}_{i}a_{i}a_{i}a_{i}a.npz")["cls"][: lmax + 1, 1]
+        x = np.load(dir_cls + f"cl{spec}_k{qe}_{i}a_{i}a_{i}a_{i}a.npz")["cls"][
+            : lmax + 1, 1
+        ]
         if ellfac >= 0:
             arr[:, i - 1] = l ** (ellfac) * (x - N0[: lmax + 1] - N1[: lmax + 1])
         else:

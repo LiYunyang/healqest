@@ -43,20 +43,7 @@ def test_map2alm(setup, pol, weights):
     print(f"healpy: {(t2-t1)*1000:.2f}ms; ducc is {(t2-t1)/(t3-t2):.2f}x faster.")
 
 
-@pytest.mark.parametrize("spin", [0, 1, 2])
-def test_map2alm_spin(setup, spin):
-    print(f"\nTesting map2alm_spin: spin={spin}")
-    m = setup['m'] if spin ==0 else setup['m'][1:]
-    t1 = perf_counter()
-    alm1 = hp.map2alm_spin(m, spin=spin)
-    t2 = perf_counter()
-    alm2 = setup['g'].map2alm_spin(m, spin=spin)
-    t3 = perf_counter()
-    assert np.allclose(alm1, alm2)
-    print(f"healpy: {(t2-t1)*1000:.2f}ms; ducc is {(t2-t1)/(t3-t2):.2f}x faster.")
-
-
-@pytest.mark.parametrize("spin", [0, 1, 2])
+@pytest.mark.parametrize("spin", [0, 1, 2, 3])
 def test_map2alm_spin(setup, spin):
     print(f"\nTesting map2alm_spin: spin={spin}")
     m = setup['m'] if spin ==0 else setup['m'][1:]
@@ -83,7 +70,7 @@ def test_alm2map(setup, pol):
     print(f"healpy: {(t2-t1)*1000:.2f}ms; ducc is {(t2-t1)/(t3-t2):.2f}x faster.")
 
 
-@pytest.mark.parametrize("spin", [0, 1, 2])
+@pytest.mark.parametrize("spin", [0, 1, 2, 3])
 def test_alm2map_spin(setup, spin):
     print(f"\nTesting alm2map_spin: spin={spin}")
     alm = setup['alm'] if spin ==0 else setup['alm'][1:]

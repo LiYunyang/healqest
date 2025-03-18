@@ -266,7 +266,13 @@ class Geometry:
             func(map=maps, spin=np.abs(spin), alm=alms, **kw, **kwargs)
             return list(maps)
 
-    def smoothing(self, maps_in, fwhm=0.0, sigma=None, beam_window=None, pol=True, nthreads=None):
-        alms = self.map2alm(maps_in, pol=pol, nthreads=nthreads)
-        alms = hp.smoothalm(alms, fwhm=fwhm, sigma=sigma, beam_window=beam_window, pol=pol)
-        return self.alm2map(alms, pol=pol, nthreads=nthreads)
+    def smoothing(self, maps_in, fwhm=0.0, sigma=None, beam_window=None, pol=True, iter=0, lmax=None, mmax=None,
+                  use_weights=False, use_pixel_weights=False, nthreads=None):
+        masks = hp.mask_bad(maps_in)
+        maps_in[masks] = 0
+        alms = self.map2alm(maps_in, pol=pol, lmax=lmax, mmax=mmax, iter=iter, use_weights=use_weights,
+                            use_pixel_weights=use_pixel_weights, nthreads=nthreads)
+        alms = hp.smoothalm(alms, fwhm=fwhm, sigma=sigma, beam_window=beam_window, pol=pol, mmax=mmax, inplace=True)
+        maps_out = self.alm2map(alms, pol=pol, nthreads=nthreads)
+        maps_out[masks] = hp.UNSEEN
+        return maps_out

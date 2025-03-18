@@ -84,6 +84,34 @@ def test_alm2map_spin(setup, spin):
     print(f"healpy: {(t2-t1)*1000:.2f}ms; ducc is {(t2-t1)/(t3-t2):.2f}x faster.")
 
 
+@pytest.mark.parametrize("fwhm", [2])
+@pytest.mark.parametrize("pol", [True, False])
+@pytest.mark.parametrize("weights", [None, 'pixel', 'ring'])
+def test_alm2map_spin(setup, fwhm, pol, weights):
+    if weights is None:
+        use_pixel_weights, use_weights = False, False
+    elif weights == 'ring':
+        use_pixel_weights, use_weights = False, True
+    elif weights == 'pixel':
+        use_pixel_weights, use_weights = True, False
+    else:
+        raise
+    print(f"\nTesting smoothing: fwhm={fwhm}, pol={pol}, use_pixel_weights={use_pixel_weights}, use_weights={use_weights}")
+
+    m = setup['m']
+    m[:, setup['mask']] = hp.UNSEEN
+    t1 = perf_counter()
+    m1 = hp.smoothing(m, fwhm=np.deg2rad(fwhm), pol=pol, iter=0, use_weights=use_weights,
+                      use_pixel_weights=use_pixel_weights)
+    t2 = perf_counter()
+    m2 = setup['g'].smoothing(m, fwhm=np.deg2rad(fwhm), pol=pol, iter=0, use_weights=use_weights,
+                              use_pixel_weights=use_pixel_weights)
+
+    t3 = perf_counter()
+    assert np.allclose(m1*setup['mask'], m2*setup['mask'])
+    print(f"healpy: {(t2-t1)*1000:.2f}ms; ducc is {(t2-t1)/(t3-t2):.2f}x faster.")
+
+
 """
 # to run the test:
 >>> pytest -vs test_ducc.py 

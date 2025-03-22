@@ -1,3 +1,4 @@
 __pycache__
 pipeline/logs
 pipeline/slurm*.out
+*.so

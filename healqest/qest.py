@@ -1,8 +1,9 @@
 import sys
-import weights,resp
+
 import numpy as np
 import healpy as hp
-import healqest_utils as utils
+from healqest import healqest_utils as utils
+from healqest import weights, resp
 
 np.seterr(all='ignore')
 

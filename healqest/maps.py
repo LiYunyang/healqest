@@ -1,7 +1,7 @@
 import os,sys
-import healqest_utils as hutils
 import healpy as hp
 from tabulate import tabulate
+from healqest import healqest_utils as hutils
 
 class maps:
     def __init__(self, sim_dict, lmax = None):

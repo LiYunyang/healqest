@@ -1,5 +1,5 @@
 import numpy as np
-import cwignerd
+from healqest import cwignerd
 
 class gauss_legendre_quadrature:
     """

@@ -1,7 +1,7 @@
 #quicklens routines for QE covariance calc
 
 import numpy as np
-import wignerd
+from healqest import wignerd
 
 def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY):
     """ compute the response of this estimator to the statistical

@@ -19,12 +19,13 @@ Requirements
 
 Install
 ------------
-If you want to install the package, you can do it by running:
-    ```bash
-    python setup.py build_ext --inplace
+
+If you want to install the package, you can do it by running::
+
+    python setup.py build_ext # (optional for analytic response calculation)
     pip install [-e] ./
-    ```
-Currently, the build_ext is not working with `pip`, so one has to compile it manually before installation.
+
+Currently, ``build_ext`` is not working with ``pip``, so one has to compile it manually before installation.
 
 
 Or if you prefer the the old way, the only thing you need to do is either add the following line at the beginning of your code::
@@ -35,7 +36,7 @@ or on a terminal do::
 
     export PYTHON_PATH=${PYTHON_PATH}:PATH_TO_THIS_DIRECTORY/healqest/
 
-Note that the path has changed (no more `src` directory) to make the package installable as `healqest`.
+Note that **the path has changed (no more src/ directory)** to make the package installable as ``healqest`` (otherwise it would be ``src``).
 
 You need to compile the cython code if you want to compute the analytic response function. This can be done by simply running::
 

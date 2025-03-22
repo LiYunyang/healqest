@@ -1,9 +1,10 @@
-import os,glob
-import numpy as np
+import os
 import distutils
 import subprocess
 from distutils.extension import Extension
 from setuptools.command.build_ext import build_ext
+from setuptools import setup, find_packages
+
 
 def configuration(parent_package='',top_path=None):
     from numpy.distutils.misc_util import Configuration
@@ -28,7 +29,7 @@ class BuildF2Py(build_ext):
             check=True,
         )
 
-        outdir = os.path.join("healqest", "src")
+        outdir = os.path.join("healqest", )
         subprocess.run(
             f"mv cwignerd*.so {outdir}",
             shell=True,
@@ -36,16 +37,22 @@ class BuildF2Py(build_ext):
 
 
 if __name__ == "__main__":
-    try:
-        from numpy.distutils.core import setup
-        packages = []
-        setup(packages=packages, configuration=configuration)
-    except Exception:
-        # alternative build for py>3.12 or numpy>1.23
-        # using setuptools + meson based f2py.
-        from setuptools import setup
-        setup(
-            name="healqest",
-            packages=["healqest", "healqest.src"],
-            cmdclass={"build_ext": BuildF2Py}
-        )
+    # the old setup, only compile the wigner code.
+    # from numpy.distutils.core import setup
+    # packages = []
+    # setup(packages=packages, configuration=configuration)
+
+    # full-functioning setup, compile the wigner code and install the package.
+    # tested for py>=3.12 or numpy>=1.23
+    # using setuptools + meson based f2py.
+    setup(
+        name="healqest",
+        version="0.1.0",
+        packages=find_packages(),
+        include_package_data=True,
+        package_data={"healqest": ["camb/*", "*.so"]},
+        cmdclass={"build_ext": BuildF2Py},
+        setup_requires=[
+            # "ducc0"
+        ],
+    )

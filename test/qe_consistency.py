@@ -2,10 +2,10 @@ import numpy as np
 import healpy as hp
 import sys
 import io
-sys.path.insert(0, '../src/')
-import weights, qest, resp
+
 import pytest
 from itertools import combinations_with_replacement as combinations
+from healqest import weights, qest, resp
 
 
 @pytest.fixture(autouse=True, scope="module")

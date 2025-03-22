@@ -1,11 +1,22 @@
-
-import sys
-sys.path.insert(0, '../src/')
-import ducc_sht
 import numpy as np
 import healpy as hp
 import pytest
 from time import perf_counter
+
+from healqest import ducc_sht
+
+
+@pytest.fixture(autouse=True, scope="module")
+def apply_custom_pytest_options(request):
+    """
+    Apply custom pytest options (-vs --tb=no) for this module.
+    """
+    # Enable verbose mode (-v)
+    request.config.option.verbose = 2
+    # Disable output capturing (-s)
+    request.config.option.capture = "no"
+    # Disable traceback (--tb=no)
+    request.config.option.tbstyle = "no"
 
 
 @pytest.fixture

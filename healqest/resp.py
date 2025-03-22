@@ -1,7 +1,7 @@
 #quicklens routines for QE covariance calc
 
 import numpy as np
-import wignerd
+from healqest import wignerd
 
 def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY):
     """ compute the response of this estimator to the statistical
@@ -96,7 +96,7 @@ def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_Z
             
             #glq  = scipy.special.roots_legendre()
             # transform l1 and l2 parts to position space
-            glq = wignerd.gauss_legendre_quadrature( (tl1max + tl2max + lmax)/2 + 1 )
+            glq = wignerd.gauss_legendre_quadrature((tl1max + tl2max + lmax) / 2 + 1)
             gp1 = glq.cf_from_cl( qeXY.s[i][0], -(-1)**(conj_ZA)*qeZA.s[j][i1_ZA], cl1 )
             gp2 = glq.cf_from_cl( qeXY.s[i][1], -(-1)**(conj_ZA)*qeZA.s[j][i2_ZA], cl2 )
 

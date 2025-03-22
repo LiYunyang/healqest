@@ -2,3 +2,7 @@ __pycache__
 pipeline/logs
 pipeline/slurm*.out
 *.so
+.eggs/
+*.egg-info/
+dist/
+build/

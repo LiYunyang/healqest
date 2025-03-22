@@ -20,13 +20,23 @@ Requirements
 Install
 ------------
 
-There is no install script. The only thing you need to do is add the correct path:
-    
-    export PYTHONPATH=${PYTHONPATH}:PATH_TO_THIS_DIRECTORY/healqest/src
+If you want to install the package, you can do it by running::
 
-You should also clone the spt3g_software repo and add the following path:
+    python setup.py build_ext # (optional for analytic response calculation)
+    pip install [-e] ./
+
+Currently, ``build_ext`` is not working with ``pip``, so one has to compile it manually before installation.
+
+
+Or if you prefer the the old way, the only thing you need to do is either add the following line at the beginning of your code::
+
+    sys.path.append("path_to_this_directory/healqest/")
     
-    export PYTHONPATH=$DIR_SPT3G_SOFTWARE/scratch/yomori:$PYTHONPATH
+or on a terminal do::
+
+    export PYTHON_PATH=${PYTHON_PATH}:PATH_TO_THIS_DIRECTORY/healqest/
+
+Note that **the path has changed (no more src/ directory)** to make the package installable as ``healqest`` (otherwise it would be ``src``).
 
 You need to compile the cython code if you want to compute the analytic response function. This can be done by simply running::
 

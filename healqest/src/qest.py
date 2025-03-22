@@ -871,7 +871,4 @@ class qest_plus(qest):
         weight = -1 * es / ss
         plm = plm1 + hp.almxfl(plm2, weight)
         resp = ee + weight * es
-
         return plm, resp
-
-

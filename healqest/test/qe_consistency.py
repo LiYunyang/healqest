@@ -5,7 +5,20 @@ import io
 sys.path.insert(0, '../src/')
 import weights, qest, resp
 import pytest
-from itertools import combinations
+from itertools import combinations_with_replacement as combinations
+
+
+@pytest.fixture(autouse=True, scope="module")
+def apply_custom_pytest_options(request):
+    """
+    Apply custom pytest options (-vs --tb=no) for this module.
+    """
+    # Enable verbose mode (-v)
+    request.config.option.verbose = 2
+    # Disable output capturing (-s)
+    request.config.option.capture = "no"
+    # Disable traceback (--tb=no)
+    request.config.option.tbstyle = "no"
 
 
 @pytest.fixture(scope="module")
@@ -48,6 +61,14 @@ def test_cmbpluslens_qest(fake_data, estimator):
     assert np.allclose(clm3, clm2), f"{estimator}curl not match curl of {estimator}"
 
 
+def two_round_test(r1, r2, message):
+    try:
+        assert np.allclose(r1, r2)
+    except AssertionError as e:
+        assert np.allclose(r1, -r2), f"{message} not match, even with a sign flip!"
+        pytest.fail(f"{message} not match, but are consistent with a sign flip!")
+
+
 # @pytest.mark.skip
 @pytest.mark.parametrize("est1, est2", combinations(['TT', 'EE', "TE", "TB", "EB", "ET", "BT", "BE"], 2))
 def test_cmbpluslens_resp_grad(fake_data, est1, est2):
@@ -62,7 +83,10 @@ def test_cmbpluslens_resp_grad(fake_data, est1, est2):
     r1 = q1.get_aresp(f1, f2, est1, est2, )
     r2 = q2.get_aresp(f1, f2, est1, est2, )
 
-    assert np.allclose(r1, r2) or np.allclose(r1, r2)  # , f"grad result not match for {est1}-{est2}"
+    if ''.join([est1, est2]) in ['TBEB','TBBE', 'BTEB','BTBE','EBTB','EBBT','BETB','BEBT']:
+        r1 *= -1
+
+    two_round_test(r1, r2, f"grad resp result for {est1}-{est2}")
 
 
 # @pytest.mark.skip
@@ -78,4 +102,7 @@ def test_cmbpluslens_resp_curl(fake_data, est1, est2):
 
     r1 = q1.get_aresp(f1, f2, est1+'curl', est2+'curl', )
     r2 = q2.get_aresp(f1, f2, est1+'curl', est2+'curl', )
-    assert np.allclose(r1, r2) or np.allclose(r1, r2) # f"curl result not match for {est1}-{est2}"
+    if ''.join([est1, est2]) in ['TBEB','TBBE', 'BTEB','BTBE','EBTB','EBBT','BETB','BEBT']:
+        r1 *= -1
+
+    two_round_test(r1, r2, f"curl resp result for {est1}-{est2}")

@@ -6,11 +6,8 @@ Modified from and built on plancklens/qcinv/opfilt_tp.py
 """
 
 import os,sys
-import hashlib
 import numpy  as np
 import healpy as hp
-
-from healpy import alm2map_spin, map2alm_spin
 
 sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
 print(os.path.abspath(os.path.join(os.path.dirname(__file__), './')))

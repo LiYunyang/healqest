@@ -10,7 +10,7 @@ import healpy as hp
 import numpy  as np
 import pickle as pk
 sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
-import utils, hp_utils, cinv_utils
+import hp_utils, cinv_utils
 import opfilt_hp_p, opfilt_hp_t, opfilt_hp_tp, cd_solve, cd_monitors
 # disable mpi
 
@@ -21,7 +21,7 @@ class cinv(object):
         self.eps_min = eps_min # Tolerance
 
         if use_mpi==True:
-            from cinv_utils import mpi
+            pass
 
     def get_tal(self, a, lmax=None):
         if lmax is None: lmax = self.lmax
@@ -70,13 +70,13 @@ class cinv(object):
                                               n_cls=self.s_inv_filt.ncls1d)
         
         cd_solve.cd_solve(soltn, b         = tpn_alm,
-                                 fwd_op    = fwd_op, 
-                                 pre_ops   = [pre_op],
-                                 dot_op    = dot_op,
-                                 criterion = monitor,
-                                 tr        = cinv_utils.cd_solve.tr_cg, 
-                                 cache     = cinv_utils.cd_solve.CacheMemory()       
-                         )
+                          fwd_op    = fwd_op,
+                          pre_ops   = [pre_op],
+                          dot_op    = dot_op,
+                          criterion = monitor,
+                          tr        = healqest.cinv.cd_solve.tr_cg,
+                          cache     = healqest.cinv.cd_solve.CacheMemory()
+                          )
 
         finifunc(soltn, self.s_inv_filt, self.n_inv_filt)
 
@@ -132,7 +132,7 @@ class cinv_t(cinv):
         if nl is not None:
             print('nl was provided, applying rescal_cl')
             #print(rescal_cl)
-            nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl**2)) for key in nl}
+            nl_dl = {key: hp.almxfl(nl[key], cinv_utils.cli(rescal_cl ** 2)) for key in nl}
             ############### Kimmy: nl_dl = {key: hp.almxfl(nl[key], rescal_cl**2) for key in nl}
         
             #np.save('/lcrc/project/SPT3G/users/ac.yomori/scratch/nlttaaa.npy',nl['tt'])
@@ -157,7 +157,7 @@ class cinv_t(cinv):
         self.ninv = ninv
 
         n_inv_filt = hp_utils.jit(opfilt_hp_t.NoiseInverseFilter, ninv, transf_dl, tf2d=tf2d_dl)
-        s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter  , dl, lmax, n_cls=nl_dl, tf2d=tf2d_dl, b_transf=transf_dl) ################################################################XXXXXXX  b_transf=transf_dl or transf? 
+        s_inv_filt = hp_utils.jit(opfilt_hp_t.SkyInverseFilter, dl, lmax, n_cls=nl_dl, tf2d=tf2d_dl, b_transf=transf_dl) ################################################################XXXXXXX  b_transf=transf_dl or transf?
         self.n_inv_filt = n_inv_filt
         self.s_inv_filt = s_inv_filt
         self.opfilt = opfilt_hp_t
@@ -227,7 +227,7 @@ class cinv_t(cinv):
     def hashdict(self):
         return {'lmax': self.lmax,
                 'nside': self.nside,
-                'rescal_cl':cinv_utils.clhash(self.rescal_cl),
+                'rescal_cl': cinv_utils.clhash(self.rescal_cl),
                 'cltt': cinv_utils.clhash(self.cl['tt'][:self.lmax + 1]),
                 'transf': cinv_utils.clhash(self.transf[:self.lmax + 1]),
                 'ninv': self._ninv_hash(),
@@ -280,9 +280,9 @@ class cinv_p(cinv):
         self.nl = nl
 
         n_inv_filt = hp_utils.jit(opfilt_hp_p.NoiseInverseFilter, ninv, transf[0:lmax + 1], tf2d=self.tf2d,
-                              b_transf_b=transf_blm) 
+                                  b_transf_b=transf_blm)
         s_inv_filt = hp_utils.jit(opfilt_hp_p.SkyInverseFilter, cl, lmax,
-                              n_cls=nl, tf2d=tf2d, b_transf = self.transf)
+                                  n_cls=nl, tf2d=tf2d, b_transf = self.transf)
         self.n_inv_filt = n_inv_filt
         self.s_inv_filt = s_inv_filt
         self.opfilt = opfilt_hp_p
@@ -315,7 +315,7 @@ class cinv_p(cinv):
                 'clee': cinv_utils.clhash(self.cl.get('ee', np.array([0.]))),
                 'cleb': cinv_utils.clhash(self.cl.get('eb', np.array([0.]))),
                 'clbb': cinv_utils.clhash(self.cl.get('bb', np.array([0.]))),
-                'transf':cinv_utils.clhash(self.transf),
+                'transf': cinv_utils.clhash(self.transf),
                 'ninv': self._ninv_hash()}
 
     def apply_ivf(self, tmap, soltn=None):
@@ -459,12 +459,12 @@ class cinv_tp(cinv):
         self.lib_dir = lib_dir
         self.rescal_cl = rescal_cl
 
-        self.n_inv_filt = hp_utils.jit(opfilt_hp_tp.NoiseInverseFilter, ninv, transf_dls['t'], 
-                                 b_transf_e=transf_dls['e'], b_transf_b=transf_dls['b'],
-                                 tf2d=tf2d_t_dl, tf2d_eb=tf2d_eb_dl)
+        self.n_inv_filt = hp_utils.jit(opfilt_hp_tp.NoiseInverseFilter, ninv, transf_dls['t'],
+                                       b_transf_e=transf_dls['e'], b_transf_b=transf_dls['b'],
+                                       tf2d=tf2d_t_dl, tf2d_eb=tf2d_eb_dl)
         self.s_inv_filt = hp_utils.jit(opfilt_hp_tp.SkyInverseFilter, dl, lmax,
-                              n_cls=nl_dl, tf2d=tf2d, tf2d_eb=tf2d_eb,
-                              b_transf=transf, b_transf_eb=transf_p)
+                                       n_cls=nl_dl, tf2d=tf2d, tf2d_eb=tf2d_eb,
+                                       b_transf=transf, b_transf_eb=transf_p)
         self.opfilt = opfilt_hp_tp
 
         if 1:

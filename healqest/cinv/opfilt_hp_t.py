@@ -4,7 +4,6 @@ Similar to opfilt_teb.py for flatsky, this is for T-only and for healpix maps.
 Modified from and built on plancklens/qcinv/opfilt_tt.py
 """
 import os,sys
-import hashlib
 import numpy  as np
 import healpy as hp
 
@@ -81,7 +80,7 @@ class PreOperatorDiag:
         if n_cls is None:
             n_cls = {key: np.zeros(lmax+1) for key in s_cls}
 
-        filt = cinv_utils.cli(cltt[:lmax + 1] + n_cls['tt']*cinv_utils.cli(n_inv_filt.b_transf[:lmax + 1] ** 2))
+        filt = cinv_utils.cli(cltt[:lmax + 1] + n_cls['tt'] * cinv_utils.cli(n_inv_filt.b_transf[:lmax + 1] ** 2))
         filt += ninv_ftl # * n_inv_filt.b_transf[:lmax + 1] ** 2
         self.filt = cinv_utils.cli(filt)
 
@@ -114,7 +113,7 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
             #if tf2d has zeros, this first one ensures the solution doesn't
             #depend on those modes
             
-            self.slinv = tf2d*tf2d * cinv_utils.cli(cltt_2d *tf2d*tf2d + n_cls['tt'])
+            self.slinv = tf2d * tf2d * cinv_utils.cli(cltt_2d * tf2d * tf2d + n_cls['tt'])
             #np.save('/lcrc/project/SPT3G/users/ac.yomori/scratch/nlttdl2.npy',n_cls['tt'])
             #import pdb; pdb.set_trace()
             #self.slinv = utils.cli(cltt_2d + n_cls['tt'] * utils.cli(tf2d*tf2d) )
@@ -128,7 +127,7 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
                 assert tf2d is None, "if tf2d is not None, nor should b_transf"
                 b_transf = np.ones(lmax+1)
             pdb.set_trace()
-            self.slinv = cinv_utils.cli(cltt + n_cls['tt']*cinv_utils.cli(b_transf*b_transf))
+            self.slinv = cinv_utils.cli(cltt + n_cls['tt'] * cinv_utils.cli(b_transf * b_transf))
 
         self.lmax  = lmax
         self.s_cls = s_cls

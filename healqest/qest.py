@@ -1,4 +1,4 @@
-import os,sys,pickle
+import sys
 import weights,resp
 import numpy as np
 import healpy as hp
@@ -330,7 +330,7 @@ class qest(object):
         else:
             qeZA = weights.weights(qe2, self.cls[self.cltype], self.lmax, u=u)
 
-        aresp = resp.fill_resp(qeXY,np.zeros(self.Lmax+1, dtype=np.complex_),flX,flY,qeZA=qeZA)
+        aresp = resp.fill_resp(qeXY, np.zeros(self.Lmax + 1, dtype=np.complex_), flX, flY, qeZA=qeZA)
 
         return aresp
 
@@ -388,7 +388,6 @@ class qest_gmv(object):
         cltype : str
           Should be one of 'grad'/'len'/'unl'
         '''
-        import gmv_resp
 
         print('Setting up lensing reconstruction')
         self.config     = config
@@ -470,7 +469,7 @@ class qest_gmv(object):
                 idx = idxs[i]
                 alm1 = alm1all[:,idx]
                 alm2 = alm2all[:,idx]
-                q = weights.weights(est,self.cls[self.cltype],self.lmax,u=u,totalcls=totalcls,crossilc=crossilc)
+                q = weights.weights(est, self.cls[self.cltype], self.lmax, u=u, totalcls=totalcls, crossilc=crossilc)
                 glmsum = 0
                 clmsum = 0
 

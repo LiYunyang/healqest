@@ -6,7 +6,6 @@ Modified from and built on plancklens/qcinv/opfilt_pp.py
 """
 
 import os,sys
-import hashlib
 import numpy  as np
 import healpy as hp
 
@@ -96,10 +95,10 @@ class PreOperatorDiag:
 
         # n_cls['ee'] = ncls1d  where ncls1d = {'ee': np.sqrt(hp.alm2cl(n_cls['e']))}
         tfbl   = hp.alm2cl(n_inv_filt.tf2d.astype(np.complex_) )[:lmax+1]
-        filt_e = cinv_utils.cli(clee + n_cls['ee']*cinv_utils.cli(tfbl ** 2))
+        filt_e = cinv_utils.cli(clee + n_cls['ee'] * cinv_utils.cli(tfbl ** 2))
         filt_e += ninv_fel[:lmax+1]
 
-        filt_b = cinv_utils.cli(clbb + n_cls['bb']*cinv_utils.cli(tfbl ** 2))
+        filt_b = cinv_utils.cli(clbb + n_cls['bb'] * cinv_utils.cli(tfbl ** 2))
         filt_b += ninv_fbl[:lmax+1]
 
         self.filt_e = cinv_utils.cli(filt_e)
@@ -135,8 +134,8 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
 
             #self.b_slinv = utils.cli(clbb_2d + n_cls['ee'] *utils.cli(tf2d*tf2d))
             #self.e_slinv = utils.cli(clee_2d + n_cls['bb'] *utils.cli(tf2d*tf2d))
-            self.b_slinv = tf2d*tf2d * cinv_utils.cli(clbb_2d*tf2d*tf2d + n_cls['bb'])
-            self.e_slinv = tf2d*tf2d * cinv_utils.cli(clee_2d*tf2d*tf2d + n_cls['ee'])
+            self.b_slinv = tf2d * tf2d * cinv_utils.cli(clbb_2d * tf2d * tf2d + n_cls['bb'])
+            self.e_slinv = tf2d * tf2d * cinv_utils.cli(clee_2d * tf2d * tf2d + n_cls['ee'])
         else:
             '''
             clee = s_cls.get('ee', np.zeros(lmax + 1))[:lmax + 1]

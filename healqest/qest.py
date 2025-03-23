@@ -715,12 +715,16 @@ class qest_plus(qest):
     """
 
     @staticmethod
-    def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None):
-        """ convert a spin-0 alm into a complex spin field (Q +/- iU): out = SUM [alm sYlm] """
+    def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None, g=None):
+        """ convert a spin-0 alm into a complex spin field (Q +/- iU): out = Q, +/-U"""
         if spin == 0:
             walm = hp.almxfl(alm, fell)
             # alm2map is recommended over alm2map_spin for spin=0
-            out = hp.alm2map(walm, nside=nside, lmax=lmax, )
+            if g is None:
+                out = hp.alm2map(walm, nside=nside, lmax=lmax, mmax=mmax)
+            else:
+                out = g.alm2map(walm, lmax=lmax, mmax=mmax)
+            return out, 0
         else:
             zero = np.zeros_like(alm)
             _fell = (-1) ** spin * np.conj(fell) if spin < 0 else fell
@@ -733,14 +737,16 @@ class qest_plus(qest):
                 B = hp.almxfl(alm, _fell.imag)
             else:
                 raise ValueError("Fell must be real or imaginary")
-            q, u = hp.alm2map_spin([E, B], nside=nside, spin=np.abs(spin), lmax=lmax, mmax=mmax)
-            if spin > 0:
-                out = q + u * 1j
+            if g is None:
+                q, u = hp.alm2map_spin([E, B], nside=nside, spin=np.abs(spin), lmax=lmax, mmax=mmax)
             else:
-                out = q - u * 1j
-        return out
+                q, u = g.alm2map_spin([E, B], spin=np.abs(spin), lmax=lmax, mmax=mmax)
+            if spin > 0:
+                return q, u
+            else:
+                return q, -u
 
-    def eval(self, qe, almbar1, almbar2, u=None):
+    def eval(self, qe, almbar1, almbar2, u=None, g=None):
         """
         Compute quadratic estimator
 
@@ -754,6 +760,10 @@ class qest_plus(qest):
           Second filtered alm
         u  : profile
           Profile instance
+        g: Geometry
+            Geometry instance defined within declination range. This will be used
+            to compute spherical harmonics functions with ducc0. If None, the slower
+            full-sky healpy functions will be used.
 
         Returns
         ----------
@@ -776,27 +786,35 @@ class qest_plus(qest):
 
         retglm = 0
         retclm = 0
+        if g is not None:
+            assert g.nside == self.nside
 
         for i in range(0, q.ntrm//2):
             # skipping second half of reducant terms
             wX, wY, wP, sX, sY, sP = q.w[i][0], q.w[i][1], q.w[i][2], q.s[i][0], q.s[i][1], q.s[i][2]
 
-            X = self.alm2map_spin(almbar1, fell=wX, nside=self.nside, spin=sX, lmax=self.lmax)
-            Y = self.alm2map_spin(almbar2, fell=wY, nside=self.nside, spin=sY, lmax=self.lmax)
-            XY = X*Y
+            Xq, Xu = self.alm2map_spin(almbar1, fell=wX, nside=self.nside, spin=sX, lmax=self.lmax, g=g)
+            Yq, Yu = self.alm2map_spin(almbar2, fell=wY, nside=self.nside, spin=sY, lmax=self.lmax, g=g)
+            XYq = Xq*Yq - Xu*Yu  # XY = X*Y
+            XYu = Xq*Yu + Yq*Xu  # XY = X*Y
 
             if np.all(wP.imag == 0):
                 _wP = wP
             elif np.all(wP.real == 0):
                 # swap grad/curl mode such that glm is curl and clm is grad
                 _wP = wP*1j  # wP has an -1j factor, here we move the factor from wP to XY.
-                XY *= -1j
+                XYq, XYu = XYu, -XYq  # XY *=-1j
             else:
                 raise ValueError("wP must be real or imaginary")
             if sP < 0:
-                XY = np.conj(XY) * (-1) ** sP  # because wP has a (-1)**sP factor, here we are canceling it.
+                # XY = np.conj(XY) * (-1) ** sP  # because wP has a (-1)**sP factor, here we are canceling it.
+                XYq *= (-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
+                XYu *= -(-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
 
-            glm, clm = hp.map2alm_spin([XY.real, XY.imag], np.abs(sP), self.Lmax)
+            if g is None:
+                glm, clm = hp.map2alm_spin([XYq, XYu], np.abs(sP), self.Lmax)
+            else:
+                glm, clm = g.map2alm_spin([XYq, XYu], spin=np.abs(sP), lmax=self.Lmax, check=False, )
             glm = hp.almxfl(glm, _wP)
             clm = hp.almxfl(clm, _wP)  # for curl est, this will be -grad.
 

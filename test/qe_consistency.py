@@ -4,7 +4,7 @@ import sys
 import io
 
 import pytest
-from itertools import combinations_with_replacement as combinations
+from itertools import product
 from healqest import weights, qest, resp
 
 
@@ -70,7 +70,7 @@ def two_round_test(r1, r2, message):
 
 
 # @pytest.mark.skip
-@pytest.mark.parametrize("est1, est2", combinations(['TT', 'EE', "TE", "TB", "EB", "ET", "BT", "BE"], 2))
+@pytest.mark.parametrize("est1, est2", product(['TT', 'EE', "TE", "TB", "EB", "ET", "BT", "BE"], repeat=2))
 def test_cmbpluslens_resp_grad(fake_data, est1, est2):
     sys.stdout = io.StringIO()
     sys.stderr = io.StringIO()
@@ -90,7 +90,7 @@ def test_cmbpluslens_resp_grad(fake_data, est1, est2):
 
 
 # @pytest.mark.skip
-@pytest.mark.parametrize("est1, est2", combinations(['TT', 'EE', "TE", "TB", "EB", "ET", "BT", "BE"], 2))
+@pytest.mark.parametrize("est1, est2", product(['TT', 'EE', "TE", "TB", "EB", "ET", "BT", "BE"], repeat=2))
 def test_cmbpluslens_resp_curl(fake_data, est1, est2):
     sys.stdout = io.StringIO()
     sys.stderr = io.StringIO()
@@ -103,6 +103,7 @@ def test_cmbpluslens_resp_curl(fake_data, est1, est2):
     r1 = q1.get_aresp(f1, f2, est1+'curl', est2+'curl', )
     r2 = q2.get_aresp(f1, f2, est1+'curl', est2+'curl', )
     if ''.join([est1, est2]) in ['TBEB','TBBE', 'BTEB','BTBE','EBTB','EBBT','BETB','BEBT']:
+        pass
         r1 *= -1
 
     two_round_test(r1, r2, f"curl resp result for {est1}-{est2}")

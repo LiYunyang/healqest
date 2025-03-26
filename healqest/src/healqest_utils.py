@@ -1048,7 +1048,7 @@ def loadcls(
     Lmax=4000,
     curl=False,
     R=1,
-    SAN0tf=None,
+    #SAN0tf=None,
     lmax=4000,
     didx=0,
     startidx=1,
@@ -1267,7 +1267,7 @@ def get_SAN0(dir, qe, nsims, N0=None, lmax=4000, mode="grad"):
     qe = qe.upper()
 
     l = np.arange(lmax + 1)
-    v = (0.5 * l * (l + 1)) ** 2
+    v = 1 #(0.5 * l * (l + 1)) ** 2 #SAN0 now in Nlkk units
 
     if N0 is None:
         # No renormalization, just return ones
@@ -1290,7 +1290,7 @@ def get_SAN0(dir, qe, nsims, N0=None, lmax=4000, mode="grad"):
             TF * v * np.load(dir + f"/clqq_{qe}_{mode}_{i}.npy")[: lmax + 1]
         )
 
-    return np.nan_to_num(SAN0arr, nan=0)
+    return np.nan_to_num(SAN0arr, nan=0), TF
 
 
 def get_bpwf(

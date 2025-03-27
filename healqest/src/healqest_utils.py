@@ -730,6 +730,14 @@ def get_qes(qeset):
         "GMVTBEB": ["TB", "BT", "EB", "BE"],
         "MV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
         "qMV": ["TT", "EE", "EB", "TE", "TB"],
+        "MVnoTT": ["EE", "EB", "TE", "TB", "EB", "TE", "TB"],
+        "qMVnoTT": ["EE", "EB", "TE", "TB"],
+        "MVnoEB": ["EE", "TE", "TB", "TE", "TB"],
+        "qMVnoEB": ["EE", "TE", "TB"],
+        "TTEETE": ["TT", "EE", "TE", "ET"],
+        "qTTEETE": ["TT", "EE", "TE"],
+        "TBEB": ["TB", "BT", "EB", "BE"],
+        "qTBEB": ["TB", "EB"],
         "PP": ["EE", "EB", "BE"],
         "qPP": ["EE", "EB"],
         "TEET": ["TE", "ET"],
@@ -738,6 +746,7 @@ def get_qes(qeset):
         "qTEET": ["TE"],
         "qEBBE": ["EB"],
         "qTBBT": ["TB"],
+
     }
 
     harden = {"TTbhTTprf", "GMVbhTTprf", "GMVTTEETEbhTTprf"}

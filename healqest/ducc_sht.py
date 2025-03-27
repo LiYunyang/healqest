@@ -349,3 +349,74 @@ class Geometry:
         maps_out = self.alm2map(alms, pol=pol, nthreads=nthreads)
         maps_out[masks] = hp.UNSEEN
         return maps_out
+
+
+def map2lens(maps, plm, g=None, **kwargs):
+    """
+    Compute the first order lensing distortion of the input maps.
+
+    Parameters
+    ----------
+    maps : array-like, shape (3, Npix)
+        Unlensed CMB maps in TQU ordering.
+    plm : array-like
+        Alm of the lensing potential phi.
+    g: Geometry
+    """
+    lmax = hp.Alm.getlmax(len(plm))
+    nside = hp.get_nside(maps)
+    if g is None:
+        alms = hp.map2alm(maps, lmax=lmax, iter=0, **kwargs)
+    else:
+        assert g.nside==nside
+        alms = g.map2alm(maps, lmax=lmax, iter=0, **kwargs)
+
+    return alm2lens(alms, plm, nside=nside, g=g, **kwargs)
+
+
+def alm2lens(alms, plm, nside, g=None, **kwargs):
+    """
+    Same as map2lens, but takes alm as input.
+
+    Parameters
+    ----------
+    alms : array-like
+        Unlensed CMB map alms in TEB ordering.
+    plm : array-like
+        Alm of the lensing potential phi.
+    nside: int
+        Nside of the output maps.
+    g: Geometry
+    """
+    lmax = hp.Alm.getlmax(len(plm))
+    ell = np.arange(lmax + 1)
+    al0 = -np.sqrt(ell * (ell + 1) / 2)
+
+    if g is None:
+        alm2map_spin = hp.alm2map_spin
+        kwargs['nside'] = nside
+    else:
+        assert g.nside==nside
+        alm2map_spin = g.alm2map_spin
+
+    zero = np.zeros_like(plm)
+    p = alm2map_spin([hp.almxfl(plm, -al0), zero], spin=1, lmax=lmax, **kwargs)
+
+    alms = np.atleast_2d(alms)
+    tp = alm2map_spin([hp.almxfl(alms[0], -al0), zero], spin=1, lmax=lmax, **kwargs)
+    out = np.zeros((alms.shape[0], hp.nside2npix(nside)), dtype=float)
+    out[0] = 2 * (p[0] * tp[0] + p[1] * tp[1])
+    del tp
+
+    if alms.shape[0]==3:
+        al2p = -np.sqrt((ell - 2) * (ell + 3) / 2)
+        Zp = alm2map_spin([hp.almxfl(alms[1], al2p),
+                           hp.almxfl(alms[2], al2p)], spin=3, lmax=lmax, **kwargs)
+
+        al2m = -np.sqrt((ell + 2) * (ell - 1) / 2)
+        Zm = alm2map_spin([hp.almxfl(alms[1], al2m),
+                           hp.almxfl(alms[2], al2m)], spin=1, lmax=lmax, **kwargs)
+
+        out[1] = (p[1] * Zm[1] - p[0] * Zm[0]) + (p[0] * Zp[0] + p[1] * Zp[1])
+        out[2] = -(p[0] * Zm[1] + p[1] * Zm[0]) + (p[0] * Zp[1] - p[1] * Zp[0])
+    return out

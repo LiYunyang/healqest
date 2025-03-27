@@ -1217,7 +1217,7 @@ class weights_plus:
         coefficients for spin 0+1 fields and spin 2+-1 fields (eq 169/170)
         """
         assert s in [-1, 1]
-        w = -np.sqrt(self.l*(self.l+1))*cl
+        w = -np.sqrt(self.l*(self.l+1))*cl[:self.lmax+1]
         if s<0:
             w *= (-1)**s
         return w, s
@@ -1232,7 +1232,7 @@ class weights_plus:
             f = np.nan_to_num(np.sqrt((self.l+3)*(self.l-2)))
         else:
             raise ValueError("|s| must be 1 or 3")
-        w = -f*cl*factor
+        w = -f*cl[:self.lmax+1]*factor
         if s<0:
             w = np.conj(w)*(-1)**s
         return w, s
@@ -1307,6 +1307,11 @@ class weights_plus:
             new_w[k+ntrm] = dict()
             new_s[k+ntrm] = dict()
             for i in range(3):
+                # for w[2], the second half has a -1/1 factor for grad
+                # and curl mode. Since s[2] is always [1, -1], it happens
+                # to be the case that the required sign change is also consistent
+                # with conj(w[2])*(-1)**s[2], where w[2] is pure imag for curl
+                # modes.
                 new_w[k+ntrm][i] = np.conj(w[i])*(-1)**s[i]
                 new_s[k+ntrm][i] = -s[i]
 

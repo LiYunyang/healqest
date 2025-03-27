@@ -746,7 +746,7 @@ class qest_plus(qest):
             else:
                 return q, -u
 
-    def eval(self, qe, almbar1, almbar2, u=None, g=None):
+    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=True):
         """
         Compute quadratic estimator
 
@@ -773,7 +773,7 @@ class qest_plus(qest):
           Curl component of the plm
         """
 
-        if qe in self.glm:
+        if cache and qe in self.glm:
             print("We've already computed this!")
             return self.glm[qe], self.clm[qe]
 
@@ -802,11 +802,13 @@ class qest_plus(qest):
                 _wP = wP
             elif np.all(wP.real == 0):
                 # swap grad/curl mode such that glm is curl and clm is grad
-                _wP = wP*1j  # wP has an -1j factor, here we move the factor from wP to XY.
+                # wP has an -1j factor, here we move the factor from wP to XY.
+                _wP = wP*1j
                 XYq, XYu = XYu, -XYq  # XY *=-1j
             else:
                 raise ValueError("wP must be real or imaginary")
             if sP < 0:
+                # This is for the second half reduncant transform, we normally don't end up here.
                 # XY = np.conj(XY) * (-1) ** sP  # because wP has a (-1)**sP factor, here we are canceling it.
                 XYq *= (-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
                 XYu *= -(-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
@@ -892,3 +894,5 @@ class qest_plus(qest):
         plm = plm1 + hp.almxfl(plm2, weight)
         resp = ee + weight * es
         return plm, resp
+
+

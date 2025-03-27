@@ -1,0 +1,7 @@
+- name: ruff-action
+  uses: astral-sh/ruff-action@v3.2.2
+
+- name: Check code format with ruff
+  uses: astral-sh/ruff-action@v3
+  with:
+    args: 'format --check --diff'

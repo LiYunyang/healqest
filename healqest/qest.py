@@ -9,7 +9,7 @@ np.seterr(all='ignore')
 
 class qest(object):
 
-    def __init__(self,config,cls):
+    def __init__(self, config, cls, verbose=True):
         '''
         Set up the quadratic estimator calculation
 
@@ -17,18 +17,14 @@ class qest(object):
         ----------
         config : dict
           Dictionary of lmin/lmax settings
-        els: dict
+        cls: dict
           Dictionary of cls
-        almbar1: complex
-          First filtered alms
-        almbar2: complex
-          Second filtered alms
         '''
 
         #assert est=='lens' or est=='src' or est=='prof', "est expected to be lens/src/prof, got: %s"%est
         #assert cltype=='grad' or cltype=='len' or cltype=='unl', "cltype expected to be grad/len/unl, got: %s"%cltype
-
-        print('Setting up lensing reconstruction')
+        if verbose:
+            print('Setting up lensing reconstruction')
         self.config  = config
         #self.almbar1 = almbar1
         #self.almbar2 = almbar2
@@ -45,16 +41,18 @@ class qest(object):
             sys.exit('cltype must be ucmb, lcmb or gcmb')
 
         if 'nside' in self.config['lensrec']:
-            print("-- Overwrite default nside")
+            if verbose:
+                print("-- Overwrite default nside")
             self.nside = self.config['lensrec']['nside'] # Overwrite automatic setting of nside<2*lmax
             assert self.lmax < 2.0*self.nside, "lmax must be less that 2*nside"
         else:
-            self.nside   = utils.get_nside(self.lmax)
+            self.nside = utils.get_nside(self.lmax)
 
-        print("-- Nside to project: %d"%self.nside)
-        print("-- lmax:%d"%self.lmax)
-        print("-- Lmax:%d"%self.Lmax)
-        print("-- Using %s cls"%self.cltype)
+        if verbose:
+            print("-- Nside to project: %d"%self.nside)
+            print("-- lmax:%d"%self.lmax)
+            print("-- Lmax:%d"%self.Lmax)
+            print("-- Using %s cls"%self.cltype)
 
     def eval(self,qe,almbar1,almbar2,u=None):
         '''
@@ -746,7 +744,7 @@ class qest_plus(qest):
             else:
                 return q, -u
 
-    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=True):
+    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=True, verbose=False):
         """
         Compute quadratic estimator
 
@@ -764,7 +762,9 @@ class qest_plus(qest):
             Geometry instance defined within declination range. This will be used
             to compute spherical harmonics functions with ducc0. If None, the slower
             full-sky healpy functions will be used.
-
+        cache: bool=True
+            If True, the QE results will be loaded from cache if available.
+        verbose: bool=False
         Returns
         ----------
         glm: complex
@@ -774,15 +774,16 @@ class qest_plus(qest):
         """
 
         if cache and qe in self.glm:
-            print("We've already computed this!")
+            if verbose:
+                print("We've already computed this!")
             return self.glm[qe], self.clm[qe]
 
         if qe in ['TTprf', 'TTmask', 'TTnoise']:
             assert u is not None, "Need profile function to compute this estimator"
 
         q = weights.weights_plus(qe, self.cls[self.cltype], self.lmax, u=u)
-
-        print('Running lensing reconstruction')
+        if verbose:
+            print('Running lensing reconstruction')
 
         retglm = 0
         retclm = 0

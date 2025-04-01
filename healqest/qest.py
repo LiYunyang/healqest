@@ -1,4 +1,5 @@
 import sys
+from typing import TypedDict
 
 import numpy as np
 import healpy as hp
@@ -707,10 +708,66 @@ class qest_gmv(object):
         return plm, resp
 
 
-class qest_plus(qest):
+class CMBCl(TypedDict):
+    tt: np.ndarray
+    te: np.ndarray
+    ee: np.ndarray
+    bb: np.ndarray
+
+
+class Qest(qest):
     """
     QE estimator following the cmblensplus convention.
     """
+
+    def __init__(self, lmax, Lmax, Cls, nside=None):
+        """
+        Parameters
+        ----------
+        lmax: int
+            Maximum multipole of the cmb map alm
+        Lmax: int
+            Maximum multipole of the lens rec alm
+        Cls: CMBCl
+            Dictionary of cls
+        nside: int=None
+            Healpix nside used for intermediate alm2map operations,
+            the nside has to be large enough, >1/2 lmax, to avoid aliasing
+        """
+        self.lmax = lmax
+        self.Lmax = Lmax
+        self.cls = Cls
+        if nside is None:
+            nside = utils.get_nside(lmax)
+        self.nside=nside
+        self.glm = {}
+        self.clm = {}
+
+        assert self.lmax < 2.0 * self.nside, "lmax must be less that 2*nside"
+
+    @classmethod
+    def from_config_yuuki(cls, config, Cls):
+        """
+        old construction code to work with Yuuki's configuration file
+        """
+
+        lmax = config['lensrec']['lmax'] = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
+        Lmax = config['lensrec']['Lmax']
+
+        Cls = Cls[config['lensrec']['cltype']]
+        nside = config['lensrec'].get('nside', None)
+        return cls(lmax=lmax, nside=nside, Cls=Cls, Lmax=Lmax, )
+
+    @classmethod
+    def from_config_srini(cls, dict_lrange, Cls):
+        """
+        old construction code to work with Srini's configuration file
+        """
+        lmin = dict_lrange['lmin']
+        lmax = max(dict_lrange['lmaxT'], dict_lrange['lmaxP'])
+        Lmax = dict_lrange['Lmax']
+        nside = None
+        return cls(lmax=lmax, nside=nside, Cls=Cls, Lmax=Lmax, )
 
     @staticmethod
     def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None, g=None):
@@ -781,7 +838,7 @@ class qest_plus(qest):
         if qe in ['TTprf', 'TTmask', 'TTnoise']:
             assert u is not None, "Need profile function to compute this estimator"
 
-        q = weights.weights_plus(qe, self.cls[self.cltype], self.lmax, u=u)
+        q = weights.weights_plus(qe, self.cls, self.lmax, u=u)
         if verbose:
             print('Running lensing reconstruction')
 
@@ -851,12 +908,12 @@ class qest_plus(qest):
         if qe1 is None:
             assert 0, "qe1 must be defined"
 
-        qeXY = weights.weights_plus(qe1, self.cls[self.cltype], self.lmax, u=u)
+        qeXY = weights.weights_plus(qe1, self.cls, self.lmax, u=u)
 
         if qe2 is None or qe2 == qe1:
             qeZA = None
         else:
-            qeZA = weights.weights_plus(qe2, self.cls[self.cltype], self.lmax, u=u)
+            qeZA = weights.weights_plus(qe2, self.cls, self.lmax, u=u)
 
         aresp = resp.fill_resp(qeXY, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, qeZA=qeZA)
 
@@ -895,5 +952,3 @@ class qest_plus(qest):
         plm = plm1 + hp.almxfl(plm2, weight)
         resp = ee + weight * es
         return plm, resp
-
-

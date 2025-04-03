@@ -234,21 +234,18 @@ class RelativeSeconds(lg.Formatter):
 
 def reduce_lmax(alm, lmax=4000):
     """
-    Reduce the lmax of input alm
+    Reduce the lmax of input alms (1d or 2d)
     """
-    lmaxin  = hp.Alm.getlmax(alm.shape[0])
-    print( "-- Reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax) )
-    ell,emm = hp.Alm.getlm(lmaxin)
-    almout  = np.zeros(hp.Alm.getsize(lmax),dtype=np.complex128)
+    lmaxin = hp.Alm.getlmax(alm.shape[-1])
+    print("-- Reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax))
+    almout = np.zeros((*alm.shape[:-1], hp.Alm.getsize(lmax)), dtype=np.complex128)
     oldi=0
-    oldf=0
     newi=0
-    newf=0
     dl = lmaxin-lmax
-    for i in range(0,lmax+1):
+    for i in range(0, lmax+1):
         oldf=oldi+lmaxin+1-i
         newf=newi+lmax+1-i
-        almout[newi:newf]=alm[oldi:oldf-dl]
+        almout[..., newi:newf]=alm[..., oldi:oldf-dl]
         oldi=oldf
         newi=newf
     return almout

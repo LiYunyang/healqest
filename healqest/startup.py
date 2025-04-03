@@ -63,8 +63,8 @@ class Config:
             # raise FileNotFoundError(out)
         return out
 
-    def load_maps(self, cmbid, seed, N1):
-        paths = self['lensing']['iqu2'] if N1 else self['lensing']['iqu1']
+    def load_maps(self, cmbid, seed):
+        paths = self['lensing'][f'iqu{cmbid}']
         # loop in case we have multiple components (cmb, foreground, noise etc.)
         if isinstance(paths, str):
             paths = [paths]

@@ -368,7 +368,7 @@ def reduce_lmax(alm, lmax=4000):
     Reduce the lmax of input alm
     """
     lmaxin = hp.Alm.getlmax(alm.shape[0])
-    print("-- Reducing lmax: lmax_in=%g -> lmax_out=%g" % (lmaxin, lmax))
+    # print("-- Reducing lmax: lmax_in=%g -> lmax_out=%g" % (lmaxin, lmax))
     ell, emm = hp.Alm.getlm(lmaxin)
     almout = np.zeros(hp.Alm.getsize(lmax), dtype=np.complex128)
     oldi = 0
@@ -379,7 +379,7 @@ def reduce_lmax(alm, lmax=4000):
     for i in range(0, lmax + 1):
         oldf = oldi + lmaxin + 1 - i
         newf = newi + lmax + 1 - i
-        almout[newi:newf] = alm[oldi : oldf - dl]
+        almout[newi:newf] = alm[oldi: oldf - dl]
         oldi = oldf
         newi = newf
     return almout

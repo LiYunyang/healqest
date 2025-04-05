@@ -23,17 +23,17 @@ def calc_prep(maps, s_inv_filt, n_inv_filt):
     qmap = np.copy(hp_utils.read_map(maps[0]))
     umap = np.copy(hp_utils.read_map(maps[1]))
     assert len(qmap) == len(umap)
-    lmax = len(n_inv_filt.tf1d) - 1
+    lmax = len(n_inv_filt.tf1dE) - 1
     npix = len(qmap)
 
     n_inv_filt.apply_map([qmap, umap])
     elm, blm = map2alm_spin([qmap, umap], 2, lmax=lmax)
-    if n_inv_filt.tf2d is None:
-        hp.almxfl(elm, n_inv_filt.tf1d * npix / (4. * np.pi), inplace=True)
-        hp.almxfl(blm, n_inv_filt.tf1d * npix / (4. * np.pi), inplace=True)
+    if n_inv_filt.tf2dE is None or n_inv_filt.tf2dB is None:
+        hp.almxfl(elm, n_inv_filt.tf1dE * npix / (4. * np.pi), inplace=True)
+        hp.almxfl(blm, n_inv_filt.tf1dB * npix / (4. * np.pi), inplace=True)
     else:
-        elm *= n_inv_filt.tf2d * npix / (4. * np.pi)
-        blm *= n_inv_filt.tf2d * npix / (4. * np.pi)
+        elm *= n_inv_filt.tf2dE * npix / (4. * np.pi)
+        blm *= n_inv_filt.tf2dB * npix / (4. * np.pi)
     return eblm([elm, blm])
 
 def calc_fini(alm, s_inv_filt, n_inv_filt):
@@ -72,16 +72,16 @@ class ForwardOperator:
 class PreOperatorDiag:
     """Missing doc. """
     def __init__(self, s_cls, n_inv_filt, nl_res=None):
-        lmax = len(n_inv_filt.tf1d) - 1
+        lmax = len(n_inv_filt.tf1dE) - 1
         clbb = s_cls['bb'][:lmax + 1]
         clee = s_cls['ee'][:lmax + 1]
         if nl_res is None: nl_res = {key: np.zeros(lmax+1) for key in s_cls}
 
         ninv_fel, ninv_fbl = n_inv_filt.get_febl()
 
-        filt_e = cinv_utils.cli(clee + nl_res['ee']*cinv_utils.cli(n_inv_filt.tf1d[:lmax + 1] ** 2))
+        filt_e = cinv_utils.cli(clee + nl_res['ee']*cinv_utils.cli(n_inv_filt.tf1dE[:lmax + 1] ** 2))
         filt_e += ninv_fel[:lmax+1]
-        filt_b = cinv_utils.cli(clbb + nl_res['bb']*cinv_utils.cli(n_inv_filt.tf1d[:lmax + 1] ** 2))
+        filt_b = cinv_utils.cli(clbb + nl_res['bb']*cinv_utils.cli(n_inv_filt.tf1dB[:lmax + 1] ** 2))
         filt_b += ninv_fbl[:lmax+1]
 
         self.filt_e = cinv_utils.cli(filt_e)
@@ -97,27 +97,13 @@ class PreOperatorDiag:
 
 class SkyInverseFilter: #alm_filter_sinv_nocorr:
  
-    def __init__(self, s_cls, nl_res, lmax, tf1d, tf2d=None):
-        '''
-        clee = s_cls['ee'][:lmax+1]
-        nlee = nl_res['ee'][:lmax+1]
-        clbb = s_cls['bb'][:lmax+1]
-        nlbb = nl_res['bb'][:lmax+1]
-        
-        clee_2d = hp_utils.cl2almformat(clee)
-        nlee_2d = hp_utils.cl2almformat(nlee)
-        self.e_slinv = tf2d*tf2d * cinv_utils.cli(clee_2d *tf2d*tf2d + nlee_2d)
-
-        clbb_2d = hp_utils.cl2almformat(clbb)
-        nlbb_2d = hp_utils.cl2almformat(nlbb)
-        self.b_slinv = tf2d*tf2d * cinv_utils.cli(clbb_2d *tf2d*tf2d + nlbb_2d)
-        '''
+    def __init__(self, s_cls, nl_res, lmax, tf1dE, tf1dB, tf2dE, tf2dB):
         
         clee = s_cls.get('ee', np.zeros(lmax + 1))[:lmax + 1]
         clbb = s_cls.get('bb', np.zeros(lmax + 1))[:lmax + 1]
         
-        nlee = nl_res.get('ee', np.zeros(lmax + 1))[:lmax + 1]/tf1d**2
-        nlbb = nl_res.get('bb', np.zeros(lmax + 1))[:lmax + 1]/tf1d**2
+        nlee = nl_res.get('ee', np.zeros(lmax + 1))[:lmax + 1]/tf1dE**2
+        nlbb = nl_res.get('bb', np.zeros(lmax + 1))[:lmax + 1]/tf1dB**2
                 
         clee_2d = hp_utils.cl2almformat(clee)
         clbb_2d = hp_utils.cl2almformat(clbb)
@@ -131,7 +117,8 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
 
         self.lmax = lmax
         self.s_cls = s_cls
-        self.tf2d  = tf2d
+        self.tf2dE  = tf2dE
+        self.tf2dB  = tf2dB
 
         self.nl_res = nl_res
 
@@ -143,7 +130,7 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
         return eblm([relm, rblm])
 
 class NoiseInverseFilter:
-    def __init__(self, n_inv, tf1d, tf2d=None, nlev_febl=None):
+    def __init__(self, n_inv, tf1dE, tf1dB, tf2dE, tf2dB, nlev_febl=None):
                  #, marge_qmaps=(), marge_umaps=()):
         """Inverse-variance filtering instance for polarization only
 
@@ -159,8 +146,11 @@ class NoiseInverseFilter:
 
         """
 
-        self.tf1d = tf1d
-        self.tf2d = tf2d
+        self.tf1dE = tf1dE
+        self.tf1dB = tf1dB
+        
+        self.tf2dE = tf2dE
+        self.tf2dB = tf2dB
 
         # These three things will be instantiated later on
         self.nside = None
@@ -212,8 +202,8 @@ class NoiseInverseFilter:
     def get_febl(self):
         if self.nlev_febl is None:
             self.nlev_febl = self._calc_febl()
-        n_inv_cl_e = self.tf1d ** 2  / (self.nlev_febl / 180. / 60. * np.pi) ** 2
-        n_inv_cl_b = self.tf1d ** 2  / (self.nlev_febl / 180. / 60. * np.pi) ** 2
+        n_inv_cl_e = self.tf1dE ** 2  / (self.nlev_febl / 180. / 60. * np.pi) ** 2
+        n_inv_cl_b = self.tf1dB ** 2  / (self.nlev_febl / 180. / 60. * np.pi) ** 2
         return n_inv_cl_e, n_inv_cl_b
 
     def apply_alm(self, alm):
@@ -221,12 +211,12 @@ class NoiseInverseFilter:
         self._load_ninv()
         lmax = alm.lmax
 
-        if self.tf2d is None:
-            hp.almxfl(alm.elm, self.tf1d, inplace=True)
-            hp.almxfl(alm.blm, self.tf1d, inplace=True)
+        if self.tf2dE is None and self.tf2dB is None:
+            hp.almxfl(alm.elm, self.tf1dE, inplace=True)
+            hp.almxfl(alm.blm, self.tf1dB, inplace=True)
         else:
-            alm.elm *= self.tf2d
-            alm.blm *= self.tf2d
+            alm.elm *= self.tf2dE
+            alm.blm *= self.tf2dB
         qmap, umap = alm2map_spin((alm.elm, alm.blm), self.nside, 2, lmax)
 
         self.apply_map([qmap, umap])  # applies N^{-1}
@@ -236,12 +226,12 @@ class NoiseInverseFilter:
         alm.elm[:] = telm
         alm.blm[:] = tblm
 
-        if self.tf2d is None:
-            hp.almxfl(alm.elm, self.tf1d * (npix / (4. * np.pi)), inplace=True)
-            hp.almxfl(alm.blm, self.tf1d * (npix / (4. * np.pi)), inplace=True)
+        if self.tf2dE is None and self.tf2dB is None:
+            hp.almxfl(alm.elm, self.tf1dE * (npix / (4. * np.pi)), inplace=True)
+            hp.almxfl(alm.blm, self.tf1dB * (npix / (4. * np.pi)), inplace=True)
         else:
-            alm.elm *= self.tf2d * (npix / (4. * np.pi))
-            alm.blm *= self.tf2d * (npix / (4. * np.pi))
+            alm.elm *= self.tf2dE * (npix / (4. * np.pi))
+            alm.blm *= self.tf2dB * (npix / (4. * np.pi))
 
     def apply_map(self, amap):
         self._load_ninv()

@@ -995,6 +995,7 @@ def get_dvec(
             )[0]
             rdl = (debiased / tlkk[: lmax + 1]) @ bpwf
             rdl_corr = np.copy(rdl)
+            #print(debiased / tlkk[: lmax + 1])
     else:
         # Measured power spectra
         if bpwf is None:
@@ -1062,9 +1063,7 @@ def loadcls(
     didx=0,
     startidx=1,
     use_cache=False,
-):
-    if use_cache:
-        print("\033[31mWARNING: Using cached file\033[0m")
+):    
 
     if curl:
         spec = "ww"
@@ -1074,27 +1073,30 @@ def loadcls(
     Lmin, Lmax = np.int32(Lmin), np.int32(Lmax)
 
     if cltype == "dd":
-        print("Loading dd")
+        print("Loading dd", end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_dddd_didx{didx}.npy"
 
         print(f1)
         if use_cache and os.path.exists(f1):
+            print("\033[31mWARNING: Using cached file\033[0m")
             return np.load(f1)
+        else:
+            print('not loading')
+            return np.load(dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx))["cls"][: lmax + 1, 1]
 
-        return np.load(
-            dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx)
-        )["cls"][: lmax + 1, 1]
 
     elif cltype == "xx":
-        print("Loading xx [%d->%d]" % (startidx, nsims + startidx - 1))
+        print("Loading xx   [%d->%d] " % (startidx, nsims + startidx - 1), end=" " )
 
         f1 = dir + f"all_cl{spec}_{qe}_xxxx.npy"
-
+        #print(f1)
         if use_cache and os.path.exists(f1):
+            print("\033[31mWARNING: Using cached file\033[0m")
             xx = np.mean(np.load(f1), axis=1)
 
         else:
+            print("\033[31mWARNING: NOT using cached file\033[0m")
             xx = 0
             for i in tqdm(range(startidx, nsims + startidx)):
                 xx += np.load(
@@ -1106,7 +1108,7 @@ def loadcls(
 
     elif cltype == "uu":
         startidx = 3001
-        print("Loading uu [%d->%d]" % (startidx, nsims + startidx - 1))
+        print("Loading uu   [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_uuuu.npy"
 
@@ -1125,12 +1127,13 @@ def loadcls(
         return xx
 
     elif cltype == "N0":
-        print("Loading N0 [%d->%d]" % (startidx, nsims + startidx - 1))
+        print("Loading N0   [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_xyxy.npy"
         f2 = dir + f"all_cl{spec}_{qe}_xyyx.npy"
 
         if use_cache and os.path.exists(f1) and os.path.exists(f2):
+            print("\033[31mWARNING: Using cached file\033[0m")
             x1 = np.load(f1)
             x2 = np.load(f2)
             N0 = np.mean(x1 + x2, axis=1)
@@ -1152,12 +1155,13 @@ def loadcls(
         return N0
 
     elif cltype == "N1":
-        print("Loading N1 [%d->%d]" % (startidx, nsims + startidx - 1))
+        print("Loading N1   [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
         f1 = dir + f"all_cl{spec}_{qe}_abab.npy"
         f2 = dir + f"all_cl{spec}_{qe}_abba.npy"
 
         if use_cache and os.path.exists(f1) and os.path.exists(f2):
             assert N0 is not None
+            print("\033[31mWARNING: Using cached file\033[0m")
             x1 = np.load(f1)
             x2 = np.load(f2)
             N1 = np.mean(x1 + x2, axis=1) - N0
@@ -1178,7 +1182,7 @@ def loadcls(
         return N1
 
     elif cltype == "RDN0":
-        print("Loading RDN0 [%d->%d]" % (startidx, nsims + startidx - 1))
+        print("Loading RDN0 [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_xdxd_didx{didx}.npy"
         f2 = dir + f"all_cl{spec}_{qe}_xddx_didx{didx}.npy"
@@ -1193,6 +1197,7 @@ def loadcls(
             and os.path.exists(f4)
         ):
             assert N0 is not None
+            print("\033[31mWARNING: Using cached file\033[0m")
             x1 = np.load(f1)
             x2 = np.load(f2)
             x3 = np.load(f3)

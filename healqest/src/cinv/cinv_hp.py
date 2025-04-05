@@ -150,9 +150,11 @@ class cinv_t(cinv):
         ell = np.arange(lmax + 1, dtype=float)
 
         if ellscale:
+            print('Applying ellscaling l(l+1)/2pi')
             rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
             rescal_cl[0] = 1
         else:
+            print('Not applying any scaling')
             rescal_cl = np.ones_like(ell)
 
         self.rescal_cl = rescal_cl
@@ -262,8 +264,10 @@ class cinv_p(cinv):
         cl,
         nl_res,
         ninv,
-        tf1d,
-        tf2d,
+        tf1dE,
+        tf1dB,
+        tf2dE,
+        tf2dB,
         eps_min=1.0e-5,
         ellscale=True,
     ):
@@ -281,9 +285,11 @@ class cinv_p(cinv):
         ell = np.arange(lmax + 1, dtype=float)
 
         if ellscale:
+            print('Applying ellscaling l(l+1)/2pi')
             rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
             rescal_cl[0] = 1
         else:
+            print('Not applying any scaling')
             rescal_cl = np.ones_like(ell)
 
         self.rescal_cl = rescal_cl
@@ -296,23 +302,29 @@ class cinv_p(cinv):
         # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
         # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
 
-        tf1d = tf1d[: lmax + 1] * cinv_utils.cli(rescal_cl)
-        tf2d = hp.almxfl(tf2d, cinv_utils.cli(rescal_cl))
+        tf1dE = tf1dE[: lmax + 1] * cinv_utils.cli(rescal_cl)
+        tf1dB = tf1dB[: lmax + 1] * cinv_utils.cli(rescal_cl)
+        
+        tf2dE = hp.almxfl(tf2dE, cinv_utils.cli(rescal_cl))
+        tf2dB = hp.almxfl(tf2dB, cinv_utils.cli(rescal_cl))
 
         self.nside = nside
         self.cl = cl
         self.dl = dl
-        self.tf1d = tf1d
-        self.tf2d = tf2d
+        self.tf1dE = tf1dE
+        self.tf1dB = tf1dB
+        
+        self.tf2dE = tf2dE
+        self.tf2dB = tf2dB
         self.ninv = ninv
         self.nl_res = nl_res
 
         # Set up s_inv_filt and n_inv_filt
         self.s_inv_filt = hp_utils.jit(
-            opfilt_hp_p.SkyInverseFilter, dl, nl_res, lmax, tf1d, tf2d=tf2d
+            opfilt_hp_p.SkyInverseFilter, dl, nl_res, lmax, tf1dE, tf1dB, tf2dE, tf2dB  
         )
         self.n_inv_filt = hp_utils.jit(
-            opfilt_hp_p.NoiseInverseFilter, ninv, tf1d, tf2d=tf2d
+            opfilt_hp_p.NoiseInverseFilter, ninv, tf1dE, tf1dB, tf2dE, tf2dB
         )
         self.opfilt = opfilt_hp_p
 
@@ -389,16 +401,18 @@ class cinv_p(cinv):
         print("cinv_p::noiseP_uk_arcmin = %.3f" % NlevP_uKamin)
 
         s_cls = self.cl
-        tf1d = self.n_inv_filt.tf1d
+        tf1dE = self.n_inv_filt.tf1dE
+        tf1dB = self.n_inv_filt.tf1dB
+        
         fel = cinv_utils.cli(
             s_cls["ee"][: self.lmax + 1]
             + (NlevP_uKamin * np.pi / 180.0 / 60.0) ** 2
-            * cinv_utils.cli(tf1d[0 : self.lmax + 1] ** 2)
+            * cinv_utils.cli(tf1dE[0 : self.lmax + 1] ** 2)
         )
         fbl = cinv_utils.cli(
             s_cls["bb"][: self.lmax + 1]
             + (NlevP_uKamin * np.pi / 180.0 / 60.0) ** 2
-            * cinv_utils.cli(tf1d[0 : self.lmax + 1] ** 2)
+            * cinv_utils.cli(tf1dB[0 : self.lmax + 1] ** 2)
         )
 
         fel[0:2] *= 0.0
@@ -407,7 +421,7 @@ class cinv_p(cinv):
         return fel, fbl
 
     def _calc_tal(self):
-        return cinv_utils.cli(self.tf1d)
+        return cinv_utils.cli(self.tf1dE)
 
     def _calc_mask(self):
         mask = np.ones(hp.nside2npix(self.nside), dtype=float)
@@ -487,9 +501,11 @@ class cinv_tp(cinv):
         ell = np.arange(lmax + 1, dtype=float)
 
         if ellscale:
+            print('Applying ell scaling: l(l+1)/2pi')
             rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
             rescal_cl[0] = 1
         else:
+            print('Not applying any ell scaling')
             rescal_cl = np.ones_like(ell)
 
         self.rescal_cl = rescal_cl

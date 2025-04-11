@@ -6,3 +6,4 @@ pipeline/slurm*.out
 *.egg-info/
 dist/
 build/
+local/

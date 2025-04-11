@@ -9,6 +9,7 @@ import healpy as hp
 
 class Config:
     outdir: str  # outout directory
+    mfsplit: bool
 
     def __init__(self, **kwargs):
         # TODO: this should really be a dataclass with all possible arguments
@@ -64,7 +65,38 @@ class Config:
             # raise FileNotFoundError(out)
         return out
 
+    @staticmethod
+    def ktype2ij(ktype, i, j=None) -> (int, int, str, str):
+        """
+        Convert the 2-letter ktype to seed and cmbset of the two maps
+        """
+        if j is None and len(set(ktype)) == 2:
+            # default `seed2` is `seed1 + 1`
+            j = i+1
+        if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
+            cmbset1, cmbset2 = 'aa'
+            if ktype == 'xx':
+                seed1, seed2 = i, i
+            elif ktype == 'xy':
+                seed1, seed2 = i, j
+            elif ktype == 'yx':
+                seed1, seed2 = j, i
+            elif ktype == 'x0':
+                seed1, seed2 = i, 0
+            elif ktype == '0x':
+                seed1, seed2 = 0, i
+            else:
+                raise AssertionError
+        elif ktype in ['ab', 'ba']:
+            cmbset1, cmbset2 = ktype
+            seed1, seed2 = i, i
+        else:
+            raise TypeError(f'Undefined ktype {ktype}')
+        return seed1, seed2, cmbset1, cmbset2
+
     def load_maps(self, cmbid, seed):
+        assert cmbid in [1, 2]
+
         paths = self['lensing'][f'iqu{cmbid}']
         # loop in case we have multiple components (cmb, foreground, noise etc.)
         if isinstance(paths, str):
@@ -105,39 +137,37 @@ class Config:
     def p_plm(self, qe, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None):
         """
         Return paths to plm(stacked) files.
+
+        Parameters
+        ----------
+        qe: str
+        seed1, seed2: int
+        cmbset1, cmbset2: str
+            Single letter strings. Accepted values are 'a', 'b', 'x', 'y'.
+        N1: bool=False
+            Indicate if the target file is for N1 calculation (they live in a separate directory).
+        stack_type: str
+            Indicate the stacking type for mean-field calculations.
         """
         subdir = 'lensrec_N1' if N1 else 'lensrec'
         if not stack_type:
-            fname = f'plm{qe}_{seed1}{cmbset1}_{seed2}{cmbset2}.npz'
+            fname = f'plm_{qe.upper()}_{seed1}{cmbset1}_{seed2}{cmbset2}.npz'
         else:
-            fname = f'plmstack{qe}_{stack_type}.npz'
+            fname = f'plmstack_{qe.upper()}_{stack_type}.npz'
         out = self.file(self.outdir, subdir, fname)
         return out
 
-    def p_cls(self, qe, seed1, seed2, ktype, N1=False):
+    def p_cls(self, qe, seed1, seed2, ktype1, ktype2, N1=False, ext='npy'):
         """
         Return paths to power spectra files.
         """
         subdir = 'cls/lensrec_N1' if N1 else 'cls'
-
-        assert len(ktype) == 4
-
-        if ktype == 'xxxx':
-            assert seed1 == seed2
-            tag = f'{seed1}a_{seed1}a_{seed1}a_{seed1}a'
-        elif ktype == 'xyxy':
-            tag = f'{seed1}a_{seed2}a_{seed1}a_{seed2}a'
-        elif ktype == 'xyyx':
-            tag = f'{seed1}a_{seed2}a_{seed2}a_{seed1}a'
-        elif ktype == 'abab':
-            assert seed1 == seed2
-            tag = f'{seed1}a_{seed2}b_{seed1}a_{seed2}b'
-        elif ktype == 'abba':
-            assert seed1 == seed2
-            tag = f'{seed1}a_{seed2}b_{seed2}b_{seed1}a'
-        else:
-            raise ValueError(f"Unknown ktype: {ktype}")
-        fname = f'clkk_k{qe.lower()}_{tag}.npy'
+        assert set(ktype1) == set(ktype2)
+        s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2)
+        tag1 = f"{s1}{c1}_{s2}{c2}"
+        s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2)
+        tag2 = f"{s1}{c1}_{s2}{c2}"
+        fname = f'clkk_k{qe.upper()}_{tag1}_{tag2}.{ext}'
         out = self.file(self.outdir, subdir, fname)
         return out
 
@@ -145,4 +175,20 @@ class Config:
         """
         Return paths to response functions.
         """
-        return self.file(self.outdir, f"respavg{qe}.npz")
+        return self.file(self.outdir, f"respavg_{qe.upper()}.npz")
+
+    @staticmethod
+    def f_tmp(qe, seed1=None, seed2=None, ktype=None, N1=False, mf_group=0):
+        """
+        Return file name of a temprary file.
+
+        Parameters
+        ----------
+        qe: str
+        seed1, seed2: int
+        ktype: str
+            2-letter string
+        N1: bool=False
+            Indicator for N1-type maps.
+        """
+        return os.path.join(f"kmap_{qe.upper()}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{'_N1' if N1 else ''}.tmp")

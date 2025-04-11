@@ -109,7 +109,7 @@ class Config:
             except (IndexError, AttributeError):
                 _alm = hp.read_alm(f)
                 alm += np.array([_alm, _alm, _alm])
-            return alm
+        return alm
 
     @property
     def dict_cls(self):

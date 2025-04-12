@@ -5,6 +5,9 @@ from pathlib import Path
 import yaml, pickle
 import logging as lg
 from tqdm import tqdm
+import tempfile as tf
+from typing import Union
+import subprocess
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -1366,3 +1369,263 @@ def get_bpwf(
         bpwf[bi:bf, i] = (1 / vv[bi:bf] ** 2) / (vbin)
 
     return bpwf
+
+
+def kspice(m1: Union[np.ndarray, str],
+           m2: Union[np.ndarray, str] = None,
+           weight1: Union[np.ndarray, str] = None,
+           weight2: Union[np.ndarray, str] = None,
+           lmax=-1,
+           apodizetype=1,
+           apodizesigma: Union[float, str] = "NO",
+           thetamax:float = 180,
+           tolerance:float = 5e-8,
+           script=False,
+           cl_out: str = None, spice:str = None):
+    """
+    A python wrapper for PolSpice for temperature (kappa) file only.
+
+    Notes
+    -----
+    For ka
+
+    Parameters
+    ----------
+    m1: np.ndarray(3, npix)
+        map1 for PS estimation.
+    m2: np.ndarray(3, npix), optional.
+        map2 for cross PS estimation. If None, m2=m1. Default: None.
+    weight1, weight2: np.ndarray=None.
+        shape (2, npix) or (npix,). The weight map for map1/2. If ndim=2, they are
+        taken as the weights for T and P maps. If ndim=1, the weights for T and P
+        are assume to be the same. If None,no weights are applied.
+    lmax: int=-1.
+        The maximum ell number for PS computation. It is advised set lmax=3*nside-1
+        (or lmax=-1) for minimum aliasing.
+    apodizetype: int=1.
+        The apodization type for angular correlation function apodization.
+            - 0: the correlation function is multiplied by a gaussian window
+                + equal to 1 at theta=0.
+                + equal to 0.5 at theta= -apodizesigma/2.
+                + equal to 1/16 at theta= -apodizesigma.
+            - 1: the correlation function is multiplied by a cosine window
+                + equal to 1 at theta=0.
+                + equal to 0.5 at theta= -apodizesigma/2.
+                + equal to 0 at theta= -apodizesigma.
+    apodizesigma: float or str='NO'.
+        scale factor in DEGREES of the correlation function tappering. For better
+        results, ``apodizesigma`` should be close to ``thetamax``. Use 'NO' to
+        disable apodization.
+    thetamax: float (0-180)=180.
+        The maximum angular distance (in deg) for computing angular-correlation
+        function.
+    tolerance: float=5e-8.
+        Tolerance for convergence.
+    script: bool=False
+        If True, return the command line script to be executed.
+    cl_out: str
+        If present, the output Cl will be write to this file
+    spice: str=None
+        Path to spice binary
+
+    Returns
+    -------
+    [command]: str
+        The command line script to be executed.
+    [clhat]: np.ndarray(1, nlmax+1)
+        PS in orders of: TT
+    Notes
+    -----
+    The wrapper forces ``decouple`` to be True.
+
+    References
+    ----------
+    PolSpice: http://www2.iap.fr/users/hivon/software/PolSpice/README.html
+    """
+
+    dtype = np.float64
+
+    # locate spice binary
+    if spice is None:
+        spice_bin = os.environ.get("POLSPICE_BIN", os.path.expanduser("~/.local/bin"))
+        spice = os.path.join(spice_bin, f"spice_SP")
+        if not os.path.exists(spice):
+            spice = os.path.join(spice_bin, f"spice_DP")
+        if not os.path.exists(spice):
+            spice = os.path.join(spice_bin, f"spice")
+    else:
+        assert os.path.exists(spice)
+
+    # locate the cached polspice configuration
+    polspice_config = os.path.expanduser("~/.local/share/polspice")
+    if not os.path.exists(polspice_config):
+        os.makedirs(polspice_config, exist_ok=True)
+
+    """
+    # ignoring window files for temp-only PS
+    if lmax == -1:
+        if isinstance(m1, str):
+            nside_in = hp.get_nside(hp.read_map(m1))
+        else:
+            nside_in = hp.get_nside(m1)
+        nlmax = 3 * nside_in - 1
+    else:
+        nlmax = lmax
+    configfile = os.path.join(
+        polspice_config,
+        f"window_apodizesigma{apodizesigma}_thetamax{thetamax}"
+        f"_apodizetype{apodizetype}_nlmax{nlmax}.fits",
+    )
+    if os.path.exists(configfile):
+        windowfilein = configfile
+        windowfileout = "NO"
+    else:
+        windowfileout = configfile
+        windowfilein = "NO"
+    """
+    command = [
+        spice,
+        "-verbosity", "0",
+        "-nlmax", str(lmax),
+        "-overwrite", "YES",
+        "-polarization", "NO",
+        "-pixelfile", "NO",
+        "-pixelfile2", "NO",
+        "-decouple", "YES",
+        "-symmetric_cl", "NO",
+        "-tolerance", str(tolerance),
+        "-apodizetype", str(apodizetype),
+        "-apodizesigma", str(apodizesigma),
+        "-thetamax", str(thetamax),
+        "-subav", "NO",
+        "-subdipole", "NO",
+        "-corfile", "NO",
+        # "-windowfileout", windowfileout,
+        # "-windowfilein", windowfilein,
+    ]
+    if m2 is None and weight2 is not None:
+        # normally we don't want to do this
+        m2 = m1
+    with tf.TemporaryDirectory(prefix='spice', ) as tmp:
+        for item, name in zip([m1, weight1, m2, weight2],
+                          ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']):
+            if item is not None:
+                if isinstance(item, str):
+                    fname = item
+                else:
+                    fname = os.path.join(tmp, f"{name}.fits")
+                    hp.write_map(fname, item, overwrite=True, dtype=dtype)
+                command += [f"-{name}", fname]
+        if cl_out is None:
+            cl_out = os.path.join(tmp, f"cls.dat")
+        command += [f"-clfile", cl_out]
+        if script:
+            return command
+        result = subprocess.run(command, capture_output=True, check=True)
+        try:
+            ell, *clhat = np.loadtxt(cl_out).T
+        except ValueError as e:
+            print(result.stdout)
+            raise e
+        clhat = np.array(clhat[0])
+        return clhat
+
+
+def map_or_alm(m):
+    """
+    Check if object is a map (True) or an alm object.
+    """
+    try:
+        nside = hp.get_nside(m)
+        return True
+    except TypeError:
+        return False
+
+
+def kappa_spectrum(m1: Union[np.ndarray, str],
+                   m2: Union[np.ndarray, str] = None,
+                   mask1: Union[np.ndarray, str] = None,
+                   mask2: Union[np.ndarray, str] = None,
+                   mask_alm=True, g=None, anafast=True, nside=None, cl_out:str = None, **kwargs):
+    """
+    General power spectrum estimator
+
+    Parameters
+    ----------
+    m1, m2: np.ndarray or str
+        1d array of map or file(.fits) name of maps. If `synfast=True`, then m1/m2 can be alm/map array or map
+        fname, but if `synfast=False`, then m1/m2 should be map fnames or map arrays.
+    mask1, mask2: np.ndarray or str
+        mask (binary or float) array or file names.
+    mask_alm: bool=True
+        If true, assume the input alm is unmasked and apply alm2map->mask->map2alm operations.
+    g: Geometry
+        ducc wrapper object. `g.nside` attribute should match that of the maps.
+    anafast: bool=True
+        If True, use hp.alm2cl to perform quick power spectrum estimation. The fsky-correction is automatically
+        applied so the returned power spectrum should be unbiased.
+    nside: int
+        used to convert alm2map if `m1/m2` are alm objects and `g` is not given. This is ignore if `anafast=True`
+    cl_out: str=None
+        Optional output directory.
+    kwargs: dict
+        kspice keyword arguments.
+    """
+    def _alm2alm(obj, mask_obj):
+        if isinstance(mask_obj, str):
+            mask = hp.read_map(mask_obj)
+        else:
+            mask = mask_obj
+
+        if isinstance(obj, str):
+            m = hp.read_map(obj)
+        else:
+            if map_or_alm(obj):
+                m = obj
+            else:
+                if mask is not None and mask_alm:
+                    if g is None:
+                        nside = hp.get_nside(mask)
+                        m = hp.alm2map(obj, nside=nside)
+                    else:
+                        m = g.alm2map(obj, )
+                else:
+                    return obj, mask
+        if m is not None:
+            if mask is not None:
+                m *= mask
+            func = hp.map2alm if g is None else g.map2alm
+            return func(m, iter=0, ), mask
+        raise ValueError
+
+    if anafast:
+        alm1, mask1 = _alm2alm(m1, mask1)
+        if m2 is None:
+            out = hp.alm2cl(alm1)
+        else:
+            if mask2 is None:
+                mask2 = mask1
+            alm2, mask2 = _alm2alm(m2, mask2)
+            out = hp.alm2cl(alm1, alm2)
+        if mask1 is None:
+            fsky = 1
+        elif mask2 is None:
+            fsky = np.mean(mask1)
+        else:
+            fsky = np.mean(mask1*mask2)
+        out /= fsky
+        if cl_out is not None:
+            l = np.arange(out.shape[-1])
+            np.savetxt(cl_out, np.array([l, out]).T)
+        return out
+    else:
+        data = {'m1': m1, 'm2': m2}
+        for key, obj in data.items():
+            if obj is not None and not isinstance(obj, str):
+                if not map_or_alm(obj):
+                    if g is None:
+                        data[key] = hp.alm2map(obj, nside=nside)
+                    else:
+                        data[key] = g.alm2map(obj)
+        # if m1/m2 are given as file names, then they are assumed to be maps.
+        return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)

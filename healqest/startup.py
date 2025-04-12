@@ -37,16 +37,15 @@ class Config:
         self._dict_cls = None
 
     @classmethod
-    def from_yaml(cls, fname):
+    def from_yaml(cls, fname, pipeline=False):
         params = yaml.safe_load(open(fname, "r"))
         obj = cls(**params)
         # copy the config file
-        if rank == 0:
+        if pipeline and rank == 0:
             os.makedirs(obj.file(obj.outdir), exist_ok=True)
             shutil.copy(fname, obj.file(obj.outdir))
             script = sys._getframe(1).f_globals['__file__']
             shutil.copy(script, obj.file(obj.outdir))
-
         return obj
 
     def __getitem__(self, item):

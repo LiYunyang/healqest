@@ -1500,6 +1500,7 @@ def kspice(m1: Union[np.ndarray, str],
         "-subav", "NO",
         "-subdipole", "NO",
         "-corfile", "NO",
+        # "-verbosity", "2",
         # "-windowfileout", windowfileout,
         # "-windowfilein", windowfilein,
     ]
@@ -1521,7 +1522,16 @@ def kspice(m1: Union[np.ndarray, str],
         command += [f"-clfile", cl_out]
         if script:
             return command
-        result = subprocess.run(command, capture_output=True, check=True)
+        try:
+            result = subprocess.run(command, capture_output=True, check=True, text=True)
+        except subprocess.CalledProcessError as e:
+            print(f"❌ Command failed with exit code {e.returncode}")
+            print(f"🔧 Command: {' '.join(e.cmd)}")
+            if e.stdout:
+                print(f"📤 Stdout:\n{e.stdout.strip()}")
+            if e.stderr:
+                print(f"📣 Stderr:\n{e.stderr.strip()}")
+            sys.exit(e.returncode)
         try:
             ell, *clhat = np.loadtxt(cl_out).T
         except ValueError as e:
@@ -1576,13 +1586,14 @@ def kappa_spectrum(m1: Union[np.ndarray, str],
             mask = hp.read_map(mask_obj)
         else:
             mask = mask_obj
-
+        lmax = -1
         if isinstance(obj, str):
             m = hp.read_map(obj)
         else:
             if map_or_alm(obj):
                 m = obj
             else:
+                lmax = hp.Alm.getlmax(len(obj))
                 if mask is not None and mask_alm:
                     if g is None:
                         nside = hp.get_nside(mask)
@@ -1595,7 +1606,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str],
             if mask is not None:
                 m *= mask
             func = hp.map2alm if g is None else g.map2alm
-            return func(m, iter=0, ), mask
+            return func(m, iter=0, lmax=lmax), mask
         raise ValueError
 
     if anafast:

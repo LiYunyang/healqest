@@ -27,7 +27,6 @@ class Config:
         self.lmaxTP = max(self.lmaxT, self.lmaxP)
         self._dict_cls = None
 
-
     @classmethod
     def from_yaml(cls, fname):
         params = yaml.safe_load(open(fname, "r"))
@@ -173,11 +172,12 @@ class Config:
         if not stack_type:
             fname = f'plm_{qe.upper()}_{seed1}{cmbset1}_{seed2}{cmbset2}.npz'
         else:
+            subdir = f"{subdir}/stack"
             fname = f'plmstack_{qe.upper()}_{stack_type}.npz'
         out = self.file(self.outdir, subdir, fname)
         return out
 
-    def p_cls(self, qe, seed1, seed2, ktype1, ktype2, N1=False, ext='npy'):
+    def p_cls(self, qe, seed1, seed2, ktype1, ktype2, N1=False, ext='dat'):
         """
         Return paths to power spectra files.
         """

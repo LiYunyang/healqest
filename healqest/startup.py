@@ -1,3 +1,4 @@
+import sys
 from dataclasses import dataclass
 import os
 import numpy as np
@@ -7,6 +8,14 @@ from importlib import resources
 import healpy as hp
 from healqest.ducc_sht import Geometry
 from functools import cached_property
+import shutil
+
+try:
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+except ImportError:
+    rank = 0
 
 
 class Config:
@@ -30,7 +39,15 @@ class Config:
     @classmethod
     def from_yaml(cls, fname):
         params = yaml.safe_load(open(fname, "r"))
-        return cls(**params)
+        obj = cls(**params)
+        # copy the config file
+        if rank == 0:
+            os.makedirs(obj.file(obj.outdir), exist_ok=True)
+            shutil.copy(fname, obj.file(obj.outdir))
+            script = sys._getframe(1).f_globals['__file__']
+            shutil.copy(script, obj.file(obj.outdir))
+
+        return obj
 
     def __getitem__(self, item):
         # so that the object can be accessed like a dictionary (the old way)

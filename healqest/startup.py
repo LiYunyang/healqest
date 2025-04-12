@@ -5,11 +5,15 @@ import yaml
 from healqest import utils
 from importlib import resources
 import healpy as hp
+from healqest.ducc_sht import Geometry
+from functools import cached_property
 
 
 class Config:
     outdir: str  # outout directory
     mfsplit: bool
+
+    nside: int # used for ducc wrapper
 
     def __init__(self, **kwargs):
         # TODO: this should really be a dataclass with all possible arguments
@@ -22,6 +26,7 @@ class Config:
         self.Lmax = self['lensing']['Lmax']
         self.lmaxTP = max(self.lmaxT, self.lmaxP)
         self._dict_cls = None
+
 
     @classmethod
     def from_yaml(cls, fname):
@@ -94,10 +99,9 @@ class Config:
             raise TypeError(f'Undefined ktype {ktype}')
         return seed1, seed2, cmbset1, cmbset2
 
-    def load_maps(self, cmbid, seed):
+    def load_maps(self, cmbid, seed, N1=False,):
         assert cmbid in [1, 2]
-
-        paths = self['lensing'][f'iqu{cmbid}']
+        paths = self['lensing'][f'iqu'] if not N1 else self['lensing'][f'iqu_N1']
         # loop in case we have multiple components (cmb, foreground, noise etc.)
         if isinstance(paths, str):
             paths = [paths]
@@ -109,6 +113,11 @@ class Config:
             except (IndexError, AttributeError):
                 _alm = hp.read_alm(f)
                 alm += np.array([_alm, _alm, _alm])
+
+        if self.sim_mask is not None:
+            # nside = hp.get_nside(self.sim_mask)
+            # alm = hp.map2alm(hp.alm2map(alm, nside=nside, )*self.sim_mask, iter=0)
+            alm = self._mask_alm(alm, self.sim_mask)
         return alm
 
     @property
@@ -133,6 +142,17 @@ class Config:
     @property
     def dict_lrange(self):
         return dict(lmin=self.lmin, lmaxTP=self.lmaxTP, lmaxT=self.lmaxT, lmaxP=self.lmaxP, Lmax=self.Lmax)
+
+    @cached_property
+    def g(self):
+        return Geometry(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
+
+    @cached_property
+    def sim_mask(self):
+        if self['lensing'].get('sim_mask', None):
+            return hp.read_map(self.file(self['lensing'].get('sim_mask')))
+        else:
+            return None
 
     def p_plm(self, qe, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None):
         """
@@ -192,3 +212,6 @@ class Config:
             Indicator for N1-type maps.
         """
         return os.path.join(f"kmap_{qe.upper()}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{'_N1' if N1 else ''}.tmp")
+
+    def _mask_alm(self, alm, mask):
+        return self.g.map2alm(self.g.alm2map(alm)*mask)

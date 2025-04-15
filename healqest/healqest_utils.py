@@ -1396,9 +1396,9 @@ def kspice(m1: Union[np.ndarray, str],
     m2: np.ndarray(3, npix), optional.
         map2 for cross PS estimation. If None, m2=m1. Default: None.
     weight1, weight2: np.ndarray=None.
-        shape (2, npix) or (npix,). The weight map for map1/2. If ndim=2, they are
-        taken as the weights for T and P maps. If ndim=1, the weights for T and P
-        are assume to be the same. If None,no weights are applied.
+        shape (npix,). The weight map for map1/2. If None,no weights are applied.
+        Note that when the `weight2` is None, if `m2` is specified, `weight2` will be considered as FULL SKY rather
+        than the same as `weight1`.
     lmax: int=-1.
         The maximum ell number for PS computation. It is advised set lmax=3*nside-1
         (or lmax=-1) for minimum aliasing.

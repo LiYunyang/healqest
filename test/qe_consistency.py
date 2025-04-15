@@ -42,7 +42,8 @@ def fake_data():
 
     config = dict(lensrec=dict(lmaxT=lmax, lmaxP=lmax, Lmax=lmax, cltype='ucmb', nside=nside))
     q1 = qest.qest(config, cls)
-    q2 = qest.qest_plus(config, cls)
+    q2 = qest.Qest(Cls=cls['ucmb'], lmax=lmax, Lmax=lmax, nside=nside)
+
     return dict(q1=q1, q2=q2, alm1=alm1, alm2=alm2, f1=f1, f2=f2, cls=cls)
 
 

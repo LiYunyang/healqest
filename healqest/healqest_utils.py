@@ -1371,8 +1371,8 @@ def get_bpwf(
     return bpwf
 
 
-def kspice(m1: Union[np.ndarray, str],
-           m2: Union[np.ndarray, str] = None,
+def kspice(m1: Union[np.ndarray, str, list],
+           m2: Union[np.ndarray, str, list] = None,
            weight1: Union[np.ndarray, str] = None,
            weight2: Union[np.ndarray, str] = None,
            lmax=-1,
@@ -1552,8 +1552,8 @@ def map_or_alm(m):
         return False
 
 
-def kappa_spectrum(m1: Union[np.ndarray, str],
-                   m2: Union[np.ndarray, str] = None,
+def kappa_spectrum(m1: Union[np.ndarray, str, list],
+                   m2: Union[np.ndarray, str, list] = None,
                    mask1: Union[np.ndarray, str] = None,
                    mask2: Union[np.ndarray, str] = None,
                    mask_alm=True, g=None, anafast=True, nside=None, cl_out:str = None, **kwargs):

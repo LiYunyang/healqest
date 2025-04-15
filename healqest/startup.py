@@ -19,7 +19,8 @@ except ImportError:
 
 
 class Config:
-    outdir: str  # outout directory
+    outdir: str  # output directory
+    recdir: str = None # output directory for lensing rec. Default to outdir
     mfsplit: bool
 
     nside: int # used for ducc wrapper
@@ -35,6 +36,8 @@ class Config:
         self.Lmax = self['lensing']['Lmax']
         self.lmaxTP = max(self.lmaxT, self.lmaxP)
         self._dict_cls = None
+        if self.recdir is None:
+            self.recdir = self.outdir
 
     @classmethod
     def from_yaml(cls, fname, pipeline=False):
@@ -190,7 +193,7 @@ class Config:
         else:
             subdir = f"{subdir}/stack"
             fname = f'plmstack_{qe.upper()}_{stack_type}.npz'
-        out = self.file(self.outdir, subdir, fname)
+        out = self.file(self.recdir, subdir, fname)
         return out
 
     def p_cls(self, qe, seed1, seed2, ktype1, ktype2, N1=False, ext='dat'):

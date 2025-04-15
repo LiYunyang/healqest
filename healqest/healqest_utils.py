@@ -1586,7 +1586,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str],
             mask = hp.read_map(mask_obj)
         else:
             mask = mask_obj
-        lmax = -1
+        lmax = None
         if isinstance(obj, str):
             m = hp.read_map(obj)
         else:

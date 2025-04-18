@@ -31,7 +31,8 @@ class Config:
     nside: int  # used for ducc wrapper
 
     fmask_qe: Union[str, list[str]]=None  # path(s) to mask used for lensrec
-    fmask_ps: Union[str, list[str]]=None  # path(s) to mask used for MC resp and clpp
+    fmask_ps: Union[str, list[str]]=None  # path(s) to mask used for clpp
+    fmask_resp: Union[str, list[str]] = None  # path(s) to mask used for MC resp
     dec_range: Union[list, dict]=None
     spice_kwargs: dict=None  # polspice settings
 
@@ -213,6 +214,13 @@ class Config:
     def mask_ps(self):
         if self.fmask_ps:
             return self._load_mask(self.fmask_ps)
+        else:
+            return None
+
+    @cached_property
+    def mask_resp(self):
+        if self.fmask_resp:
+            return self._load_mask(self.fmask_resp)
         else:
             return None
 

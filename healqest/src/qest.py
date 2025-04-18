@@ -32,7 +32,7 @@ class qest(object):
         #self.almbar1 = almbar1
         #self.almbar2 = almbar2
 
-        self.lmax    = self.config['lensrec']['lmax'] = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
+        self.lmax    = self.config['lensrec']['Lmax']#self.config['lensrec']['lmax'] = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
         self.Lmax    = self.config['lensrec']['Lmax']
         self.cltype  = self.config['lensrec']['cltype']
         self.glm = {}
@@ -92,7 +92,7 @@ class qest(object):
             #sys.exit()
             print('Running lensing reconstruction')
 
-            if qe=='TB' or qe=='EB':
+            if qe[:2]=='TB' or qe[:2]=='EB':
                 # Hack to get TB/EB working. currently not understanding some factors of j
                 print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
 
@@ -123,7 +123,7 @@ class qest(object):
                 self.glm[qe] = hp.almxfl(glm,nrm*wP1)
                 self.clm[qe] = hp.almxfl(clm,nrm*wP1)
 
-            elif qe=='BT' or qe=='BE':
+            elif qe[:2]=='BT' or qe[:2]=='BE':
                 # Hack to get TB/EB working. currently not understanding some factors of j
                 print('WARNING: Currently using a hacky implementation for TB/EB -- should probably revisit!')
                 print('using est: %s'%qe )

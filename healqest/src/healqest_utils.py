@@ -199,6 +199,11 @@ def parse_yaml(file_yaml):
             "maptype2": "cmbmv",
             "qes": ["TT", "TE", "TB", "ET", "EE", "EB", "BT", "BE"],
         },
+        "gmvjtp_sep": {
+            "maptype1": "cmbmv",
+            "maptype2": "cmbmv",
+            "qes": ["TT", "TE", "TB", "ET", "EE", "EB", "BT", "BE"],
+        },
         "gmvjtp_tteete": {
             "maptype1": "cmbmv",
             "maptype2": "cmbmv",
@@ -220,7 +225,7 @@ def parse_yaml(file_yaml):
     dict["dir_out"] = dict["lensrec"]["dir_out"]
 
     # Read Cls from specified files
-    dict["lensrec"]["lmax"] = max(dict["lensrec"]["lmaxT"], dict["lensrec"]["lmaxP"])
+    dict["lensrec"]["lmax"] = dict["lensrec"]["Lmax"]#  max(dict["lensrec"]["lmaxT"], dict["lensrec"]["lmaxP"])
 
     if "cls" in dict:
         if "file_lcmb" in dict["cls"]:
@@ -722,7 +727,7 @@ def get_qes(qeset):
         A list of estimators neesed.
     """
 
-    single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT"}
+    single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT", "TTbhTTprf", "GMVbhTTprf", "GMVTTEETEbhTTprf"}
 
     composite = {
         "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
@@ -746,16 +751,16 @@ def get_qes(qeset):
         "qTEET": ["TE"],
         "qEBBE": ["EB"],
         "qTBBT": ["TB"],
-
+        "qMVTTbhTTprf": ["TTbhTTprf", "EE", "TE", "TB", "EB"],
+        "MVTTbhTTprf": ["TTbhTTprf", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
     }
 
-    harden = {"TTbhTTprf", "GMVbhTTprf", "GMVTTEETEbhTTprf"}
 
     if qeset in composite:
         return composite[qeset]
 
     # For any qetype that is one of the single entry codes.
-    elif qeset in single or qeset in harden:
+    elif qeset in single:
         return [qeset]
 
     else:
@@ -783,6 +788,7 @@ def get_dvec(
     unl=False,
     lmax=4000,
     use_cache=False,
+    verbose=True
 ):
     """
     Returns data vector and covariance.
@@ -848,6 +854,7 @@ def get_dvec(
         'rdl_corr' : array_like
             Sim mean correct data Cl.
     """
+    #sys.stdout = open(os.devnull, 'w')
 
     spec = "ww" if curl else "kk"
 
@@ -871,7 +878,7 @@ def get_dvec(
     v[:2] = np.inf
 
     rl = rebincl(l, l, bine)
-
+    
     # ----------Simulation part--------------
     if use_cache:
         if unl:
@@ -884,7 +891,7 @@ def get_dvec(
         else:
             xx = np.load(dir + f"all_cl{spec}_{qe}_xxxx.npy")
 
-    for i in tqdm(range(startidx, nsims + startidx)):
+    for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
         if unl:
             if use_cache:
                 x = uu[: lmax + 1, i - startidx]
@@ -925,10 +932,10 @@ def get_dvec(
             else:
                 rcl = (debiased / tlkk[: lmax + 1]) @ bpwf
                 corr = np.zeros_like(rl)
-
+            #print('ratio')
         else:
             # Fiducial case when we want the actual spectra
-
+            #print('not ratio')
             tlkk0 = np.copy(tlkk)
             tlkk0[:2] = 0
 
@@ -940,6 +947,7 @@ def get_dvec(
                         bine,
                         return_ell=True,
                     )
+                    #print(ellfac)
                 else:
                     rl, rcl = rebincl(
                         l[: lmax + 1], debiased / v, bine, return_ell=True
@@ -947,6 +955,7 @@ def get_dvec(
             else:
                 if ellfac >= 0:
                     rcl = (l[: lmax + 1] ** (ellfac) * debiased)[: lmax + 1] @ bpwf
+                    #print(ellfac)
                 if ellfac < 0:
                     rcl = ((debiased)[: lmax + 1] / v) @ bpwf
 
@@ -1012,6 +1021,7 @@ def get_dvec(
                     bine,
                     return_ell=True,
                 )
+                #print(ellfac)
 
             else:
                 rl, rdl = rebincl(l[: lmax + 1], (debiased) / v, bine, return_ell=True)
@@ -1033,10 +1043,13 @@ def get_dvec(
                 rdl_corr = (l[: lmax + 1] ** (ellfac) * (debiased - sim_mean))[
                     : lmax + 1
                 ] @ bpwf
+                #print(ellfac)
             else:
                 rdl_corr = ((debiased - np.mean(farr, axis=1))[: lmax + 1] / v) @ bpwf
                 rdl = ((debiased - 0 * np.mean(farr, axis=1))[: lmax + 1] / v) @ bpwf
 
+    #if verbose==False: sys.stdout = sys.stdout
+    
     # return rl, rdl, np.mean(arr, axis=1), np.std(arr, axis=1), arr, rdl_corr
     return {
         "rl": rl,
@@ -1063,7 +1076,9 @@ def loadcls(
     didx=0,
     startidx=1,
     use_cache=False,
+    verbose=True
 ):    
+    #if verbose==False: sys.stdout = open(os.devnull, 'w')
 
     if curl:
         spec = "ww"
@@ -1098,7 +1113,7 @@ def loadcls(
         else:
             print("\033[31mWARNING: NOT using cached file\033[0m")
             xx = 0
-            for i in tqdm(range(startidx, nsims + startidx)):
+            for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 xx += np.load(
                     dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
@@ -1118,7 +1133,7 @@ def loadcls(
 
         else:
             xx = 0
-            for i in tqdm(range(startidx, nsims + startidx)):
+            for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 xx += np.load(
                     dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
@@ -1140,7 +1155,7 @@ def loadcls(
 
         else:
             N0 = 0
-            for i in tqdm(range(startidx, nsims + startidx)):
+            for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 a = np.load(
                     dir
                     + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
@@ -1169,7 +1184,7 @@ def loadcls(
         else:
             assert N0 is not None
             N1 = 0
-            for i in tqdm(range(startidx, nsims + startidx)):
+            for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 abab = np.load(
                     dir + "cl%s_k%s_%da_%db_%da_%db.npz" % (spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
@@ -1207,7 +1222,7 @@ def loadcls(
         else:
             assert N0 is not None
             RDN0 = 0
-            for i in tqdm(range(startidx, nsims + startidx)):
+            for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 xdxd = np.load(
                     dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, didx, i, didx)
                 )["cls"][: lmax + 1, 1]
@@ -1222,6 +1237,8 @@ def loadcls(
                 )["cls"][: lmax + 1, 1]
                 RDN0 += (xdxd + xddx + dxdx + dxxd) - N0
             RDN0 = RDN0 / nsims
+
+        #if verbose==False: sys.stdout = sys.stdout
 
         return RDN0
 
@@ -1251,7 +1268,7 @@ def loadcls_unlcov(
 
     if cltype == "N0":
         N0 = np.zeros((lmax + 1, nsims))
-        for i in tqdm(range(startidx, nsims + startidx)):
+        for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
             a = np.load(
                 dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
             )["cls"][: lmax + 1, 1]
@@ -1318,6 +1335,7 @@ def get_bpwf(
     curl=False,
     lmax=4000,
     use_cache=False,
+    verbose=True
 ):
     """
     Return band power window function, based on the scatter measured
@@ -1351,7 +1369,7 @@ def get_bpwf(
 
     if use_cache and os.path.exists(f1):
         xx = np.load(f1)
-        for i in tqdm(range(1, nsims + 1)):
+        for i in tqdm(range(1, nsims + 1), disable=not verbose):
             if ellfac >= 0:
                 arr[:, i - 1] = l ** (ellfac) * (
                     xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1]
@@ -1360,7 +1378,7 @@ def get_bpwf(
                 arr[:, i - 1] = (xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1]) / v
 
     else:
-        for i in tqdm(range(1, nsims + 1)):
+        for i in tqdm(range(1, nsims + 1), disable=not verbose):
             x = np.load(dir_cls + f"cl{spec}_k{qe}_{i}a_{i}a_{i}a_{i}a.npz")["cls"][
                 : lmax + 1, 1
             ]

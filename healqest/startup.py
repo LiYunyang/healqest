@@ -197,7 +197,8 @@ class Config:
                 if mask is None:
                     mask = _mask
                 else:
-                    mask = np.logical_or(mask, _mask)
+                    mask = np.logical_and(mask, _mask)
+            return mask
         else:
             raise TypeError(f'Undefined item type {type(item)}')
 

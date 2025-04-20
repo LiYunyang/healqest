@@ -1,7 +1,7 @@
 import sys
 import argparse
 import os
-from typing import Union
+from typing import Union, get_type_hints
 
 import numpy as np
 import yaml
@@ -11,11 +11,13 @@ import healpy as hp
 from healqest.ducc_sht import Geometry
 from functools import cached_property
 import shutil
-
+import warnings
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
+    if rank != 0:
+        warnings.filterwarnings("ignore")
 except ImportError:
     rank = 0
 
@@ -36,9 +38,14 @@ class Config:
     dec_range: Union[list, dict]=None
     spice_kwargs: dict=None  # polspice settings
 
+    save_as_map: bool=False # save plm as map, otherwise as alm.
+    lensing: dict  # lumped parameters related to lensing. TODO: re-organize this.
+
     def __init__(self, **kwargs):
         # TODO: this should really be a dataclass with all possible arguments
         # specified, typed and with defaults.
+        self._warned_keys = set()
+        self._validate_config(kwargs)
         self.__dict__.update(kwargs)
 
         self.lmin = self['lensing']['lmin']
@@ -63,6 +70,15 @@ class Config:
                     self.spice_kwargs[key] = max(self.dec_range)-min(self.dec_range)
                 elif isinstance(self.spice_kwargs[key], dict):
                     self.spice_kwargs[key] = self.spice_kwargs[key][self.field]
+
+    def _validate_config(self, config_dict: dict):
+        expected_keys = get_type_hints(self)
+        unexpected_keys = set(config_dict.keys()) - set(expected_keys.keys())
+
+        for key in unexpected_keys:
+            if key not in self._warned_keys:
+                warnings.warn(f"Unexpected config parameter: '{key}'. ", UserWarning, stacklevel=2)
+                self._warned_keys.add(key)
 
     @classmethod
     def from_yaml(cls, fname, pipeline=False, field=None):
@@ -224,7 +240,12 @@ class Config:
         else:
             return None
 
-    def p_plm(self, qe, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None):
+    @cached_property
+    def mask_bounary(self):
+        """boundary mask used to save plm as partial maps"""
+        return self.mask_qe !=0
+
+    def p_plm(self, qe=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None, ):
         """
         Return paths to plm(stacked) files.
 
@@ -240,11 +261,16 @@ class Config:
             Indicate the stacking type for mean-field calculations.
         """
         subdir = 'lensrec_N1' if N1 else 'lensrec'
+        suffix = 'fits' if self.save_as_map else 'npz'
         if not stack_type:
-            fname = f'plm_{qe.upper()}_{seed1}{cmbset1}_{seed2}{cmbset2}.npz'
+            if self.save_as_map:
+                # when saving as partial maps, save all QEs together as columns, so QE doesn't appear in fname.
+                fname = f'plm_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
+            else:
+                fname = f'plm_{qe.upper()}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
         else:
             subdir = f"{subdir}/stack"
-            fname = f'plmstack_{qe.upper()}_{stack_type}.npz'
+            fname = f'plmstack_{qe.upper()}_{stack_type}.{suffix}'
         out = self.file(self.recdir, subdir, fname)
         return out
 
@@ -286,6 +312,13 @@ class Config:
 
     def _mask_alm(self, alm, mask):
         return self.g.map2alm(self.g.alm2map(alm)*mask)
+
+    def get_fl(self, qe, cls):
+        # TODO: fix me in the future
+        fls = utils.get_fl(cls, self.dict_lrange)
+        fl1 = fls[list('TEB').index(qe[0].upper())]
+        fl2 = fls[list('TEB').index(qe[1].upper())]
+        return fl1, fl2
 
 
 def parse_args():

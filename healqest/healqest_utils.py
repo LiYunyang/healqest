@@ -1640,3 +1640,51 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
                         data[key] = g.alm2map(obj)
         # if m1/m2 are given as file names, then they are assumed to be maps.
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
+
+
+def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
+    """A wrapper to read the phi maps.
+
+    Parameters
+    ----------
+    fname: str
+    field: int/str or list of int/str
+        column(s) to read from the FITS file.
+    dtype: str or np.dtype
+    partial : bool, optional
+        If True, fits file is assumed to be a partial-sky file with explicit indexing,
+        if the indexing scheme cannot be determined from the header.
+        If False, implicit indexing is assumed.  Default: False.
+        A partial sky file is one in which OBJECT=PARTIAL and INDXSCHM=EXPLICIT,
+        and the first column is then assumed to contain pixel indices.
+        A full sky file is one in which OBJECT=FULLSKY and INDXSCHM=IMPLICIT.
+        At least one of these keywords must be set for the indexing
+        scheme to be properly identified.
+    hdu : int, optional
+        the header number to look at (start at 0)
+    h : bool, optional
+    If True, return also the header. Default: False.
+    """
+
+    from astropy.io import fits
+    with fits.open(fname) as hdul:
+        names = hdul[hdu].columns.names
+        try:
+            # for partial maps, we skip the index column
+            names.remove('PIXEL')
+        except ValueError:
+            pass
+        if isinstance(field, (str, int)):
+            field = [field]
+        fields = []
+        for c in field:
+            if isinstance(c, str):
+                if c in names:
+                    fields.append(names.index(c))
+                else:
+                    raise ValueError(f"Column {c} not found in the FITS file: {names}")
+            elif isinstance(c, int):
+                fields.append(c)
+            else:
+                raise TypeError
+        return hp.read_map(fname, field=tuple(fields), dtype=dtype, hdu=hdu, h=h, partial=partial)

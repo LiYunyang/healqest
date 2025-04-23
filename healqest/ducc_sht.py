@@ -420,3 +420,18 @@ def alm2lens(alms, plm, nside, g=None, **kwargs):
         out[1] = (p[1] * Zm[1] - p[0] * Zm[0]) + (p[0] * Zp[0] + p[1] * Zp[1])
         out[2] = -(p[0] * Zm[1] + p[1] * Zm[0]) + (p[0] * Zp[1] - p[1] * Zp[0])
     return out
+
+
+def get_dec_range(mask, dec=None):
+    """
+    Find the proper decrange for ducc wrapper for a given mask.
+    """
+    if isinstance(mask, str):
+        mask = hp.read_map(mask)
+    nside = hp.get_nside(mask)
+    if dec is None:
+        dec = hp.pix2ang(nside, np.arange(hp.nside2npix(nside)), lonlat=True)[1]
+
+    dec1 = int(np.floor(np.min(dec[mask > 0])))
+    dec2 = int(np.ceil(np.max(dec[mask > 0])))
+    return dec1, dec2

@@ -25,8 +25,9 @@ except ImportError:
 class Config:
     outdir: str  # output directory
     recdir: str = None  # output directory for lensing rec. Default to outdir
-    mfsplit: bool
-    field: str
+    mfsplit: bool = True
+    field: str = None  # SPT field name, used for output/fname parsing and mask selection
+    bundle: int = None  # bundle number, used for output/fname parsing
     """
     the SPT field identifier. This is used to format `outdir`/`recdir`/`dec_range` and mask files.
     """
@@ -59,6 +60,9 @@ class Config:
         if self.field is not None:
             self.outdir = self.outdir.format(field=self.field)
             self.recdir = self.recdir.format(field=self.field)
+        if self.bundle is not None:
+            self.outdir = self.outdir.format(bundle=self.bundle)
+            self.recdir = self.recdir.format(bundle=self.bundle)
         if isinstance(self.dec_range, dict):
             if self.field is not None:
                 self.dec_range = self.dec_range[self.field]
@@ -81,11 +85,15 @@ class Config:
                 self._warned_keys.add(key)
 
     @classmethod
-    def from_yaml(cls, fname, pipeline=False, field=None):
+    def from_yaml(cls, fname, field=None, bundle=None):
         params = yaml.safe_load(open(fname, "r"))
-        obj = cls(**params, field=field)
-        # copy the config file
-        if pipeline and rank == 0:
+        return cls(**params, field=field, bundle=bundle)
+
+    @classmethod
+    def from_args(cls, args):
+        fname = args.config
+        obj = cls.from_yaml(fname, field=args.field, bundle=args.bundle)
+        if rank == 0:
             os.makedirs(obj.file(obj.outdir), exist_ok=True)
             shutil.copy(fname, obj.file(obj.outdir))
             script = sys._getframe(1).f_globals['__file__']
@@ -275,23 +283,23 @@ class Config:
         return out
 
     def p_cls(self, qe, seed1, seed2, ktype1, ktype2, N1=False, ext='dat'):
-        """
-        Return paths to power spectra files.
-        """
+        """paths to power spectra files."""
         subdir = 'cls/lensrec_N1' if N1 else 'cls'
-        assert set(ktype1) == set(ktype2)
+
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2)
         tag1 = f"{s1}{c1}_{s2}{c2}"
-        s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2)
-        tag2 = f"{s1}{c1}_{s2}{c2}"
-        fname = f'clkk_k{qe.upper()}_{tag1}_{tag2}.{ext}'
+        if ktype2 is not None:
+            assert set(ktype1) == set(ktype2)
+            s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2)
+            tag2 = f"{s1}{c1}_{s2}{c2}"
+            fname = f'clkk_k{qe.upper()}_{tag1}_{tag2}.{ext}'
+        else:
+            fname = f'clkk_k{qe.upper()}_{tag1}_cross.{ext}'
         out = self.file(self.outdir, subdir, fname)
         return out
 
-    def p_reps(self, qe):
-        """
-        Return paths to response functions.
-        """
+    def p_resp(self, qe):
+        """paths to response functions."""
         return self.file(self.outdir, f"respavg_{qe.upper()}.npz")
 
     @staticmethod
@@ -321,16 +329,13 @@ class Config:
         return fl1, fl2
 
 
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
-    parser.add_argument('-f', '--field', default=None, type=str, help='SPT field')
-    parser.add_argument('-i1', default=1, type=int, help='seed start')
-    parser.add_argument('-i2', default=1, type=int, help='seed stop')
-    parser.add_argument('-cmbid1', default=1, type=int, help='cmbid1')
-    parser.add_argument('-cmbid2', default=1, type=int, help='cmbid2')
-    parser.add_argument('-N1', action='store_true', help='do N1-type sims')
-    parser.add_argument('-qe', default=None, type=str, help='QE type')
-    parser.add_argument('-qe2', default=None, dest='qe2', help='2nd QE if xpec')
-    args = parser.parse_args()
-    return args
+def parser():
+    p = argparse.ArgumentParser()
+    p.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
+    p.add_argument('-f', '--field', default=None, type=str, help='SPT field')
+    p.add_argument('-b', '--bundle', default=None, type=int, help='Bundle id')
+    p.add_argument('-i1', default=1, type=int, help='seed start')
+    p.add_argument('-i2', default=1, type=int, help='seed stop')
+    p.add_argument('-cmbid1', default=1, type=int, help='cmbid1')
+    p.add_argument('-cmbid2', default=1, type=int, help='cmbid2')
+    return p

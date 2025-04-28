@@ -454,7 +454,6 @@ def get_fl(cls, dict_lrange):
     flT = 1.0/(cls['cmb']['tt']+cls['res']['tt'][:lmaxTP+1]); flT[lmaxT+1:] = 0; flT[:lmin] = 0
     flE = 1.0/(cls['cmb']['ee']+cls['res']['ee'][:lmaxTP+1]); flE[lmaxP+1:] = 0; flE[:lmin] = 0
     flB = 1.0/(cls['cmb']['bb']+cls['res']['bb'][:lmaxTP+1]); flB[lmaxP+1:] = 0; flB[:lmin] = 0
-
     return flT, flE, flB
 
 def get_almbar(qetype, alms1, alms2, cls, dict_lrange):

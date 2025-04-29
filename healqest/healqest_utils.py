@@ -1547,7 +1547,8 @@ def kspice(m1: Union[np.ndarray, str, list],
                     fname = item
                 else:
                     fname = os.path.join(tmp, f"{name}.fits")
-                    hp.write_map(fname, item, overwrite=True, dtype=dtype)
+                    hp.write_map(fname, item, overwrite=True, dtype=dtype,
+                                 partial=True if name.startswith("mapfile") else False)
                 command += [f"-{name}", fname]
         if cl_out is None:
             cl_out = os.path.join(tmp, f"cls.dat")

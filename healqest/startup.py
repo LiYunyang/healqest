@@ -27,7 +27,6 @@ class Config:
 
     # === command-line parameters ===
     field: str = None  # SPT field name, used for output/fname parsing and mask selection
-    bundle: int = None  # bundle number, used for output/fname parsing
 
     """Config should be specified in a yaml file with these keywords. """
     # === base ===
@@ -35,6 +34,7 @@ class Config:
     recdir: str = None  # output directory for lensing rec. Default to outdir
     dec_range: Union[list, dict] = None
     save_as_map: bool = False  # save plm as map, otherwise as alm.
+    nbundle: int = None  # number of bundles, if any.
 
     # === cinv ===
     file_bl: str  # path to beam file.
@@ -72,9 +72,9 @@ class Config:
         self._set_defaults()
 
     @classmethod
-    def from_yaml(cls, fname, field=None, bundle=None):
+    def from_yaml(cls, fname, field=None):
         params = yaml.safe_load(open(fname, "r"))
-        config_dict = dict(field=field, bundle=bundle)
+        config_dict = dict(field=field)
         for group_key in cls.__keywords__:
             subdict = params.pop(group_key, None)
             if subdict:
@@ -88,7 +88,7 @@ class Config:
     @classmethod
     def from_args(cls, args):
         fname = args.config
-        obj = cls.from_yaml(fname, field=args.field, bundle=args.bundle)
+        obj = cls.from_yaml(fname, field=args.field)
         if rank == 0:
             os.makedirs(obj.path(obj.outdir), exist_ok=True)
             shutil.copy(fname, obj.path(obj.outdir))
@@ -266,7 +266,8 @@ class Config:
         """boundary mask used to save plm as partial maps"""
         return self.mask_qe !=0
 
-    def p_plm(self, tag=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None, ):
+    def p_plm(self, tag=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None,
+              bundle=None):
         """
         Return paths to plm(stacked) files.
 
@@ -281,10 +282,11 @@ class Config:
             Indicate if the target file is for N1 calculation (they live in a separate directory).
         stack_type: str
             Indicate the stacking type for mean-field calculations.
+        bundle: int=None
         """
         subdir = 'lensrec_N1' if N1 else 'lensrec'
-        if self.bundle is not None:
-            subdir = f"{subdir}/bundle{self.bundle}"
+        if bundle is not None and not N1:  # MF and N1 don't do bundle
+            subdir = f"{subdir}/bundle{bundle}"
         suffix = 'fits' if self.save_as_map else 'npz'
         if not stack_type:
             if self.save_as_map:
@@ -302,8 +304,6 @@ class Config:
         """paths to power spectra files."""
 
         subdir = 'cls/lensrec_N1' if N1 else 'cls'
-        if self.bundle is not None:
-            subdir = f"{subdir}/bundle{self.bundle}"
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2)
         tag1 = f"{s1}{c1}_{s2}{c2}"
         if ktype2 is not None:
@@ -316,12 +316,13 @@ class Config:
         out = self.path(self.outdir, subdir, fname)
         return out
 
-    def p_resp(self, tag):
+    def p_resp(self, tag, bundle=None):
         """paths to response functions."""
-        return self.path(self.outdir, f"respavg_{tag}.npz")
+        bundle_tag = f'_bundle{bundle}' if bundle is not None else ''
+        return self.path(self.outdir, f"respavg_{tag}{bundle_tag}.npz")
 
     @staticmethod
-    def f_tmp(tag, seed1=None, seed2=None, ktype=None, N1=False, mf_group=0):
+    def f_tmp(tag, seed1=None, seed2=None, ktype=None, N1=False, mf_group=0, bundle=None):
         """
         Return file name of a temprary file.
 
@@ -334,8 +335,13 @@ class Config:
             2-letter string
         N1: bool=False
             Indicator for N1-type maps.
+        mf_group: int=0
+        bundle: int=None
         """
-        return os.path.join(f"kmap_{tag}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{'_N1' if N1 else ''}.tmp")
+
+        bundle_tag = f'_bundle{bundle}' if bundle is not None else ''
+        N1_tag = '_N1' if N1 else ''
+        return os.path.join(f"kmap_{tag}{bundle_tag}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp")
 
 
 def parser():
@@ -345,4 +351,5 @@ def parser():
     p.add_argument('-b', '--bundle', default=None, type=int, help='Bundle id')
     p.add_argument('-n1', action='store_true', help='do N1-type operations')
     p.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
+    p.add_argument('-skip', action='store_true', help='skip finished jobs')
     return p

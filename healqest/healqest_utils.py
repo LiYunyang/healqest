@@ -1412,6 +1412,8 @@ def kspice(m1: Union[np.ndarray, str, list],
            apodizesigma: Union[float, str] = "NO",
            thetamax:float = 180,
            tolerance:float = 5e-8,
+           subav:bool = False,
+           subdipole:bool = False,
            script=False,
            cl_out: str = None, spice:str = None):
     """
@@ -1453,6 +1455,8 @@ def kspice(m1: Union[np.ndarray, str, list],
         function.
     tolerance: float=5e-8.
         Tolerance for convergence.
+    subav: bool=False.
+    subdipole: bool=False.
     script: bool=False
         If True, return the command line script to be executed.
     cl_out: str
@@ -1529,8 +1533,8 @@ def kspice(m1: Union[np.ndarray, str, list],
         "-apodizetype", str(apodizetype),
         "-apodizesigma", str(apodizesigma),
         "-thetamax", str(thetamax),
-        "-subav", "NO",
-        "-subdipole", "NO",
+        "-subav", "NO" if not subav else "YES",
+        "-subdipole", "NO" if not subdipole else "YES",
         "-corfile", "NO",
         # "-verbosity", "2",
         # "-windowfileout", windowfileout,
@@ -1671,6 +1675,8 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
                         data[key] = hp.alm2map(obj, nside=nside)
                     else:
                         data[key] = g.alm2map(obj)
+                else:
+                    data[key] = np.asarray(obj, dtype=np.float64)
         # if m1/m2 are given as file names, then they are assumed to be maps.
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
 

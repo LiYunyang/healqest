@@ -5,14 +5,12 @@ https://github.com/SouthPoleTelescope/spt3g_software/blob/curvlens/lensing/pytho
 but with additional cleaning/formatting and commenting.
 """
 
-import os, sys
+import os
+import sys
 import healpy as hp
 import numpy as np
-import pickle as pk
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "./")))
-import utils, hp_utils, cinv_utils
-import opfilt_hp_p, opfilt_hp_t, opfilt_hp_tp, cd_solve, cd_monitors
+from . import opfilt_hp_p, opfilt_hp_t, opfilt_hp_tp, cd_solve, cd_monitors, hp_utils, cinv_utils
 
 
 class cinv(object):
@@ -20,9 +18,6 @@ class cinv(object):
         self.lib_dir = lib_dir  # Output directory
         self.lmax = lmax  # Lmax to use for filtering
         self.eps_min = eps_min  # Tolerance
-
-        if use_mpi == True:
-            from cinv_utils import mpi
 
     def get_tal(self, a, lmax=None):
         if lmax is None:
@@ -124,17 +119,17 @@ class cinv_t(cinv):
     """
 
     def __init__(
-        self,
-        lib_dir,
-        lmax,
-        nside,
-        cl,
-        nl_res,
-        ninv,
-        tf1d,
-        tf2d,
-        eps_min=1.0e-5,
-        ellscale=True,
+            self,
+            lib_dir,
+            lmax,
+            nside,
+            cl,
+            nl_res,
+            ninv,
+            tf1d,
+            tf2d,
+            eps_min=1.0e-5,
+            ellscale=True,
     ):
         assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
             lib_dir,
@@ -160,7 +155,7 @@ class cinv_t(cinv):
         self.rescal_cl = rescal_cl
 
         # rescaled cls (Dls by default)
-        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
+        dl = {k: rescal_cl ** 2 * cl[k][: lmax + 1] for k in cl.keys()}
 
         # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
         # cltt has l^2 and tf^2 has 1/l^2 factor already.
@@ -193,10 +188,10 @@ class cinv_t(cinv):
         ninv = self.n_inv_filt.n_inv
         npix = len(ninv[:])
         NlevT_uKamin = (
-            np.sqrt(4.0 * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0]))
-            * 180.0
-            * 60.0
-            / np.pi
+                np.sqrt(4.0 * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0]))
+                * 180.0
+                * 60.0
+                / np.pi
         )
         print("cinv_t::noiseT_uk_arcmin = %.3f" % NlevT_uKamin)
 
@@ -204,8 +199,8 @@ class cinv_t(cinv):
         tf1d = self.tf1d
 
         ftl = cinv_utils.cli(
-            s_cls["tt"][0 : self.lmax + 1]
-            + (NlevT_uKamin * np.pi / 180.0 / 60.0) ** 2 / tf1d[0 : self.lmax + 1] ** 2
+            s_cls["tt"][0: self.lmax + 1]
+            + (NlevT_uKamin * np.pi / 180.0 / 60.0) ** 2 / tf1d[0: self.lmax + 1] ** 2
         )
         ftl[0:2] = 0.0
 
@@ -257,25 +252,21 @@ class cinv_p(cinv):
     """
 
     def __init__(
-        self,
-        lib_dir,
-        lmax,
-        nside,
-        cl,
-        nl_res,
-        ninv,
-        tf1dE,
-        tf1dB,
-        tf2dE,
-        tf2dB,
-        eps_min=1.0e-5,
-        ellscale=True,
-    ):
-        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
+            self,
             lib_dir,
             lmax,
             nside,
-        )
+            cl,
+            nl_res,
+            ninv,
+            tf1dE,
+            tf1dB,
+            tf2dE,
+            tf2dB,
+            eps_min=1.0e-5,
+            ellscale=True,
+    ):
+        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (lib_dir, lmax, nside)
         assert isinstance(ninv, list)
         super(cinv_p, self).__init__(lib_dir, lmax, eps_min)
 
@@ -295,7 +286,7 @@ class cinv_p(cinv):
         self.rescal_cl = rescal_cl
 
         # rescaled cls (Dls by default)
-        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
+        dl = {k: rescal_cl ** 2 * cl[k][: lmax + 1] for k in cl.keys()}
 
         # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
         # cltt has l^2 and tf^2 has 1/l^2 factor already.
@@ -304,7 +295,7 @@ class cinv_p(cinv):
 
         tf1dE = tf1dE[: lmax + 1] * cinv_utils.cli(rescal_cl)
         tf1dB = tf1dB[: lmax + 1] * cinv_utils.cli(rescal_cl)
-        
+
         tf2dE = hp.almxfl(tf2dE, cinv_utils.cli(rescal_cl))
         tf2dB = hp.almxfl(tf2dB, cinv_utils.cli(rescal_cl))
 
@@ -313,7 +304,7 @@ class cinv_p(cinv):
         self.dl = dl
         self.tf1dE = tf1dE
         self.tf1dB = tf1dB
-        
+
         self.tf2dE = tf2dE
         self.tf2dB = tf2dB
         self.ninv = ninv
@@ -321,7 +312,7 @@ class cinv_p(cinv):
 
         # Set up s_inv_filt and n_inv_filt
         self.s_inv_filt = hp_utils.jit(
-            opfilt_hp_p.SkyInverseFilter, dl, nl_res, lmax, tf1dE, tf1dB, tf2dE, tf2dB  
+            opfilt_hp_p.SkyInverseFilter, dl, nl_res, lmax, tf1dE, tf1dB, tf2dE, tf2dB
         )
         self.n_inv_filt = hp_utils.jit(
             opfilt_hp_p.NoiseInverseFilter, ninv, tf1dE, tf1dB, tf2dE, tf2dB
@@ -332,14 +323,8 @@ class cinv_p(cinv):
         if soltn is not None:
             print("soltn is not None")
             assert len(soltn) == 2
-            assert hp.Alm.getlmax(soltn[0].size) == self.lmax, (
-                hp.Alm.getlmax(soltn[0].size),
-                self.lmax,
-            )
-            assert hp.Alm.getlmax(soltn[1].size) == self.lmax, (
-                hp.Alm.getlmax(soltn[1].size),
-                self.lmax,
-            )
+            assert hp.Alm.getlmax(soltn[0].size) == self.lmax, (hp.Alm.getlmax(soltn[0].size), self.lmax)
+            assert hp.Alm.getlmax(soltn[1].size) == self.lmax, (hp.Alm.getlmax(soltn[1].size), self.lmax)
             talm = hp_utils.eblm([soltn[0], soltn[1]])
         else:
             print("soltn is None")
@@ -361,41 +346,41 @@ class cinv_p(cinv):
             ninv = self.n_inv_filt.n_inv[0]
             npix = len(ninv)
             NlevP_uKamin = (
-                np.sqrt(
-                    4.0 * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0])
-                )
-                * 180.0
-                * 60.0
-                / np.pi
+                    np.sqrt(
+                        4.0 * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0])
+                    )
+                    * 180.0
+                    * 60.0
+                    / np.pi
             )
         else:
             assert len(self.ninv) == 3
             ninv = self.n_inv_filt.n_inv
             NlevP_uKamin = (
-                0.5
-                * np.sqrt(
-                    4.0
-                    * np.pi
-                    / len(ninv[0])
-                    / np.sum(ninv[0])
-                    * len(np.where(ninv[0] != 0.0)[0])
-                )
-                * 180.0
-                * 60.0
-                / np.pi
+                    0.5
+                    * np.sqrt(
+                4.0
+                * np.pi
+                / len(ninv[0])
+                / np.sum(ninv[0])
+                * len(np.where(ninv[0] != 0.0)[0])
+            )
+                    * 180.0
+                    * 60.0
+                    / np.pi
             )
             NlevP_uKamin += (
-                0.5
-                * np.sqrt(
-                    4.0
-                    * np.pi
-                    / len(ninv[2])
-                    / np.sum(ninv[2])
-                    * len(np.where(ninv[2] != 0.0)[0])
-                )
-                * 180.0
-                * 60.0
-                / np.pi
+                    0.5
+                    * np.sqrt(
+                4.0
+                * np.pi
+                / len(ninv[2])
+                / np.sum(ninv[2])
+                * len(np.where(ninv[2] != 0.0)[0])
+            )
+                    * 180.0
+                    * 60.0
+                    / np.pi
             )
 
         print("cinv_p::noiseP_uk_arcmin = %.3f" % NlevP_uKamin)
@@ -403,16 +388,16 @@ class cinv_p(cinv):
         s_cls = self.cl
         tf1dE = self.n_inv_filt.tf1dE
         tf1dB = self.n_inv_filt.tf1dB
-        
+
         fel = cinv_utils.cli(
             s_cls["ee"][: self.lmax + 1]
             + (NlevP_uKamin * np.pi / 180.0 / 60.0) ** 2
-            * cinv_utils.cli(tf1dE[0 : self.lmax + 1] ** 2)
+            * cinv_utils.cli(tf1dE[0: self.lmax + 1] ** 2)
         )
         fbl = cinv_utils.cli(
             s_cls["bb"][: self.lmax + 1]
             + (NlevP_uKamin * np.pi / 180.0 / 60.0) ** 2
-            * cinv_utils.cli(tf1dB[0 : self.lmax + 1] ** 2)
+            * cinv_utils.cli(tf1dB[0: self.lmax + 1] ** 2)
         )
 
         fel[0:2] *= 0.0
@@ -473,19 +458,19 @@ class cinv_tp(cinv):
     """
 
     def __init__(
-        self,
-        lib_dir,
-        lmax,
-        nside,
-        cl,
-        nl_res,
-        ninv,
-        tf1d_t,
-        tf1d_p,
-        tf2d_t,
-        tf2d_p,
-        eps_min=1.0e-5,
-        ellscale=False,
+            self,
+            lib_dir,
+            lmax,
+            nside,
+            cl,
+            nl_res,
+            ninv,
+            tf1d_t,
+            tf1d_p,
+            tf2d_t,
+            tf2d_p,
+            eps_min=1.0e-5,
+            ellscale=False,
     ):
         assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
             lib_dir,
@@ -511,7 +496,7 @@ class cinv_tp(cinv):
         self.rescal_cl = rescal_cl
 
         # rescaled cls (Dls by default)
-        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
+        dl = {k: rescal_cl ** 2 * cl[k][: lmax + 1] for k in cl.keys()}
 
         # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
         # cltt has l^2 and tf^2 has 1/l^2 factor already.
@@ -582,7 +567,7 @@ class library_sepTP(object):
     """
 
     def __init__(
-        self, lib_dir, sim_lib, cl_weights, lfilt=None, soltn_lib=None, add_noise=False
+            self, lib_dir, sim_lib, cl_weights, lfilt=None, soltn_lib=None, add_noise=False
     ):
         self.lib_dir = lib_dir
         self.sim_lib = sim_lib
@@ -833,14 +818,14 @@ class library_cinv_sepTP(library_sepTP):
     """
 
     def __init__(
-        self,
-        lib_dir,
-        sim_lib,
-        cinvt,
-        cinvp,
-        cl_weights,
-        soltn_lib=None,
-        lfilt=None,
+            self,
+            lib_dir,
+            sim_lib,
+            cinvt,
+            cinvp,
+            cl_weights,
+            soltn_lib=None,
+            lfilt=None,
     ):
         self.cinv_t = cinvt
         self.cinv_p = cinvp
@@ -874,7 +859,6 @@ class library_cinv_sepTP(library_sepTP):
         return self.cinv_p.apply_ivf(pmap, soltn=soltn)
 
 
-
 class library_jTP(object):
     """Template class for CMB inverse-variance and Wiener-filtering library.
 
@@ -894,7 +878,6 @@ class library_jTP(object):
         self.cl = cl_weights
         self.lfilt = lfilt
         self.soltn_lib = soltn_lib
-
 
     def _get_alms(self, a, idx):
         assert a in ["t", "e", "b", "teb"]
@@ -1004,13 +987,13 @@ class library_cinv_jTP(library_jTP):
     """
 
     def __init__(
-        self,
-        lib_dir,
-        sim_lib,
-        cinv_jtp: cinv_tp,
-        cl_weights: dict,
-        soltn_lib=None,
-        lfilt=None,
+            self,
+            lib_dir,
+            sim_lib,
+            cinv_jtp: cinv_tp,
+            cl_weights: dict,
+            soltn_lib=None,
+            lfilt=None,
     ):
         self.cinv_tp = cinv_jtp
         super(library_cinv_jTP, self).__init__(

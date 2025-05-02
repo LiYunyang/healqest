@@ -1,11 +1,9 @@
-import sys, time, copy, os, io
+import sys, time, copy, os
 import numpy as np
 import pickle as pk
 import hashlib
-#from spt3g import core, maps
 from contextlib import contextmanager
-sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
-import cd_monitors, cd_solve, cg_solve
+
 
 def read_map_frame(path, id=None):
     """
@@ -14,8 +12,8 @@ def read_map_frame(path, id=None):
     if not os.path.exists(path):
         raise OSError("File {} does not exist".format(path))
 
-    if path.split(".")[-1] == 'g3': 
-        for frame in core.G3File(path): 
+    if path.split(".")[-1] == 'g3':
+        for frame in core.G3File(path):
             if (frame["Id"] == id or id is None) and frame.type == core.G3FrameType.Map:
                 return frame
         raise RuntimeError("Map frame {} not found G3File.".format(id))
@@ -23,6 +21,7 @@ def read_map_frame(path, id=None):
         return maps.fitsio.load_skymap_fits(path)
 
     raise OSError("G3File {} does not contain a map frame .".format(path))
+
 
 def hash_check(hash1, hash2, ignore=[], keychain=[]):
     """
@@ -56,10 +55,10 @@ def hash_check(hash1, hash2, ignore=[], keychain=[]):
 
         def hashfail(msg=None):
             logmsg = "ERROR: HASHCHECK FAIL AT KEY = {}\n{}\nV1 = {}\nV2 = {}"
-            #core.log_fatal(
+            # core.log_fatal(
             #    logmsg.format(":".join(keychain + [str(key)]), msg or "", v1, v2),
             #    unit="Hashcheck",
-            #)
+            # )
 
         if type(v1) != type(v2):
             hashfail("UNEQUAL TYPES")
@@ -72,6 +71,7 @@ def hash_check(hash1, hash2, ignore=[], keychain=[]):
             if not (v1 == v2):
                 hashfail("UNEQUAL VALUES")
 
+
 def clhash(cl, dtype=np.float16):
     """Hash for generic numpy array.
     from plancklens/utils.py
@@ -80,6 +80,7 @@ def clhash(cl, dtype=np.float16):
     """
     return hashlib.sha1(np.copy(cl.astype(dtype), order='C')).hexdigest()
 
+
 def mask_hash(m, dtype=bool):
     if m is None:
         return "none"
@@ -87,46 +88,49 @@ def mask_hash(m, dtype=bool):
         mh = mask_hash(m[0], dtype=dtype)
         for m2 in m[1:]:
             mh += mask_hash(m2, dtype=dtype)
-        return mh 
+        return mh
     if isinstance(m, str):
-        return m.replace('/','_sl_').replace('.', '_')
+        return m.replace('/', '_sl_').replace('.', '_')
     elif isinstance(m, np.ndarray):
         return utils.clhash(m, dtype=dtype)
     elif callable(m):
         return 'callable'
     assert 0, 'not implemented'
 
+
 def cli(cl):
     ret = np.zeros_like(cl)
     ret[np.where(cl != 0.)] = 1. / cl[np.where(cl != 0.)]
     return ret
 
+
 def cache_pk(suffix="", trim_lm=True):
     """decorator which can be used to cache the output of
     a function using pickle.
     """
-    #suffix and trim_lm arguments
-    #here are for backwards compatibility and can be
-    #removed at some point. ditto for the format of 'tfname'
+
+    # suffix and trim_lm arguments
+    # here are for backwards compatibility and can be
+    # removed at some point. ditto for the format of 'tfname'
 
     def cache_lm_func(f):
         def cachelm(self, *args, **kwargs):
             fname = f.__name__
             if (
-                (trim_lm == True)
-                and (len(fname) > 3)
-                and (fname[-3:] == "_lm")
+                    (trim_lm == True)
+                    and (len(fname) > 3)
+                    and (fname[-3:] == "_lm")
             ):
                 fname = fname[0:-3]
 
             tfname = os.path.join(self.lib_dir, "cache_lm_%s%s_%s.pk"
-                % (suffix,
-                   hashlib.sha1(
-                       np.ascontiguousarray(args + list(kwargs.items())[0])
-                   ).hexdigest(),
-                   fname,
-                  )
-            )
+                                  % (suffix,
+                                     hashlib.sha1(
+                                         np.ascontiguousarray(args + list(kwargs.items())[0])
+                                     ).hexdigest(),
+                                     fname,
+                                     )
+                                  )
             if not os.path.exists(tfname):
                 core.log_notice("caching lm: %s" % tfname)
                 lm = f(self, *args, **kwargs)
@@ -138,8 +142,8 @@ def cache_pk(suffix="", trim_lm=True):
                 core.log_notice("caching lm: %s" % tfname)
                 lm = f(self, *args, **kwargs)
                 pk.dump(lm, open(tfname, "wb"))
-                #core.log_notice("wrap_cachelm:: failed to load ", tfname)
-                #assert 0
+                # core.log_notice("wrap_cachelm:: failed to load ", tfname)
+                # assert 0
 
         return cachelm
 
@@ -259,9 +263,10 @@ class DeltaTime(object):
         self.dt = _dt
 
     def __str__(self):
-        return ('%02d:%02d:%02d'% (np.floor(self.dt / 60 / 60),
-                                 np.floor(np.mod(self.dt, 60*60) / 60 ),
-                                 np.floor(np.mod(self.dt, 60))))
+        return ('%02d:%02d:%02d' % (np.floor(self.dt / 60 / 60),
+                                    np.floor(np.mod(self.dt, 60 * 60) / 60),
+                                    np.floor(np.mod(self.dt, 60))))
+
     def __int__(self):
         return int(self.dt)
 
@@ -289,12 +294,12 @@ class StopWatch(object):
         self.lt = lt
         return ret
 
+
 # -- below cribbed from
 # http://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python
 
 @contextmanager
 def stdout_redirected(to=os.devnull):
-
     try:
         __IPYTHON__
     except NameError:

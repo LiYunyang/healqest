@@ -5,19 +5,15 @@ maps.
 Modified from and built on plancklens/qcinv/opfilt_pp.py
 """
 
-import os,sys
-import hashlib
-import numpy  as np
+import numpy as np
 import healpy as hp
 
 from healpy import alm2map_spin, map2alm_spin
-
-sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
-import hp_utils
-import cinv_utils
+from . import cinv_utils, hp_utils
 
 clhash = cinv_utils.clhash
 eblm = hp_utils.eblm
+
 
 def calc_prep(maps, s_inv_filt, n_inv_filt):
     qmap = np.copy(hp_utils.read_map(maps[0]))
@@ -36,10 +32,12 @@ def calc_prep(maps, s_inv_filt, n_inv_filt):
         blm *= n_inv_filt.tf2dB * npix / (4. * np.pi)
     return eblm([elm, blm])
 
+
 def calc_fini(alm, s_inv_filt, n_inv_filt):
     ret = s_inv_filt.calc(alm)
     alm.elm[:] = ret.elm[:]
     alm.blm[:] = ret.blm[:]
+
 
 class DotOperator:
     def __init__(self):
@@ -50,8 +48,10 @@ class DotOperator:
         tcl = hp.alm2cl(alm1.elm, alm2.elm) + hp.alm2cl(alm1.blm, alm2.blm)
         return np.sum(tcl[2:] * (2. * np.arange(2, alm1.lmax + 1) + 1))
 
+
 class ForwardOperator:
     """Missing doc. """
+
     def __init__(self, s_inv_filt, n_inv_filt):
         self.s_inv_filt = s_inv_filt
         self.n_inv_filt = n_inv_filt
@@ -69,20 +69,22 @@ class ForwardOperator:
         slm = self.s_inv_filt.calc(alm)
         return nlm + slm
 
+
 class PreOperatorDiag:
     """Missing doc. """
+
     def __init__(self, s_cls, n_inv_filt, nl_res=None):
         lmax = len(n_inv_filt.tf1dE) - 1
         clbb = s_cls['bb'][:lmax + 1]
         clee = s_cls['ee'][:lmax + 1]
-        if nl_res is None: nl_res = {key: np.zeros(lmax+1) for key in s_cls}
+        if nl_res is None: nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
 
         ninv_fel, ninv_fbl = n_inv_filt.get_febl()
 
-        filt_e = cinv_utils.cli(clee + nl_res['ee']*cinv_utils.cli(n_inv_filt.tf1dE[:lmax + 1] ** 2))
-        filt_e += ninv_fel[:lmax+1]
-        filt_b = cinv_utils.cli(clbb + nl_res['bb']*cinv_utils.cli(n_inv_filt.tf1dB[:lmax + 1] ** 2))
-        filt_b += ninv_fbl[:lmax+1]
+        filt_e = cinv_utils.cli(clee + nl_res['ee'] * cinv_utils.cli(n_inv_filt.tf1dE[:lmax + 1] ** 2))
+        filt_e += ninv_fel[:lmax + 1]
+        filt_b = cinv_utils.cli(clbb + nl_res['bb'] * cinv_utils.cli(n_inv_filt.tf1dB[:lmax + 1] ** 2))
+        filt_b += ninv_fbl[:lmax + 1]
 
         self.filt_e = cinv_utils.cli(filt_e)
         self.filt_b = cinv_utils.cli(filt_b)
@@ -95,16 +97,16 @@ class PreOperatorDiag:
         rblm = hp.almxfl(alm.blm, self.filt_b)
         return eblm([relm, rblm])
 
-class SkyInverseFilter: #alm_filter_sinv_nocorr:
- 
+
+class SkyInverseFilter:  # alm_filter_sinv_nocorr:
+
     def __init__(self, s_cls, nl_res, lmax, tf1dE, tf1dB, tf2dE, tf2dB):
-        
         clee = s_cls.get('ee', np.zeros(lmax + 1))[:lmax + 1]
         clbb = s_cls.get('bb', np.zeros(lmax + 1))[:lmax + 1]
-        
-        nlee = nl_res.get('ee', np.zeros(lmax + 1))[:lmax + 1]/tf1dE**2
-        nlbb = nl_res.get('bb', np.zeros(lmax + 1))[:lmax + 1]/tf1dB**2
-                
+
+        nlee = nl_res.get('ee', np.zeros(lmax + 1))[:lmax + 1] / tf1dE ** 2
+        nlbb = nl_res.get('bb', np.zeros(lmax + 1))[:lmax + 1] / tf1dB ** 2
+
         clee_2d = hp_utils.cl2almformat(clee)
         clbb_2d = hp_utils.cl2almformat(clbb)
 
@@ -113,15 +115,13 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
 
         self.e_slinv = cinv_utils.cli(clee_2d + nlee_2d)
         self.b_slinv = cinv_utils.cli(clbb_2d + nlbb_2d)
-    
 
         self.lmax = lmax
         self.s_cls = s_cls
-        self.tf2dE  = tf2dE
-        self.tf2dB  = tf2dB
+        self.tf2dE = tf2dE
+        self.tf2dB = tf2dB
 
         self.nl_res = nl_res
-
 
     def calc(self, alm):
         relm = alm.elm * self.e_slinv
@@ -129,9 +129,10 @@ class SkyInverseFilter: #alm_filter_sinv_nocorr:
 
         return eblm([relm, rblm])
 
+
 class NoiseInverseFilter:
     def __init__(self, n_inv, tf1dE, tf1dB, tf2dE, tf2dB, nlev_febl=None):
-                 #, marge_qmaps=(), marge_umaps=()):
+        # , marge_qmaps=(), marge_umaps=()):
         """Inverse-variance filtering instance for polarization only
 
             Args:
@@ -148,7 +149,7 @@ class NoiseInverseFilter:
 
         self.tf1dE = tf1dE
         self.tf1dB = tf1dB
-        
+
         self.tf2dE = tf2dE
         self.tf2dB = tf2dB
 
@@ -157,7 +158,7 @@ class NoiseInverseFilter:
         self.n_inv = None
 
         self.nlev_febl = nlev_febl
-        self._n_inv = n_inv # could be paths or list of paths
+        self._n_inv = n_inv  # could be paths or list of paths
         self._load_ninv()
 
     def _load_ninv(self):
@@ -183,7 +184,7 @@ class NoiseInverseFilter:
             nlev_febl = 10800. / np.sqrt(np.sum(0.5 * (self.n_inv[0] + self.n_inv[2])) / (4.0 * np.pi)) / np.pi
         else:
             assert 0
-        print("ninv_febl: using %.2f uK-amin noise Cl"%nlev_febl)
+        print("ninv_febl: using %.2f uK-amin noise Cl" % nlev_febl)
         return nlev_febl
 
     def get_ninv(self):
@@ -202,8 +203,8 @@ class NoiseInverseFilter:
     def get_febl(self):
         if self.nlev_febl is None:
             self.nlev_febl = self._calc_febl()
-        n_inv_cl_e = self.tf1dE ** 2  / (self.nlev_febl / 180. / 60. * np.pi) ** 2
-        n_inv_cl_b = self.tf1dB ** 2  / (self.nlev_febl / 180. / 60. * np.pi) ** 2
+        n_inv_cl_e = self.tf1dE ** 2 / (self.nlev_febl / 180. / 60. * np.pi) ** 2
+        n_inv_cl_b = self.tf1dB ** 2 / (self.nlev_febl / 180. / 60. * np.pi) ** 2
         return n_inv_cl_e, n_inv_cl_b
 
     def apply_alm(self, alm):
@@ -252,9 +253,3 @@ class NoiseInverseFilter:
             del qmap_copy
         else:
             assert 0
-
-
-
-
-
-

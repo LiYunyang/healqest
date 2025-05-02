@@ -5,18 +5,15 @@ maps.
 Modified from and built on plancklens/qcinv/opfilt_tp.py
 """
 
-import os,sys
-import numpy  as np
+import numpy as np
 import healpy as hp
 
-sys.path.insert(0,os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
-print(os.path.abspath(os.path.join(os.path.dirname(__file__), './')))
-import hp_utils
-import cinv_utils
+from . import hp_utils, cinv_utils
 
 clhash = cinv_utils.clhash
 teblm = hp_utils.teblm
-_cli  = cinv_utils.cli
+_cli = cinv_utils.cli
+
 
 def calc_prep(maps, s_inv_filt, n_inv_filt):
     tmap, qmap, umap = np.copy(maps[0]), np.copy(maps[1]), np.copy(maps[2])
@@ -26,7 +23,6 @@ def calc_prep(maps, s_inv_filt, n_inv_filt):
     npix = len(tmap)
 
     n_inv_filt.apply_map([tmap, qmap, umap])
-
 
     tlm, elm, blm = hp.map2alm([tmap, qmap, umap], lmax=lmax, iter=0, pol=True)
     tlm *= npix / (4. * np.pi)
@@ -44,26 +40,29 @@ def calc_prep(maps, s_inv_filt, n_inv_filt):
 
     return teblm([tlm, elm, blm])
 
-def calc_fini(alm, s_inv_filt, n_inv_filt): 
+
+def calc_fini(alm, s_inv_filt, n_inv_filt):
     ret = s_inv_filt.calc(alm)
     alm.tlm[:] = ret.tlm[:]
     alm.elm[:] = ret.elm[:]
     alm.blm[:] = ret.blm[:]
+
 
 class DotOperator:
     def __init__(self):
         pass
 
     def __call__(self, alm1, alm2):
-        #CHECKED WITH PLANCK LENSING 
+        # CHECKED WITH PLANCK LENSING
         assert alm1.lmaxt == alm2.lmaxt, (alm1.lmaxt, alm2.lmaxt)
         assert alm1.lmaxe == alm2.lmaxe, (alm1.lmaxe, alm2.lmaxe)
         assert alm1.lmaxb == alm2.lmaxb, (alm1.lmaxb, alm2.lmaxb)
 
-        ret =  np.sum(hp.alm2cl(alm1.tlm, alm2.tlm) * (2. * np.arange(0, alm1.lmaxt + 1) + 1))
+        ret = np.sum(hp.alm2cl(alm1.tlm, alm2.tlm) * (2. * np.arange(0, alm1.lmaxt + 1) + 1))
         ret += np.sum(hp.alm2cl(alm1.elm, alm2.elm) * (2. * np.arange(0, alm1.lmaxe + 1) + 1))
         ret += np.sum(hp.alm2cl(alm1.blm, alm2.blm) * (2. * np.arange(0, alm1.lmaxb + 1) + 1))
         return ret
+
 
 class ForwardOperator:
     def __init__(self, s_inv_filt, n_inv_filt):
@@ -84,14 +83,16 @@ class ForwardOperator:
         slm = self.s_inv_filt.calc(alm)
         return nlm + slm
 
+
 class PreOperatorDiag:
     def __init__(self, s_cls, n_inv_filt, nl_res=None, te_only=True):
         # diagonal pre-conditioner for conjugate-gradient solver
         # skip n_ell component (fine if white noise in ninv has most of the non-signal)
         lmax = len(n_inv_filt.tf1d_t) - 1
-        if nl_res is None: nl_res = {key: np.zeros(lmax+1) for key in s_cls}
+        if nl_res is None: nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
 
-        s_inv_filt = SkyInverseFilter(s_cls, nl_res, lmax, n_inv_filt.tf1d_t, n_inv_filt.tf1d_p, n_inv_filt.tf2d_t, n_inv_filt.tf2d_p)
+        s_inv_filt = SkyInverseFilter(s_cls, nl_res, lmax, n_inv_filt.tf1d_t, n_inv_filt.tf1d_p, n_inv_filt.tf2d_t,
+                                      n_inv_filt.tf2d_p)
         assert ((s_inv_filt.lmax + 1) >= len(n_inv_filt.tf1d_t))
 
         # Compute noise level
@@ -106,7 +107,7 @@ class PreOperatorDiag:
         # Probably offset because this is signal + noise res whereas it shoudl be signal + total res  
         flmat = np.linalg.pinv(flmat)
         self.flmat = flmat
-        self.te_only = te_only #s_inv_filt.te_only
+        self.te_only = te_only  # s_inv_filt.te_only
 
     def __call__(self, talm):
         return self.calc(talm)
@@ -118,13 +119,17 @@ class PreOperatorDiag:
             relm = hp.almxfl(alm.tlm, tmat[:, 1, 0]) + hp.almxfl(alm.elm, tmat[:, 1, 1])
             rblm = hp.almxfl(alm.blm, tmat[:, 2, 2])
         else:
-            rtlm = hp.almxfl(alm.tlm, tmat[:, 0, 0]) + hp.almxfl(alm.elm, tmat[:, 0, 1]) + hp.almxfl(alm.blm, tmat[:, 0, 2])
-            relm = hp.almxfl(alm.tlm, tmat[:, 1, 0]) + hp.almxfl(alm.elm, tmat[:, 1, 1]) + hp.almxfl(alm.blm, tmat[:, 1, 2])
-            rblm = hp.almxfl(alm.tlm, tmat[:, 2, 0]) + hp.almxfl(alm.elm, tmat[:, 2, 1]) + hp.almxfl(alm.blm, tmat[:, 2, 2])
+            rtlm = hp.almxfl(alm.tlm, tmat[:, 0, 0]) + hp.almxfl(alm.elm, tmat[:, 0, 1]) + hp.almxfl(alm.blm,
+                                                                                                     tmat[:, 0, 2])
+            relm = hp.almxfl(alm.tlm, tmat[:, 1, 0]) + hp.almxfl(alm.elm, tmat[:, 1, 1]) + hp.almxfl(alm.blm,
+                                                                                                     tmat[:, 1, 2])
+            rblm = hp.almxfl(alm.tlm, tmat[:, 2, 0]) + hp.almxfl(alm.elm, tmat[:, 2, 1]) + hp.almxfl(alm.blm,
+                                                                                                     tmat[:, 2, 2])
         return teblm([rtlm, relm, rblm])
 
-class SkyInverseFilter: #alm_filter_sinv:
-    #def __init__(self, s_cls, lmax, n_cls=None, tf2d=None, tf2d_eb=None,
+
+class SkyInverseFilter:  # alm_filter_sinv:
+    # def __init__(self, s_cls, lmax, n_cls=None, tf2d=None, tf2d_eb=None,
     #             b_transf=None, b_transf_eb=None, cmb2d=None):
     def __init__(self, s_cls, nl_res, lmax, tf1d_t, tf1d_p, tf2d_t, tf2d_p):
 
@@ -134,16 +139,15 @@ class SkyInverseFilter: #alm_filter_sinv:
         self.tf2d_p = tf2d_p
         self.s_cls = s_cls
         self.nl_res = nl_res
-        
+
         cltt = s_cls.get('tt', np.zeros(lmax + 1))[:lmax + 1]
         clte = s_cls.get('te', np.zeros(lmax + 1))[:lmax + 1]
         clee = s_cls.get('ee', np.zeros(lmax + 1))[:lmax + 1]
         clbb = s_cls.get('bb', np.zeros(lmax + 1))[:lmax + 1]
-        
-        nltt = nl_res.get('tt', np.zeros(lmax + 1))[:lmax + 1]/tf1d_t**2
-        nlee = nl_res.get('ee', np.zeros(lmax + 1))[:lmax + 1]/tf1d_p**2
-        nlbb = nl_res.get('bb', np.zeros(lmax + 1))[:lmax + 1]/tf1d_p**2
-        
+
+        nltt = nl_res.get('tt', np.zeros(lmax + 1))[:lmax + 1] / tf1d_t ** 2
+        nlee = nl_res.get('ee', np.zeros(lmax + 1))[:lmax + 1] / tf1d_p ** 2
+        nlbb = nl_res.get('bb', np.zeros(lmax + 1))[:lmax + 1] / tf1d_p ** 2
 
         cltt_2d = hp_utils.cl2almformat(cltt)
         clte_2d = hp_utils.cl2almformat(clte)
@@ -155,19 +159,19 @@ class SkyInverseFilter: #alm_filter_sinv:
         nlbb_2d = hp_utils.cl2almformat(nlbb)
 
         # FIll in matrix with elements Clxx + |nlm_x|^2/TF^2
-        slmat_alm = np.zeros((len(tf2d_t), 3,3))
+        slmat_alm = np.zeros((len(tf2d_t), 3, 3))
         slmat_alm[:, 0, 0] = cltt_2d + nltt_2d
         slmat_alm[:, 0, 1] = clte_2d
         slmat_alm[:, 1, 0] = clte_2d
-        slmat_alm[:, 1, 1] = clee_2d + nlee_2d 
+        slmat_alm[:, 1, 1] = clee_2d + nlee_2d
         slmat_alm[:, 2, 2] = clbb_2d + nlbb_2d
-            
-        #slmat_alm[slmat_alm==0]=1e30
+
+        # slmat_alm[slmat_alm==0]=1e30
         self.slinv_alm = np.linalg.pinv(slmat_alm)
 
         print('--------------------')
         print(np.max(self.slinv_alm))
-        #import pdb;pdb.set_trace()
+        # import pdb;pdb.set_trace()
         '''
         #import pdb; pdb.set_trace()
         if self.n_cls is not None:
@@ -189,18 +193,18 @@ class SkyInverseFilter: #alm_filter_sinv:
 
         if b_transf_eb is None: b_transf_eb = b_transf
         '''
- 
-        #always initialize diagonal (no l,m difference) S-inv; for PreOperatorDiag
+
+        # always initialize diagonal (no l,m difference) S-inv; for PreOperatorDiag
         slmat = np.zeros((lmax + 1, 3, 3))  # matrix of TEB correlations at each l.
-        slmat[:, 0, 0] = cltt+nltt 
-        slmat[:, 0, 1] = clte      
+        slmat[:, 0, 0] = cltt + nltt
+        slmat[:, 0, 1] = clte
         slmat[:, 1, 0] = slmat[:, 0, 1]
-        slmat[:, 0, 2] = clte*0    
+        slmat[:, 0, 2] = clte * 0
         slmat[:, 2, 0] = slmat[:, 0, 2]
-        slmat[:, 1, 1] = clee+nlee
-        slmat[:, 1, 2] = clee*0 
+        slmat[:, 1, 1] = clee + nlee
+        slmat[:, 1, 2] = clee * 0
         slmat[:, 2, 1] = slmat[:, 1, 2]
-        slmat[:, 2, 2] = clbb+nlbb
+        slmat[:, 2, 2] = clbb + nlbb
         slinv = np.linalg.pinv(slmat)
 
         self.slinv = slinv
@@ -217,7 +221,7 @@ class SkyInverseFilter: #alm_filter_sinv:
         print("DONE SkyInverseFilter--------------------")
 
     def calc(self, alm):
-        #tmat = self.slinv
+        # tmat = self.slinv
 
         if self.nl_res is not None and self.tf2d_t is not None:
             assert self.te_only, "only has te_only case"
@@ -226,12 +230,13 @@ class SkyInverseFilter: #alm_filter_sinv:
             relm = alm.tlm * self.slinv_alm[:, 1, 0] + alm.elm * self.slinv_alm[:, 1, 1]
             rblm = alm.blm * self.slinv_alm[:, 2, 2]
         else:
-          sys.exit('bad path -- SkyInverseFilter/calc(self, alm):')
+            sys.exit('bad path -- SkyInverseFilter/calc(self, alm):')
 
         return teblm([rtlm, relm, rblm])
 
     def hashdict(self):
         return {'slinv': clhash(self.slinv.flatten())}
+
 
 class NoiseInverseFilter:
     def __init__(self, n_inv, tf1d_t, tf1d_p, tf2d_t, tf2d_p):
@@ -258,15 +263,14 @@ class NoiseInverseFilter:
         self.npix = npix
         self.nside = nside
 
-
         self.tf1d_t = tf1d_t
         self.tf1d_p = tf1d_p if tf1d_p is not None else self.tf1d_t
-        assert len(self.tf1d_t) == len(self.tf1d_p) 
-        #self.b_transf = (self.b_transf_t + self.b_transf_e + self.b_transf_t) / 3.
+        assert len(self.tf1d_t) == len(self.tf1d_p)
+        # self.b_transf = (self.b_transf_t + self.b_transf_e + self.b_transf_t) / 3.
 
         self.tf2d_t = tf2d_t
         self.tf2d_p = tf2d_p if tf2d_p is not None else tf2d_t
-    
+
     def get_ftebl(self):
         if len(self.n_inv) == 2:  # TT, 1/2(QQ+UU)
             n_inv_cl_t = np.sum(self.n_inv[0]) / (4.0 * np.pi) * self.tf1d_t ** 2
@@ -282,7 +286,7 @@ class NoiseInverseFilter:
             return n_inv_cl_t, n_inv_cl_e, n_inv_cl_b
         else:
             sys.exit('bad path -- NoiseInverseFilter/get_ftebl(self)/else:')
-    
+
     def hashdict(self):
         sys.exit('bad path -- NoiseInverseFilter/hashdict(self):')
         return {'n_inv': [clhash(n) for n in self.n_inv],
@@ -295,9 +299,9 @@ class NoiseInverseFilter:
 
         if self.tf2d_t is None:
             sys.exit('bad path -- NoiseInverseFilter/apply_alm(self, alm):')
-            #hp.almxfl(alm.tlm, self.b_transf_t, inplace=True)
-            #hp.almxfl(alm.elm, self.b_transf_e, inplace=True)
-            #hp.almxfl(alm.blm, self.b_transf_b, inplace=True)
+            # hp.almxfl(alm.tlm, self.b_transf_t, inplace=True)
+            # hp.almxfl(alm.elm, self.b_transf_e, inplace=True)
+            # hp.almxfl(alm.blm, self.b_transf_b, inplace=True)
         else:
             alm.tlm *= self.tf2d_t
             alm.elm *= self.tf2d_p
@@ -319,9 +323,9 @@ class NoiseInverseFilter:
 
         if self.tf2d_t is None:
             sys.exit('bad path -- NoiseInverseFilter/if self.tf2d_t is None:')
-            #hp.almxfl(alm.tlm, self.b_transf_t, inplace=True)
-            #hp.almxfl(alm.elm, self.b_transf_e, inplace=True)
-            #hp.almxfl(alm.blm, self.b_transf_b, inplace=True)
+            # hp.almxfl(alm.tlm, self.b_transf_t, inplace=True)
+            # hp.almxfl(alm.elm, self.b_transf_e, inplace=True)
+            # hp.almxfl(alm.blm, self.b_transf_b, inplace=True)
         else:
             alm.tlm *= self.tf2d_t
             alm.elm *= self.tf2d_p
@@ -338,15 +342,15 @@ class NoiseInverseFilter:
 
         elif len(self.n_inv) == 4:  # TT, QQ, QU, UU
             sys.exit('bad path -- NoiseInverseFilter/apply_map(self, amap)/elif len(self.n_inv) == 4:')
-            #qmap_copy = qmap.copy()
+            # qmap_copy = qmap.copy()
 
-            #tmap *= self.n_inv[0]
-            #qmap *= self.n_inv[1]
-            #qmap += self.n_inv[2] * umap
+            # tmap *= self.n_inv[0]
+            # qmap *= self.n_inv[1]
+            # qmap += self.n_inv[2] * umap
 
-            #umap *= self.n_inv[3]
-            #umap += self.n_inv[2] * qmap_copy
+            # umap *= self.n_inv[3]
+            # umap += self.n_inv[2] * qmap_copy
 
-            #del qmap_copy
+            # del qmap_copy
         else:
             assert 0

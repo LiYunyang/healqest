@@ -3,7 +3,6 @@ Profile class inspired by pyccl. More flexible than just feeding
 in a txt file with ell/b(ell), and can use all sorts of profiles.
 '''
 
-import healpy as hp
 import numpy as np
 
 

@@ -1,4 +1,3 @@
-import os,sys
 import healpy as hp
 from tabulate import tabulate
 from healqest import healqest_utils as hutils

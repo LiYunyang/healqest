@@ -8,6 +8,7 @@ class CacheMemory(dict):
     """A dictionary-like object that can store things and remove keys
     conveniently.
     """
+
     def __init__(self):
         pass
 
@@ -30,15 +31,15 @@ class CacheMemory(dict):
 
 
 def cd_solve(
-    x,
-    b,
-    fwd_op,
-    pre_ops,
-    dot_op,
-    criterion,
-    tr,
-    cache=CacheMemory(),
-    roundoff=25,
+        x,
+        b,
+        fwd_op,
+        pre_ops,
+        dot_op,
+        criterion,
+        tr,
+        cache=CacheMemory(),
+        roundoff=25,
 ):
     """Conjugate direction solver
     The customizable conjugate directions loop for x=[fwd_op]^{-1}b.

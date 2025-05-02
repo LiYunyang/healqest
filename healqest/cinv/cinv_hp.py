@@ -10,22 +10,69 @@ import sys
 import healpy as hp
 import numpy as np
 
-from . import (
-    opfilt_hp_p,
-    opfilt_hp_t,
-    opfilt_hp_tp,
-    cd_solve,
-    cd_monitors,
-    hp_utils,
-    cinv_utils,
-)
+from . import opfilt_hp_p, opfilt_hp_t,opfilt_hp_tp
+from . import cd_solve, cd_monitors
+from . import hp_utils, cinv_utils
 
 
 class cinv(object):
-    def __init__(self, lib_dir, lmax, eps_min, use_mpi=False):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, eps_min, ellscale, opfilt):
+        """
+        Parameters
+        ----------
+        lib_dir: str
+            Directory where intermediate data will be cached.
+        lmax: int
+        nside: int
+        cl: dict
+            Dictionary of CMB power spectra, including 'tt', 'ee', 'bb', 'te'.
+        nl_res:
+        ninv: list of arrays
+            inverse variance map for each components
+        eps_min: float
+        ellscale: bool
+            If True, scale Cl as Dl.
+        opfilt: module
+            module object that contains routines to perform appropriate filtering
+        """
+        assert lib_dir is not None
+        assert lmax >= 1024
+        assert nside >= 512
         self.lib_dir = lib_dir  # Output directory
         self.lmax = lmax  # Lmax to use for filtering
+        self.nside = nside
         self.eps_min = eps_min  # Tolerance
+
+        print(f"Initializing {self.__class__.__name__}")
+
+        # Scaling factor
+        ell = np.arange(lmax + 1, dtype=float)
+        if ellscale:
+            print("Applying ell scaling: l(l+1)/2pi")
+            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
+            rescal_cl[0] = 1
+        else:
+            print("Not applying any ell scaling")
+            rescal_cl = np.ones_like(ell)
+        self.rescal_cl = rescal_cl
+
+        self.cl = cl
+        # rescaled cls (Dls by default)
+        # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
+        # cltt has l^2 and tf^2 has 1/l^2 factor already.
+        # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
+        # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
+        self.dl = {k: rescal_cl ** 2 * v[: lmax + 1] for k, v in cl.items()}
+
+        self.ninv = ninv
+        self.nl_res = nl_res
+
+        self.opfilt = opfilt  # filter module
+        self.s_inv_filt = None
+        self.n_inv_filt = None
+
+        self.iter_tot = None
+        self.prev_eps = None
 
     def get_tal(self, a, lmax=None):
         if lmax is None:
@@ -35,8 +82,8 @@ class cinv(object):
         assert len(ret) > lmax, (len(ret), lmax)
         return ret[: lmax + 1]
 
-    def get_fmask(self):
-        return hp.read_map(os.path.join(self.lib_dir, "fmask.fits.gz"))
+    # def get_fmask(self):
+    #     return hp.read_map(os.path.join(self.lib_dir, "fmask.fits.gz"))
 
     def get_ftl(self, lmax=None):
         if lmax is None:
@@ -84,8 +131,8 @@ class cinv(object):
             pre_ops=[pre_op],
             dot_op=dot_op,
             criterion=monitor,
-            tr=cinv_utils.cd_solve.tr_cg,
-            cache=cinv_utils.cd_solve.CacheMemory(),
+            tr=cd_solve.tr_cg,
+            cache=cd_solve.CacheMemory(),
         )
 
         finifunc(soltn, self.s_inv_filt, self.n_inv_filt)
@@ -126,71 +173,19 @@ class cinv_t(cinv):
 
     """
 
-    def __init__(
-        self,
-        lib_dir,
-        lmax,
-        nside,
-        cl,
-        nl_res,
-        ninv,
-        tf1d,
-        tf2d,
-        eps_min=1.0e-5,
-        ellscale=True,
-    ):
-        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
-            lib_dir,
-            lmax,
-            nside,
-        )
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True):
         assert isinstance(ninv, list)
-        super(cinv_t, self).__init__(lib_dir, lmax, eps_min)
+        super(cinv_t, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv, eps_min=eps_min,
+                                     ellscale=ellscale, opfilt=opfilt_hp_t)
 
-        print("Initializing cinv_t")
-
-        # Scaling factor
-        ell = np.arange(lmax + 1, dtype=float)
-
-        if ellscale:
-            print("Applying ellscaling l(l+1)/2pi")
-            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
-            rescal_cl[0] = 1
-        else:
-            print("Not applying any scaling")
-            rescal_cl = np.ones_like(ell)
-
-        self.rescal_cl = rescal_cl
-
-        # rescaled cls (Dls by default)
-        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
-
-        # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
-        # cltt has l^2 and tf^2 has 1/l^2 factor already.
-        # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
-        # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
-
-        tf1d = tf1d[: lmax + 1] * cinv_utils.cli(rescal_cl)
-        tf2d = hp.almxfl(tf2d, cinv_utils.cli(rescal_cl))
-
-        self.nside = nside
-
-        self.cl = cl
-        self.dl = dl
-        self.nl_res = nl_res
-        self.ninv = ninv
-
-        self.tf1d = tf1d
-        self.tf2d = tf2d
+        invfac = cinv_utils.cli(self.rescal_cl)
+        self.tf1d = tf1d[: lmax + 1] * invfac
+        self.tf2d = hp.almxfl(tf2d, invfac) if tf2d is not None else None
 
         # Set up s_inv_filt and n_inv_filt
-        self.s_inv_filt = hp_utils.jit(
-            opfilt_hp_t.SkyInverseFilter, dl, nl_res, lmax, tf1d, tf2d=tf2d
-        )
-        self.n_inv_filt = hp_utils.jit(
-            opfilt_hp_t.NoiseInverseFilter, ninv, tf1d, tf2d=tf2d
-        )
-        self.opfilt = opfilt_hp_t
+        self.s_inv_filt = hp_utils.jit(self.opfilt.SkyInverseFilter,
+                                       self.dl, self.nl_res, self.lmax, self.tf1d, tf2d=self.tf2d)
+        self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter, self.ninv, self.tf1d, tf2d=tf2d)
 
     def _calc_ftl(self):
         ninv = self.n_inv_filt.n_inv
@@ -259,77 +254,26 @@ class cinv_p(cinv):
 
     """
 
-    def __init__(
-        self,
-        lib_dir,
-        lmax,
-        nside,
-        cl,
-        nl_res,
-        ninv,
-        tf1dE,
-        tf1dB,
-        tf2dE,
-        tf2dB,
-        eps_min=1.0e-5,
-        ellscale=True,
-    ):
-        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
-            lib_dir,
-            lmax,
-            nside,
-        )
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1dE, tf1dB,
+                 tf2dE=None, tf2dB=None, eps_min=1.0e-5, ellscale=True):
+
         assert isinstance(ninv, list)
-        super(cinv_p, self).__init__(lib_dir, lmax, eps_min)
+        super(cinv_p, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv, eps_min=eps_min,
+                                     ellscale=ellscale, opfilt=opfilt_hp_p)
 
-        print("Initializing cinv_p")
-
-        # Scaling factor
-        ell = np.arange(lmax + 1, dtype=float)
-
-        if ellscale:
-            print("Applying ellscaling l(l+1)/2pi")
-            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
-            rescal_cl[0] = 1
-        else:
-            print("Not applying any scaling")
-            rescal_cl = np.ones_like(ell)
-
-        self.rescal_cl = rescal_cl
-
-        # rescaled cls (Dls by default)
-        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
-
-        # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
-        # cltt has l^2 and tf^2 has 1/l^2 factor already.
-        # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
-        # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
-
-        tf1dE = tf1dE[: lmax + 1] * cinv_utils.cli(rescal_cl)
-        tf1dB = tf1dB[: lmax + 1] * cinv_utils.cli(rescal_cl)
-
-        tf2dE = hp.almxfl(tf2dE, cinv_utils.cli(rescal_cl))
-        tf2dB = hp.almxfl(tf2dB, cinv_utils.cli(rescal_cl))
-
-        self.nside = nside
-        self.cl = cl
-        self.dl = dl
-        self.tf1dE = tf1dE
-        self.tf1dB = tf1dB
-
-        self.tf2dE = tf2dE
-        self.tf2dB = tf2dB
-        self.ninv = ninv
-        self.nl_res = nl_res
+        invfac = cinv_utils.cli(self.rescal_cl)
+        self.tf1dE = tf1dE[: lmax + 1] * invfac
+        self.tf1dB = tf1dB[: lmax + 1] * invfac
+        self.tf2dE = hp.almxfl(tf2dE, invfac) if tf2dE is not None else None
+        self.tf2dB = hp.almxfl(tf2dB, invfac) if tf2dB is not None else None
 
         # Set up s_inv_filt and n_inv_filt
-        self.s_inv_filt = hp_utils.jit(
-            opfilt_hp_p.SkyInverseFilter, dl, nl_res, lmax, tf1dE, tf1dB, tf2dE, tf2dB
-        )
-        self.n_inv_filt = hp_utils.jit(
-            opfilt_hp_p.NoiseInverseFilter, ninv, tf1dE, tf1dB, tf2dE, tf2dB
-        )
-        self.opfilt = opfilt_hp_p
+        self.s_inv_filt = hp_utils.jit(self.opfilt.SkyInverseFilter,
+                                       self.dl, self.nl_res, self.lmax,
+                                       self.tf1dE, self.tf1dB,
+                                       self.tf2dE, self.tf2dB)
+        self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter,
+                                       self.ninv, self.tf1dE, self.tf1dB, self.tf2dE, self.tf2dB)
 
     def apply_ivf(self, tmap, soltn=None):
         if soltn is not None:
@@ -475,84 +419,25 @@ class cinv_tp(cinv):
         Whether to scale by multipole ell, by default True.
     """
 
-    def __init__(
-        self,
-        lib_dir,
-        lmax,
-        nside,
-        cl,
-        nl_res,
-        ninv,
-        tf1d_t,
-        tf1d_p,
-        tf2d_t,
-        tf2d_p,
-        eps_min=1.0e-5,
-        ellscale=False,
-    ):
-        assert lib_dir is not None and lmax >= 1024 and nside >= 512, (
-            lib_dir,
-            lmax,
-            nside,
-        )
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d_t, tf1d_p, tf2d_t, tf2d_p, eps_min=1.0e-5,
+                 ellscale=False):
+
         assert len(ninv) == 2 or len(ninv) == 4  # TT, (QQ + UU)/2 or TT,QQ,QU,UU
-        super(cinv_tp, self).__init__(lib_dir, lmax, eps_min)
+        super(cinv_tp, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv,
+                                      eps_min=eps_min, ellscale=ellscale, opfilt=opfilt_hp_tp)
 
-        print("Initializing cinv_tp")
+        invfac = cinv_utils.cli(self.rescal_cl)
+        self.tf1d_t = tf1d_t[: lmax + 1] * invfac
+        self.tf1d_p = tf1d_p[: lmax + 1] * invfac
+        self.tf2d_t = hp.almxfl(tf2d_t, invfac) if tf2d_t is not None else None
+        self.tf2d_p = hp.almxfl(tf2d_p, invfac) if tf2d_p is not None else None
 
-        # Scaling factor
-        ell = np.arange(lmax + 1, dtype=float)
+        self.s_inv_filt = hp_utils.jit(self.opfilt.SkyInverseFilter,
+                                       self.dl, self.nl_res, self.lmax, self.tf1d_t, self.tf1d_p,
+                                       self.tf2d_t, self.tf2d_p)
 
-        if ellscale:
-            print("Applying ell scaling: l(l+1)/2pi")
-            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
-            rescal_cl[0] = 1
-        else:
-            print("Not applying any ell scaling")
-            rescal_cl = np.ones_like(ell)
-
-        self.rescal_cl = rescal_cl
-
-        # rescaled cls (Dls by default)
-        dl = {k: rescal_cl**2 * cl[k][: lmax + 1] for k in cl.keys()}
-
-        # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
-        # cltt has l^2 and tf^2 has 1/l^2 factor already.
-        # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
-        # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
-
-        tf1d_t = tf1d_t[: lmax + 1] * cinv_utils.cli(rescal_cl)
-        tf1d_p = tf1d_p[: lmax + 1] * cinv_utils.cli(rescal_cl)
-
-        tf2d_t = hp.almxfl(tf2d_t, cinv_utils.cli(rescal_cl))
-        tf2d_p = hp.almxfl(tf2d_p, cinv_utils.cli(rescal_cl))
-
-        self.nside = nside
-        self.cl = cl
-        self.dl = dl
-        self.tf1d_t = tf1d_t
-        self.tf1d_p = tf1d_p
-        self.tf2d_t = tf2d_t
-        self.tf2d_p = tf2d_p
-        self.ninv = ninv
-        self.nl_res = nl_res
-
-        self.s_inv_filt = hp_utils.jit(
-            opfilt_hp_tp.SkyInverseFilter,
-            dl,
-            nl_res,
-            lmax,
-            tf1d_t,
-            tf1d_p,
-            tf2d_t,
-            tf2d_p,
-        )
-
-        self.n_inv_filt = hp_utils.jit(
-            opfilt_hp_tp.NoiseInverseFilter, ninv, tf1d_t, tf1d_p, tf2d_t, tf2d_p
-        )
-
-        self.opfilt = opfilt_hp_tp
+        self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter, self.ninv, self.tf1d_t, self.tf1d_p,
+                                       self.tf2d_t, self.tf2d_p)
 
     def apply_ivf(self, tqumap, soltn=None):  # , apply_fini=''):
         assert len(tqumap) == 3
@@ -630,12 +515,11 @@ class library_sepTP(object):
         )
         if not os.path.exists(tfname):
             print("tlm file doesnt exit so creating one")
-            tlm = self._apply_ivf_t(
-                self.sim_lib.get_tmap(idx, add_noise=self.add_noise),
-                soltn=None
-                if self.soltn_lib is None
-                else self.soltn_lib.get_sim_tmliklm(idx),
-            )
+            if self.soltn_lib is not None:
+                soltn = self.soltn_lib.get_sim_tmliklm(idx)
+            else:
+                soltn = None
+            tlm = self._apply_ivf_t(self.sim_lib.get_tmap(idx, add_noise=self.add_noise), soltn=soltn)
         else:
             print("Loading file: %s" % tfname)
             tlm = hp.read_alm(tfname)

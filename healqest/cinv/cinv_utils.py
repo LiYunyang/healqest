@@ -12,12 +12,12 @@ def read_map_frame(path, id=None):
     if not os.path.exists(path):
         raise OSError("File {} does not exist".format(path))
 
-    if path.split(".")[-1] == 'g3':
+    if path.split(".")[-1] == "g3":
         for frame in core.G3File(path):
             if (frame["Id"] == id or id is None) and frame.type == core.G3FrameType.Map:
                 return frame
         raise RuntimeError("Map frame {} not found G3File.".format(id))
-    elif path.split(".")[-1] == 'fits':
+    elif path.split(".")[-1] == "fits":
         return maps.fitsio.load_skymap_fits(path)
 
     raise OSError("G3File {} does not contain a map frame .".format(path))
@@ -38,14 +38,8 @@ def hash_check(hash1, hash2, ignore=[], keychain=[]):
 
     for key in set(keys1).union(set(keys2)):
         if key == "idf_def":
-            v1 = {
-                x: [z.rsplit("/", 1)[-1] for z in y]
-                for x, y in hash1[key].items()
-            }
-            v2 = {
-                x: [z.rsplit("/", 1)[-1] for z in y]
-                for x, y in hash2[key].items()
-            }
+            v1 = {x: [z.rsplit("/", 1)[-1] for z in y] for x, y in hash1[key].items()}
+            v2 = {x: [z.rsplit("/", 1)[-1] for z in y] for x, y in hash2[key].items()}
         elif key == "idfs":
             v1 = [x.rsplit("/", 1)[-1] for x in hash1[key]]
             v2 = [x.rsplit("/", 1)[-1] for x in hash2[key]]
@@ -78,7 +72,7 @@ def clhash(cl, dtype=np.float16):
     By default we avoid here double precision checks since this might be machine dependent.
         Note: casting to low precision can be a really bad choice for small numbers...
     """
-    return hashlib.sha1(np.copy(cl.astype(dtype), order='C')).hexdigest()
+    return hashlib.sha1(np.copy(cl.astype(dtype), order="C")).hexdigest()
 
 
 def mask_hash(m, dtype=bool):
@@ -90,17 +84,17 @@ def mask_hash(m, dtype=bool):
             mh += mask_hash(m2, dtype=dtype)
         return mh
     if isinstance(m, str):
-        return m.replace('/', '_sl_').replace('.', '_')
+        return m.replace("/", "_sl_").replace(".", "_")
     elif isinstance(m, np.ndarray):
         return utils.clhash(m, dtype=dtype)
     elif callable(m):
-        return 'callable'
-    assert 0, 'not implemented'
+        return "callable"
+    assert 0, "not implemented"
 
 
 def cli(cl):
     ret = np.zeros_like(cl)
-    ret[np.where(cl != 0.)] = 1. / cl[np.where(cl != 0.)]
+    ret[np.where(cl != 0.0)] = 1.0 / cl[np.where(cl != 0.0)]
     return ret
 
 
@@ -116,21 +110,20 @@ def cache_pk(suffix="", trim_lm=True):
     def cache_lm_func(f):
         def cachelm(self, *args, **kwargs):
             fname = f.__name__
-            if (
-                    (trim_lm == True)
-                    and (len(fname) > 3)
-                    and (fname[-3:] == "_lm")
-            ):
+            if (trim_lm == True) and (len(fname) > 3) and (fname[-3:] == "_lm"):
                 fname = fname[0:-3]
 
-            tfname = os.path.join(self.lib_dir, "cache_lm_%s%s_%s.pk"
-                                  % (suffix,
-                                     hashlib.sha1(
-                                         np.ascontiguousarray(args + list(kwargs.items())[0])
-                                     ).hexdigest(),
-                                     fname,
-                                     )
-                                  )
+            tfname = os.path.join(
+                self.lib_dir,
+                "cache_lm_%s%s_%s.pk"
+                % (
+                    suffix,
+                    hashlib.sha1(
+                        np.ascontiguousarray(args + list(kwargs.items())[0])
+                    ).hexdigest(),
+                    fname,
+                ),
+            )
             if not os.path.exists(tfname):
                 core.log_notice("caching lm: %s" % tfname)
                 lm = f(self, *args, **kwargs)
@@ -151,8 +144,8 @@ def cache_pk(suffix="", trim_lm=True):
 
 
 def enumerate_progress(list, label="", clear=False):
-    """ implementation of python's enumerate built-in which
-    prints a progress bar as it yields elements of a list. """
+    """implementation of python's enumerate built-in which
+    prints a progress bar as it yields elements of a list."""
     t0 = time.time()
     ni = len(list)
     for i, v in enumerate(list):
@@ -186,7 +179,7 @@ def enumerate_progress(list, label="", clear=False):
 
 
 class SumObjects(object):
-    """ helper class to contain the sum of a number of objets. """
+    """helper class to contain the sum of a number of objets."""
 
     def __init__(self, clone=copy.deepcopy):
         self.__dict__["__clone"] = clone
@@ -213,7 +206,7 @@ class SumObjects(object):
 
 
 class AverageObjects(object):
-    """ helper class to contain the average of a number of objets. """
+    """helper class to contain the average of a number of objets."""
 
     def __init__(self, clone=copy.deepcopy):
         self.__dict__["__clone"] = clone
@@ -240,7 +233,7 @@ class AverageObjects(object):
 
 
 class TimeDifference(object):
-    """ helper class to contain / print a time difference. """
+    """helper class to contain / print a time difference."""
 
     def __init__(self, _dt):
         self.dt = _dt
@@ -257,29 +250,31 @@ class TimeDifference(object):
 
 
 class DeltaTime(object):
-    ''' helper class to contain / print a time difference. '''
+    """helper class to contain / print a time difference."""
 
     def __init__(self, _dt):
         self.dt = _dt
 
     def __str__(self):
-        return ('%02d:%02d:%02d' % (np.floor(self.dt / 60 / 60),
-                                    np.floor(np.mod(self.dt, 60 * 60) / 60),
-                                    np.floor(np.mod(self.dt, 60))))
+        return "%02d:%02d:%02d" % (
+            np.floor(self.dt / 60 / 60),
+            np.floor(np.mod(self.dt, 60 * 60) / 60),
+            np.floor(np.mod(self.dt, 60)),
+        )
 
     def __int__(self):
         return int(self.dt)
 
 
 class StopWatch(object):
-    """ simple stopwatch timer class. """
+    """simple stopwatch timer class."""
 
     def __init__(self):
         self.st = time.time()
         self.lt = self.st
 
     def lap(self):
-        """ return the time since start and the time since last call to lap or elapsed. """
+        """return the time since start and the time since last call to lap or elapsed."""
 
         lt = time.time()
         ret = (DeltaTime(lt - self.st), DeltaTime(lt - self.lt))
@@ -287,7 +282,7 @@ class StopWatch(object):
         return ret
 
     def elapsed(self):
-        """ return the time since initialization. """
+        """return the time since initialization."""
 
         lt = time.time()
         ret = DeltaTime(lt - self.st)
@@ -297,6 +292,7 @@ class StopWatch(object):
 
 # -- below cribbed from
 # http://stackoverflow.com/questions/5081657/how-do-i-prevent-a-c-shared-library-to-print-on-stdout-in-python
+
 
 @contextmanager
 def stdout_redirected(to=os.devnull):

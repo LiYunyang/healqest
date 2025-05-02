@@ -1,7 +1,9 @@
 import numpy as np
 
 
-def cg_solve_simple(x, b, fwd_op, pre_op, dot_op, iter_max=1000, eps_min=1.0e-5, roundoff=50):
+def cg_solve_simple(
+    x, b, fwd_op, pre_op, dot_op, iter_max=1000, eps_min=1.0e-5, roundoff=50
+):
     """simple conjugate gradient loop, demonstrating use of cg_iterator.
     this function solves for x=[fwd_op]^{-1}b
 
@@ -28,24 +30,24 @@ def cg_solve_simple(x, b, fwd_op, pre_op, dot_op, iter_max=1000, eps_min=1.0e-5,
     for iter in range(1, iter_max + 1):
         (delta, resid) = next(my_cg_iterator)
 
-        if delta < eps_min ** 2 * d0:
+        if delta < eps_min**2 * d0:
             break
 
     return (iter, delta / d0)
 
 
 def cg_solve(
-        soltn,
-        b,
-        fwd_op,
-        pre_op,
-        dot_op,
-        criterion,
-        apply_prep_op=None,
-        apply_fini_op=None,
-        roundoff=50,
+    soltn,
+    b,
+    fwd_op,
+    pre_op,
+    dot_op,
+    criterion,
+    apply_prep_op=None,
+    apply_fini_op=None,
+    roundoff=50,
 ):
-    """ fully customizable conjugate gradient loop.
+    """fully customizable conjugate gradient loop.
 
     Selected Parameters
     -------------

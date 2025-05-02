@@ -8,13 +8,13 @@ import numpy as np
 
 def almtf2d(lmax, lmin=0, mmin=0, bl=None):
     """
-    bl: 1D B(ell), start at ell=0    
+    bl: 1D B(ell), start at ell=0
     """
 
     tf2d = np.zeros([lmax + 1, lmax + 1])
     # fill non-zero (l,m) with ones
     for l in range(0, lmax + 1):
-        tf2d[0:l + 1, l] = 1.0
+        tf2d[0 : l + 1, l] = 1.0
     if bl is not None:
         tf2d *= bl[None, :]
 
@@ -34,7 +34,7 @@ def cl2almformat(cl):
     alm = np.zeros(hp.Alm.getsize(lmax))
     idx = 0
     for i in range(0, lmax + 1):
-        alm[idx:idx + (lmax + 1 - i)] = cl[i:]
+        alm[idx : idx + (lmax + 1 - i)] = cl[i:]
         idx = idx + (lmax + 1 - i)
     return alm
 
@@ -73,7 +73,7 @@ def alm2grid(alm, realpart=True):
     idxf = 0
     for i in range(0, lmax + 1):
         idxf = idx + lmax + 1 - i
-        a[i, i:] = alm[idx:idx + (lmax + 1 - i)]
+        a[i, i:] = alm[idx : idx + (lmax + 1 - i)]
         idx = idxf
     return a
 
@@ -158,8 +158,7 @@ class teblm:
 
 
 def read_map(m):
-    """Reads a map whether given as (list of) string (with ',f' denoting field f), array or callable        
-    """
+    """Reads a map whether given as (list of) string (with ',f' denoting field f), array or callable"""
     if callable(m):
         return m()
     if isinstance(m, list):
@@ -169,33 +168,31 @@ def read_map(m):
         return ma
     if not isinstance(m, str):
         return m
-    if ',' not in m:
+    if "," not in m:
         return hp.read_map(m)
-    m, field = m.split(',')
+    m, field = m.split(",")
     return hp.read_map(m, field=int(field))
 
 
 class jit:
-    """ just-in-time instantiation wrapper class.
-
-    """
+    """just-in-time instantiation wrapper class."""
 
     def __init__(self, ctype, *cargs, **ckwds):
-        self.__dict__['__jit_args'] = [ctype, cargs, ckwds]
-        self.__dict__['__jit_obj'] = None
+        self.__dict__["__jit_args"] = [ctype, cargs, ckwds]
+        self.__dict__["__jit_obj"] = None
 
     def instantiate(self):
-        [ctype, cargs, ckwds] = self.__dict__['__jit_args']
-        print('jit: instantiating ctype =', ctype)
-        self.__dict__['__jit_obj'] = ctype(*cargs, **ckwds)
-        del self.__dict__['__jit_args']
+        [ctype, cargs, ckwds] = self.__dict__["__jit_args"]
+        print("jit: instantiating ctype =", ctype)
+        self.__dict__["__jit_obj"] = ctype(*cargs, **ckwds)
+        del self.__dict__["__jit_args"]
 
     def __getattr__(self, attr):
-        if self.__dict__['__jit_obj'] is None:
+        if self.__dict__["__jit_obj"] is None:
             self.instantiate()
-        return getattr(self.__dict__['__jit_obj'], attr)
+        return getattr(self.__dict__["__jit_obj"], attr)
 
     def __setattr__(self, attr, val):
-        if self.__dict__['__jit_obj'] is None:
+        if self.__dict__["__jit_obj"] is None:
             self.instantiate()
-        setattr(self.__dict__['__jit_obj'], attr, val)
+        setattr(self.__dict__["__jit_obj"], attr, val)

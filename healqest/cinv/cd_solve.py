@@ -23,23 +23,22 @@ class CacheMemory(dict):
         del self[key]
 
     def trim(self, keys):
-        """Remove a list of keys from the dictionary
-        """
+        """Remove a list of keys from the dictionary"""
         assert set(keys).issubset(list(self.keys()))
         for key in set(self.keys()) - set(keys):
             del self[key]
 
 
 def cd_solve(
-        x,
-        b,
-        fwd_op,
-        pre_ops,
-        dot_op,
-        criterion,
-        tr,
-        cache=CacheMemory(),
-        roundoff=25,
+    x,
+    b,
+    fwd_op,
+    pre_ops,
+    dot_op,
+    criterion,
+    tr,
+    cache=CacheMemory(),
+    roundoff=25,
 ):
     """Conjugate direction solver
     The customizable conjugate directions loop for x=[fwd_op]^{-1}b.
@@ -86,7 +85,7 @@ def cd_solve(
 
         # search.
         alphas = np.dot(dTAd_inv, deltas)
-        for (searchdir, alpha) in zip(searchdirs, alphas):
+        for searchdir, alpha in zip(searchdirs, alphas):
             x += searchdir * alpha
 
         # append to cache.
@@ -97,7 +96,7 @@ def cd_solve(
         if np.mod(iter, roundoff) == 0:
             residual = b - fwd_op(x)
         else:
-            for (searchfwd, alpha) in zip(searchfwds, alphas):
+            for searchfwd, alpha in zip(searchfwds, alphas):
                 residual -= searchfwd * alpha
 
         # initial choices for new search directions.
@@ -107,9 +106,7 @@ def cd_solve(
         prev_iters = list(range(tr(iter), iter))
 
         for titer in prev_iters:
-            [prev_dTAd_inv, prev_searchdirs, prev_searchfwds] = cache.restore(
-                titer
-            )
+            [prev_dTAd_inv, prev_searchdirs, prev_searchfwds] = cache.restore(titer)
 
             for searchdir in searchdirs:
                 proj = [
@@ -118,7 +115,7 @@ def cd_solve(
                 ]
                 betas = np.dot(prev_dTAd_inv, proj)
 
-                for (beta, prev_searchdir) in zip(betas, prev_searchdirs):
+                for beta, prev_searchdir in zip(betas, prev_searchdirs):
                     searchdir -= prev_searchdir * beta
 
         # clear old keys from cache

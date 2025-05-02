@@ -10,7 +10,7 @@ logger_none = lambda i, eps, watch=None, **kwargs: 0
 
 
 class MonitorBasic(object):
-    """ Class for monitoring whether the solver has converged
+    """Class for monitoring whether the solver has converged
 
     Selected attributes
     ---------
@@ -21,9 +21,8 @@ class MonitorBasic(object):
     eps_min: float
         the threshold for converge
     """
-    def __init__(
-        self, dot_op, iter_max=np.inf, eps_min=1.0e-10, logger=logger_basic
-    ):
+
+    def __init__(self, dot_op, iter_max=np.inf, eps_min=1.0e-10, logger=logger_basic):
         self.dot_op = dot_op
         self.iter_max = iter_max
         self.eps_min = eps_min
@@ -46,7 +45,7 @@ class MonitorBasic(object):
                 resid=resid,
             )
 
-        if (i >= self.iter_max) or (delta <= self.eps_min ** 2 * self.d0):
+        if (i >= self.iter_max) or (delta <= self.eps_min**2 * self.d0):
             return True
 
         return False

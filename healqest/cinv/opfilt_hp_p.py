@@ -25,11 +25,11 @@ def calc_prep(maps, s_inv_filt, n_inv_filt):
     n_inv_filt.apply_map([qmap, umap])
     elm, blm = map2alm_spin([qmap, umap], 2, lmax=lmax)
     if n_inv_filt.tf2dE is None or n_inv_filt.tf2dB is None:
-        hp.almxfl(elm, n_inv_filt.tf1dE * npix / (4. * np.pi), inplace=True)
-        hp.almxfl(blm, n_inv_filt.tf1dB * npix / (4. * np.pi), inplace=True)
+        hp.almxfl(elm, n_inv_filt.tf1dE * npix / (4.0 * np.pi), inplace=True)
+        hp.almxfl(blm, n_inv_filt.tf1dB * npix / (4.0 * np.pi), inplace=True)
     else:
-        elm *= n_inv_filt.tf2dE * npix / (4. * np.pi)
-        blm *= n_inv_filt.tf2dB * npix / (4. * np.pi)
+        elm *= n_inv_filt.tf2dE * npix / (4.0 * np.pi)
+        blm *= n_inv_filt.tf2dB * npix / (4.0 * np.pi)
     return eblm([elm, blm])
 
 
@@ -46,19 +46,21 @@ class DotOperator:
     def __call__(self, alm1, alm2):
         assert alm1.lmax == alm2.lmax
         tcl = hp.alm2cl(alm1.elm, alm2.elm) + hp.alm2cl(alm1.blm, alm2.blm)
-        return np.sum(tcl[2:] * (2. * np.arange(2, alm1.lmax + 1) + 1))
+        return np.sum(tcl[2:] * (2.0 * np.arange(2, alm1.lmax + 1) + 1))
 
 
 class ForwardOperator:
-    """Missing doc. """
+    """Missing doc."""
 
     def __init__(self, s_inv_filt, n_inv_filt):
         self.s_inv_filt = s_inv_filt
         self.n_inv_filt = n_inv_filt
 
     def hashdict(self):
-        return {'s_inv_filt': self.s_inv_filt.hashdict(),
-                'n_inv_filt': self.n_inv_filt.hashdict()}
+        return {
+            "s_inv_filt": self.s_inv_filt.hashdict(),
+            "n_inv_filt": self.n_inv_filt.hashdict(),
+        }
 
     def __call__(self, alm):
         return self.calc(alm)
@@ -71,20 +73,25 @@ class ForwardOperator:
 
 
 class PreOperatorDiag:
-    """Missing doc. """
+    """Missing doc."""
 
     def __init__(self, s_cls, n_inv_filt, nl_res=None):
         lmax = len(n_inv_filt.tf1dE) - 1
-        clbb = s_cls['bb'][:lmax + 1]
-        clee = s_cls['ee'][:lmax + 1]
-        if nl_res is None: nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
+        clbb = s_cls["bb"][: lmax + 1]
+        clee = s_cls["ee"][: lmax + 1]
+        if nl_res is None:
+            nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
 
         ninv_fel, ninv_fbl = n_inv_filt.get_febl()
 
-        filt_e = cinv_utils.cli(clee + nl_res['ee'] * cinv_utils.cli(n_inv_filt.tf1dE[:lmax + 1] ** 2))
-        filt_e += ninv_fel[:lmax + 1]
-        filt_b = cinv_utils.cli(clbb + nl_res['bb'] * cinv_utils.cli(n_inv_filt.tf1dB[:lmax + 1] ** 2))
-        filt_b += ninv_fbl[:lmax + 1]
+        filt_e = cinv_utils.cli(
+            clee + nl_res["ee"] * cinv_utils.cli(n_inv_filt.tf1dE[: lmax + 1] ** 2)
+        )
+        filt_e += ninv_fel[: lmax + 1]
+        filt_b = cinv_utils.cli(
+            clbb + nl_res["bb"] * cinv_utils.cli(n_inv_filt.tf1dB[: lmax + 1] ** 2)
+        )
+        filt_b += ninv_fbl[: lmax + 1]
 
         self.filt_e = cinv_utils.cli(filt_e)
         self.filt_b = cinv_utils.cli(filt_b)
@@ -99,13 +106,12 @@ class PreOperatorDiag:
 
 
 class SkyInverseFilter:  # alm_filter_sinv_nocorr:
-
     def __init__(self, s_cls, nl_res, lmax, tf1dE, tf1dB, tf2dE, tf2dB):
-        clee = s_cls.get('ee', np.zeros(lmax + 1))[:lmax + 1]
-        clbb = s_cls.get('bb', np.zeros(lmax + 1))[:lmax + 1]
+        clee = s_cls.get("ee", np.zeros(lmax + 1))[: lmax + 1]
+        clbb = s_cls.get("bb", np.zeros(lmax + 1))[: lmax + 1]
 
-        nlee = nl_res.get('ee', np.zeros(lmax + 1))[:lmax + 1] / tf1dE ** 2
-        nlbb = nl_res.get('bb', np.zeros(lmax + 1))[:lmax + 1] / tf1dB ** 2
+        nlee = nl_res.get("ee", np.zeros(lmax + 1))[: lmax + 1] / tf1dE**2
+        nlbb = nl_res.get("bb", np.zeros(lmax + 1))[: lmax + 1] / tf1dB**2
 
         clee_2d = hp_utils.cl2almformat(clee)
         clbb_2d = hp_utils.cl2almformat(clbb)
@@ -135,15 +141,15 @@ class NoiseInverseFilter:
         # , marge_qmaps=(), marge_umaps=()):
         """Inverse-variance filtering instance for polarization only
 
-            Args:
-                n_inv: inverse pixel variance maps or masks
-                b_transf: filter fiducial transfer function
-                nlev_febl(optional): isotropic approximation to the noise level across the entire map
-                                     this is used e.g. in the diag. preconditioner of cg inversion.
-                b_transf_b: B-mode transfer func if different from E-mode
+        Args:
+            n_inv: inverse pixel variance maps or masks
+            b_transf: filter fiducial transfer function
+            nlev_febl(optional): isotropic approximation to the noise level across the entire map
+                                 this is used e.g. in the diag. preconditioner of cg inversion.
+            b_transf_b: B-mode transfer func if different from E-mode
 
-            Note:
-                This allows for independent Q and U map marginalization
+        Note:
+            This allows for independent Q and U map marginalization
 
         """
 
@@ -179,9 +185,13 @@ class NoiseInverseFilter:
     def _calc_febl(self):
         self._load_ninv()
         if len(self.n_inv) == 1:
-            nlev_febl = 10800. / np.sqrt(np.sum(self.n_inv[0]) / (4.0 * np.pi)) / np.pi
+            nlev_febl = 10800.0 / np.sqrt(np.sum(self.n_inv[0]) / (4.0 * np.pi)) / np.pi
         elif len(self.n_inv) == 3:
-            nlev_febl = 10800. / np.sqrt(np.sum(0.5 * (self.n_inv[0] + self.n_inv[2])) / (4.0 * np.pi)) / np.pi
+            nlev_febl = (
+                10800.0
+                / np.sqrt(np.sum(0.5 * (self.n_inv[0] + self.n_inv[2])) / (4.0 * np.pi))
+                / np.pi
+            )
         else:
             assert 0
         print("ninv_febl: using %.2f uK-amin noise Cl" % nlev_febl)
@@ -195,16 +205,16 @@ class NoiseInverseFilter:
         ninv = self.get_ninv()
         assert len(ninv) in [1, 3], len(ninv)
         self.nside = hp.npix2nside(len(ninv[0]))
-        mask = np.where(ninv[0] > 0, 1., 0)
+        mask = np.where(ninv[0] > 0, 1.0, 0)
         for ni in ninv[1:]:
-            mask *= (ni > 0)
+            mask *= ni > 0
         return mask
 
     def get_febl(self):
         if self.nlev_febl is None:
             self.nlev_febl = self._calc_febl()
-        n_inv_cl_e = self.tf1dE ** 2 / (self.nlev_febl / 180. / 60. * np.pi) ** 2
-        n_inv_cl_b = self.tf1dB ** 2 / (self.nlev_febl / 180. / 60. * np.pi) ** 2
+        n_inv_cl_e = self.tf1dE**2 / (self.nlev_febl / 180.0 / 60.0 * np.pi) ** 2
+        n_inv_cl_b = self.tf1dB**2 / (self.nlev_febl / 180.0 / 60.0 * np.pi) ** 2
         return n_inv_cl_e, n_inv_cl_b
 
     def apply_alm(self, alm):
@@ -228,11 +238,11 @@ class NoiseInverseFilter:
         alm.blm[:] = tblm
 
         if self.tf2dE is None and self.tf2dB is None:
-            hp.almxfl(alm.elm, self.tf1dE * (npix / (4. * np.pi)), inplace=True)
-            hp.almxfl(alm.blm, self.tf1dB * (npix / (4. * np.pi)), inplace=True)
+            hp.almxfl(alm.elm, self.tf1dE * (npix / (4.0 * np.pi)), inplace=True)
+            hp.almxfl(alm.blm, self.tf1dB * (npix / (4.0 * np.pi)), inplace=True)
         else:
-            alm.elm *= self.tf2dE * (npix / (4. * np.pi))
-            alm.blm *= self.tf2dB * (npix / (4. * np.pi))
+            alm.elm *= self.tf2dE * (npix / (4.0 * np.pi))
+            alm.blm *= self.tf2dB * (npix / (4.0 * np.pi))
 
     def apply_map(self, amap):
         self._load_ninv()

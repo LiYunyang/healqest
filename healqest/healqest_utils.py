@@ -8,6 +8,7 @@ from tqdm import tqdm
 import tempfile as tf
 from typing import Union
 import subprocess
+import hashlib
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -1727,3 +1728,8 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
             else:
                 raise TypeError
         return hp.read_map(fname, field=tuple(fields), dtype=dtype, hdu=hdu, h=h, partial=partial)
+
+
+def generate_seed(seed, cmbid, bundle=None, extra_tag=None):
+    """Generate random seed."""
+    return int(hashlib.sha256(f"{cmbid}/{seed}/{bundle}/{extra_tag}".encode()).hexdigest()[:8], base=16)

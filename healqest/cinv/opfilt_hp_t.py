@@ -3,7 +3,7 @@ Similar to opfilt_teb.py for flatsky, this is for T-only and for healpix maps.
 
 Modified from and built on plancklens/qcinv/opfilt_tt.py
 """
-
+import sys
 import numpy as np
 import healpy as hp
 
@@ -14,15 +14,14 @@ import pdb
 
 def calc_prep(m, s_inv_filt, n_inv_filt):
     tmap = np.copy(m)
-    # pdb.set_trace()
     n_inv_filt.apply_map(tmap)
     alm = map2alm(tmap, lmax=len(n_inv_filt.b_transf) - 1, iter=0)
+    pixarea = hp.nside2pixarea(hp.get_nside(m))
     if n_inv_filt.tf2d is None:
-        sys.exit("n_inv_filt.tf2d is None")
-        hp.almxfl(alm, n_inv_filt.b_transf * (len(m) / (4.0 * np.pi)), inplace=True)
+        hp.almxfl(alm, n_inv_filt.b_transf, inplace=True)
     else:
-        alm *= n_inv_filt.tf2d * (len(m) / (4.0 * np.pi))
-    return alm
+        alm *= n_inv_filt.tf2d
+    return alm/pixarea
 
 
 def calc_fini(alm, s_inv_filt, n_inv_filt):
@@ -106,39 +105,28 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
     def __init__(self, s_cls, lmax, n_cls=None, tf2d=None, b_transf=None, slinv=None):
         self.n_cls = n_cls
 
+        cltt = s_cls["tt"][:lmax + 1]
         if n_cls is not None and tf2d is not None:
             # the only case that needs to expand into alms
             assert "tt" in n_cls.keys()
             assert len(n_cls["tt"]) == len(tf2d), "n_cls must be 2d (and TF+beam-ed)"
-
-            cltt = s_cls["tt"][: lmax + 1]
+            assert n_cls['tt'] == tf2d.shape
             cltt_2d = hp_utils.cl2almformat(cltt)  # dltt
 
             # 1/(cltt_2d + nltt_2d/tf2d**2) recovers 1d behavior if nltt_2d==0.
             # the following two implementation are identical if tf2d has no zeros
             # if tf2d has zeros, this first one ensures the solution doesn't
             # depend on those modes
-
-            self.slinv = (
-                tf2d * tf2d * cinv_utils.cli(cltt_2d * tf2d * tf2d + n_cls["tt"])
-            )
-            # np.save('/lcrc/project/SPT3G/users/ac.yomori/scratch/nlttdl2.npy',n_cls['tt'])
-            # import pdb; pdb.set_trace()
+            self.slinv = (tf2d * tf2d * cinv_utils.cli(cltt_2d * tf2d * tf2d + n_cls["tt"]))
             # self.slinv = utils.cli(cltt_2d + n_cls['tt'] * utils.cli(tf2d*tf2d) )
-
         else:
-            print(" NOT: n_cls is not None and tf2d is not None:")
-            sys.exit("bad path aa")
-            cltt = s_cls["tt"][: lmax + 1]
+            # raise ValueError("NOT: n_cls is not None and tf2d is not None:")
             if n_cls is None:
                 n_cls = {key: np.zeros(lmax + 1) for key in s_cls}
             if b_transf is None:
                 assert tf2d is None, "if tf2d is not None, nor should b_transf"
                 b_transf = np.ones(lmax + 1)
-            pdb.set_trace()
-            self.slinv = cinv_utils.cli(
-                cltt + n_cls["tt"] * cinv_utils.cli(b_transf * b_transf)
-            )
+            self.slinv = cinv_utils.cli(cltt + n_cls["tt"] * cinv_utils.cli(b_transf * b_transf))
 
         self.lmax = lmax
         self.s_cls = s_cls
@@ -257,13 +245,9 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             print("n_inv is NOT A LIST")
             n_inv = hp_utils.read_map(n_inv)
 
-        print(
-            "opfilt_tt: inverse noise map std dev / av = %.3e"
-            % (
-                np.std(n_inv[np.where(n_inv != 0.0)])
-                / np.average(n_inv[np.where(n_inv != 0.0)])
-            )
-        )
+        ninv_std = np.std(n_inv[np.where(n_inv != 0.0)])
+        ninv_avg = np.average(n_inv[np.where(n_inv != 0.0)])
+        print(f"opfilt_t: inverse noise map std dev / av = {ninv_std/ninv_avg:.3e}")
 
         self.n_inv = n_inv
         self.b_transf = b_transf
@@ -274,13 +258,6 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         self.nlev_ftl = nlev_ftl
         self._n_inv = n_inv  # could be paths or list of paths
         self._load_ninv()
-
-        ####### This doesnt actually get used anywhere ########
-        # if nlev_ftl is None:
-        #    nlev_ftl =  10800. / np.sqrt(np.sum(self.n_inv) / (4.0 * np.pi)) / np.pi
-        # self.nlev_ftl = nlev_ftl
-        # print("ninv_ftl: using %.2f uK-amin noise Cl"%self.nlev_ftl)
-        #######################################################
 
     def hashdict(self):
         return {

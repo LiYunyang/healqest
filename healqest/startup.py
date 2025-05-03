@@ -1,7 +1,11 @@
-import sys
 import argparse
+from functools import cached_property
 import os
+import string
+import shutil
+import sys
 from typing import Union, get_type_hints
+import warnings
 
 import numpy as np
 import yaml
@@ -9,9 +13,6 @@ from healqest import utils, healqest_utils
 from importlib import resources
 import healpy as hp
 from healqest.ducc_sht import Geometry
-from functools import cached_property
-import shutil
-import warnings
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -20,6 +21,29 @@ try:
         warnings.filterwarnings("ignore")
 except ImportError:
     rank = 0
+
+
+class PartialFormatter(string.Formatter):
+    """Allow delayed fornatting of values in strings."""
+    def get_value(self, key, args, kwargs):
+        # Try to resolve the key
+        try:
+            return super().get_value(key, args, kwargs)
+        except (KeyError, IndexError):
+            # Preserve the original placeholder if value is missing
+            if isinstance(key, str):
+                return "{" + key + "}"
+            return super().get_value(key, args, kwargs)
+
+    def format_field(self, value, format_spec):
+        if isinstance(value, str) and value.startswith("{") and value.endswith("}"):
+            v = value[1:-1]
+            # If value is a placeholder, return it with its format spec untouched
+            return f"{{{v}:{format_spec}}}" if format_spec else value
+        try:
+            return super().format_field(value, format_spec)
+        except (ValueError, TypeError):
+            return f"{value}:{format_spec}"
 
 
 class Config:
@@ -37,7 +61,21 @@ class Config:
     nbundle: int = None  # number of bundles, if any.
 
     # === cinv ===
+    eps_t: float  # convergence threshold for cinv T component
+    eps_p: float  # convergence threshold for cinv Pol component
+    cinv_lmax: int  # maximum l for cinv
+    cinv_lmin: int  # minimum l for cinv
     file_bl: str  # path to beam file.
+    file_tf2d: str=None  # path to tf2d file
+    file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
+    file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
+    file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.
+    file_nlm: str  # path to noise alm files for std/N0-type sims.
+    file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
+    file_nlm_N1: str  # path to noise alm files for N1-type sims.
+    nlev_t: float = None  # NET value, if not specified, nlev_t = nlev_p / sqrt(2)
+    nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
+    ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
 
     # === lensrec ===
     rectype: str  # [sqe,gmv,mh,xilc,gmvph]
@@ -66,7 +104,7 @@ class Config:
     fmask_resp: Union[str, list[str]] = None  # path(s) to mask used for MC resp
     spice_kwargs: dict = None  # polspice settings
 
-    def __init__(self, **kwargs):
+    def __init__(self, cinv=None, **kwargs):
         self._validate_config(kwargs)
         self.__dict__.update(kwargs)
         self._set_defaults()
@@ -132,6 +170,12 @@ class Config:
                 elif isinstance(self.spice_kwargs[key], dict):
                     self.spice_kwargs[key] = self.spice_kwargs[key][self.field]
 
+        # cinv settings:
+        if self.nlev_p is None and self.nlev_t is not None:
+            self.nlev_p = self.nlev_t * np.sqrt(2)
+        if self.nlev_t is None and self.nlev_p is not None:
+            self.nlev_t = self.nlev_p / np.sqrt(2)
+
         # mvtypes has to be a list
         self.mvtypes = list(self.mvtypes)
 
@@ -167,6 +211,15 @@ class Config:
         return out
 
     @staticmethod
+    def as_list(x):
+        if isinstance(x, list):
+            return x
+        elif isinstance(x, str):
+            return [x]
+        else:
+            raise NotImplementedError(f"turning {type(x)} into list is not implemented")
+
+    @staticmethod
     def ktype2ij(ktype, i, j=None) -> (int, int, str, str):
         """
         Convert the 2-letter ktype to seed and cmbset of the two maps
@@ -195,20 +248,6 @@ class Config:
             raise TypeError(f'Undefined ktype {ktype}')
         return seed1, seed2, cmbset1, cmbset2
 
-    @cached_property
-    def cmbcl(self):
-        cambcls = str(resources.files('healqest') / 'camb' / self.file_cmb)
-        ell, sltt, slee, slbb, slte = utils.get_lensedcls(cambcls, lmax=self.lmax)
-        return dict(tt=sltt, ee=slee, bb=slbb, te=slte)
-
-    @property
-    def qes(self):
-        """return qes for lensrec"""
-        qes = list()
-        for mvtype in self.mvtypes:
-            qes += self.mvtype2qe(mvtype)
-        return list(set(qes))
-
     @staticmethod
     def mvtype2qe(mvtype):
         # SQE type MVs
@@ -221,24 +260,76 @@ class Config:
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
 
+    @property
+    def qes(self):
+        """return qes for lensrec"""
+        qes = list()
+        for mvtype in self.mvtypes:
+            qes += self.mvtype2qe(mvtype)
+        return list(set(qes))
+
+    @cached_property
+    def cinv_cls(self) -> dict:
+        """return the CMB and foreground cls for cinv"""
+        out = dict()
+
+        def dat2dict(ell, dat):
+            assert ell[0] == 0
+            assert ell[-1] == self.cinv_lmax
+            return dict(tt=dat[0],
+                        ee=dat[1],
+                        bb=dat[2],
+                        te=dat[3])
+
+        file_cmb = str(resources.files('healqest') / 'camb' / self.file_cambcmb)
+        ell, *dat = utils.get_lensedcls(file_cmb, lmax=self.cinv_lmax)
+        out['cmb'] = dat2dict(ell, dat)
+
+        if hasattr(self, 'file_noisefg'):
+            ell, *dat = np.loadtxt(self.path(self.file_noisefg))[:self.cinv_lmax + 1, :5].T
+            out['nl_res'] = dat2dict(ell, dat)
+        else:
+            out['nl_res'] = None
+        return out
+
+    @cached_property
+    def cmbcl(self):
+        cambcls = str(resources.files('healqest') / 'camb' / self.file_cmb)
+        ell, sltt, slee, slbb, slte = utils.get_lensedcls(cambcls, lmax=self.lmax)
+        return dict(tt=sltt, ee=slee, bb=slbb, te=slte)
+
+    @cached_property
+    def tfbl_1d(self) -> dict:
+        """Return a 1d bl functions for T/E/B"""
+        if self.file_bl is None:
+            bl = np.ones(self.cinv_lmax)
+        else:
+            beam_file = self.path(self.file_bl)
+            bl = np.loadtxt(beam_file)[:self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
+        return dict(t=bl, e=bl, b=bl)
+
+    @cached_property
+    def tfbl_2d(self) -> Union[dict, None]:
+        """Return a 2d bl/tf functions for T/E/B"""
+        if self.file_tf2d:
+            return np.load(self.file_tf2d)  # TODO: actually implement this when needed
+        else:
+            return None
+
     @cached_property
     def g(self):
         return Geometry(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
 
+    # === setup masks ===
     def _load_mask(self, item):
-        if isinstance(item, str):
-            return hp.read_map(self.path(item, field=self.field))
-        elif isinstance(item, list):
-            mask = None
-            for _ in item:
-                _mask = self._load_mask(_)
-                if mask is None:
-                    mask = _mask
-                else:
-                    mask *= _mask
-            return mask
-        else:
-            raise TypeError(f'Undefined item type {type(item)}')
+        mask = None
+        for _ in self.as_list(item):
+            _mask = hp.read_map(self.path(_, field=self.field))
+            if mask is None:
+                mask = _mask
+            else:
+                mask *= _mask
+        return mask
 
     @cached_property
     def mask_qe(self):
@@ -266,6 +357,7 @@ class Config:
         """boundary mask used to save plm as partial maps"""
         return self.mask_qe !=0
 
+    # === setup paths ===
     def p_plm(self, tag=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None,
               bundle=None):
         """
@@ -324,7 +416,7 @@ class Config:
     @staticmethod
     def f_tmp(tag, seed1=None, seed2=None, ktype=None, N1=False, mf_group=0, bundle=None):
         """
-        Return file name of a temprary file.
+        Return file name of a temprary file for kappa maps.
 
         Parameters
         ----------
@@ -342,6 +434,109 @@ class Config:
         bundle_tag = f'_bundle{bundle}' if bundle is not None else ''
         N1_tag = '_N1' if N1 else ''
         return os.path.join(f"kmap_{tag}{bundle_tag}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp")
+
+
+class Maps:
+    def __init__(self, nside, file_signal, file_noise=None, tf2d=None, config=None, g=None, N1=False, bundle=None):
+        """
+        Maps class for loading maps as simulation/cinv input
+
+        Parameters
+        ----------
+        nside: int
+            Nside for the maps
+        file_signal: str
+            String or format string that expects {seed} and {cmbid} substitutions. This points to signal alm files.
+        file_noise: str=None
+            String or format string that expects {seed} and {cmbid} substitutions. This points to noise alm files.
+        tf2d: np.array=None
+            2d TF in alm space
+        config: Config=None
+        g: Geometry=None
+            The `ducc` wrapper object used to speed up spherical harmonic transforms. If specified, the SHT will
+            only be applied on relevant rings, i.e., an implicit binary mask is applied.  If None, a full-sky
+            Geometry object of `nside` will be used. This should give identical results as healpy but still a 2x
+            speed-up.
+        N1: bool=False
+            Specify if these maps are for N1-type or std sims. This is only relevant for noise seed generations if
+            `file_noise` is not given.
+        bundle: int=None
+            Specify if the bundle. This is only relevant for noise seed generations if `file_noise` is not given.
+        """
+        self.nside = nside
+        self.file_cmb = file_signal
+        self.file_noise = file_noise
+        self.tf2d = tf2d
+        self.config = config
+        if g is None:
+            self.g = Geometry(nside=nside, dec_range=None)
+        else:
+            self.g = g
+        assert self.g.nside == nside
+        self.bundle = bundle
+        self.N1 = N1
+
+    @classmethod
+    def from_config(cls, config: Config, N1=False, bundle=None):
+        if not N1:
+            _file_signal, _file_noise = config.file_slm, config.file_nlm
+        else:
+            _file_signal, _file_noise = config.file_slm_N1, config.file_nlm_N1
+
+        # Apply additional bundle/field specifications with PartialFormatter
+        f = PartialFormatter()
+        file_signal = f.format(config.path(_file_signal), field=config.field, bundle=bundle)
+        if _file_noise is not None:
+            file_noise = f.format(config.path(_file_noise), field=config.field, bundle=bundle)
+        else:
+            file_noise = None
+
+        return cls(
+            nside=config.nside,
+            file_signal=file_signal,
+            file_noise=file_noise,
+            config=config,
+            g=config.g,
+            tf2d=config.tfbl_2d,
+            N1=N1, bundle=bundle
+        )
+
+    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False):
+        """Load sim temperature signal and noise map separately and add"""
+
+        f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
+        print(f"loading {f_slm}")
+        almt = hp.read_alm(f_slm, hdu=1)
+
+        if add_noise:
+            if self.file_noise is not None:
+                f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
+                print(f"Adding noise: {f_nlm}")
+                nlm = hp.read_alm(f_nlm, hdu=1)
+            else:
+                _seed = healqest_utils.generate_seed(seed=seed, cmbid=cmbid, bundle=self.bundle,
+                                                     extra_tag='N1' if self.N1 else None)
+                np.random.seed(_seed)
+                lmax = hp.Alm.getlmax(len(almt))
+                nl = np.full(lmax+1, np.deg2rad(self.config.nlev_t/60)**2)
+                nlm = hp.synalm(nl, lmax=lmax, new=True)
+
+            almt += nlm
+            del nlm
+        else:
+            pass
+
+        if apply_tf:
+            print("Applying tf")
+            assert self.tf2d is not None
+            lmax = hp.Alm.getlmax(len(self.tf2d))
+            lmaxin = hp.Alm.getlmax(len(almt))
+            if lmaxin > lmax:
+                almt = healqest_utils.reduce_lmax(almt, lmax)
+            almt *= self.tf2d
+        else:
+            pass
+        return self.g.alm2map(almt)
 
 
 def parser():

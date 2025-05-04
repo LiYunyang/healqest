@@ -4,6 +4,9 @@ Convinient functions for curved-sky lensing
 
 import healpy as hp
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def almtf2d(lmax, lmin=0, mmin=0, bl=None):
@@ -183,7 +186,7 @@ class jit:
 
     def instantiate(self):
         [ctype, cargs, ckwds] = self.__dict__["__jit_args"]
-        print("jit: instantiating ctype =", ctype)
+        logger.info(f"jit: instantiating ctype={ctype}")
         self.__dict__["__jit_obj"] = ctype(*cargs, **ckwds)
         del self.__dict__["__jit_args"]
 

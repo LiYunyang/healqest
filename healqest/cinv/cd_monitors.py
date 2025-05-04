@@ -1,12 +1,33 @@
-import sys
 import numpy as np
 from . import cinv_utils
+import logging
+logger = logging.getLogger(__name__)
 
-# monitors
-logger_basic = lambda i, eps, watch=None, **kwargs: sys.stdout.write(
-    "[" + str(watch.elapsed()) + "] " + str((i, eps)) + "\n"
-)
-logger_none = lambda i, eps, watch=None, **kwargs: 0
+try:
+    from mpi4py import MPI
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+except ImportError:
+    rank = 0
+
+
+class Logger:
+    def __init__(self, **kwargs):
+        pass
+
+    def __call__(self, i, eps, watch=None, **kwargs):
+        pass
+
+
+class logger_basic(Logger):
+    def __call__(self, i, eps, watch=None, **kwargs):
+        if rank ==0:
+            logger.info(f"[{str(watch.elapsed())}] {i} {eps:.3e}")
+
+
+class logger_none(Logger):
+    def __call__(self, i, eps, watch=None, **kwargs):
+        pass
 
 
 class MonitorBasic(object):
@@ -22,28 +43,30 @@ class MonitorBasic(object):
         the threshold for converge
     """
 
-    def __init__(self, dot_op, iter_max=np.inf, eps_min=1.0e-10, logger=logger_basic):
+    def __init__(self, dot_op, iter_max=np.inf, eps_min=1.0e-10, cd_logger=None):
         self.dot_op = dot_op
         self.iter_max = iter_max
         self.eps_min = eps_min
-        self.logger = logger
-
+        if cd_logger is None:
+            cd_logger = logger_basic()
+        self.logger = cd_logger
         self.watch = cinv_utils.StopWatch()
+        self.d0 = None
+        self.eps = None
 
     def criterion(self, i, soltn, resid):
         delta = self.dot_op(resid, resid)
-
         if i == 0:
             self.d0 = delta
+            self.eps = []
+        else:
+            pass
+
+        eps = np.sqrt(delta / self.d0)
+        self.eps.append(eps)
 
         if self.logger is not None:
-            self.logger(
-                i,
-                np.sqrt(delta / self.d0),
-                watch=self.watch,
-                soltn=soltn,
-                resid=resid,
-            )
+            self.logger(i, eps, watch=self.watch, soltn=soltn, resid=resid)
 
         if (i >= self.iter_max) or (delta <= self.eps_min**2 * self.d0):
             return True

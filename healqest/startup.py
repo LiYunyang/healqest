@@ -1,5 +1,12 @@
+"""
+This module provides setups needed at startup, including
+    - parsing config files;
+    - initiating the global logger
+    - modules for map io (might move maps sometime).
+"""
 import argparse
 from functools import cached_property
+import logging
 import os
 import string
 import shutil
@@ -21,6 +28,8 @@ try:
         warnings.filterwarnings("ignore")
 except ImportError:
     rank = 0
+
+logger = logging.getLogger(__name__)
 
 
 class PartialFormatter(string.Formatter):
@@ -505,13 +514,13 @@ class Maps:
         """Load sim temperature signal and noise map separately and add"""
 
         f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
-        print(f"loading {f_slm}")
+        logger.debug(f"loading {f_slm}")
         almt = hp.read_alm(f_slm, hdu=1)
 
         if add_noise:
             if self.file_noise is not None:
                 f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
-                print(f"Adding noise: {f_nlm}")
+                logger.debug(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=1)
             else:
                 _seed = healqest_utils.generate_seed(seed=seed, cmbid=cmbid, bundle=self.bundle,
@@ -527,7 +536,7 @@ class Maps:
             pass
 
         if apply_tf:
-            print("Applying tf")
+            logger.debug("Applying tf")
             assert self.tf2d is not None
             lmax = hp.Alm.getlmax(len(self.tf2d))
             lmaxin = hp.Alm.getlmax(len(almt))
@@ -544,7 +553,82 @@ def parser():
     p.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
     p.add_argument('-f', '--field', default=None, type=str, help='SPT field')
     p.add_argument('-b', '--bundle', default=None, type=int, help='Bundle id')
+    p.add_argument('-v', '--verbose', default=3, type=int, help='Output verbosity')
     p.add_argument('-n1', action='store_true', help='do N1-type operations')
     p.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     p.add_argument('-skip', action='store_true', help='skip finished jobs')
     return p
+
+
+class MPIAwareFormatter(logging.Formatter):
+    COLORS = {
+        logging.DEBUG: "\033[37m",  # white
+        logging.INFO: "\033[32m",  # green
+        logging.WARNING: "\033[33m",  # yellow
+        logging.ERROR: "\033[31m",  # red
+        logging.CRITICAL: "\033[41m",  # red background
+    }
+    RESET = "\033[0m"
+
+    def format(self, record):
+        record.rank = rank  # Save rank into the record
+        record.name = record.name.split('.')[-1]  # truncate to keep only the module name
+
+        asctime = self.formatTime(record, self.datefmt)
+        color = self.COLORS.get(record.levelno, "")
+        prefix = f"{color}[{asctime}({rank})]{self.RESET}"
+
+        # Format rest of the message
+        message = super().format(record)
+
+        # Replace the [asctime(rank)] part with the colored version
+        # This assumes `[{asctime}({rank})]` is at the beginning of your format string
+        start = message.find("[")
+        end = message.find("]") + 1
+        return f"{prefix}{message[end:]}"
+
+
+def verbose2level(verbosity: int) -> int:
+
+    return {
+        0: logging.CRITICAL,
+        1: logging.ERROR,
+        2: logging.WARNING,
+        3: logging.INFO,
+        4: logging.DEBUG,
+        5: logging.DEBUG,
+    }.get(verbosity, logging.INFO)
+
+
+def setup_logger(verbose=3, force=True, quiet=True):
+    """
+    Central logging config. Call this early in your script.
+
+    Parameters
+    ----------
+    verbose: int=3
+        verboisity. 0=CRITICAL, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG
+    force: bool=True
+    quiet: bool=True
+        If True, scilence sub-warning level message from selected modules.
+    """
+    if rank > 0:
+        # Silence all logging on non-root ranks
+        logging.disable(logging.CRITICAL)
+        # return
+        pass
+
+    fmt = "[{asctime}({rank})] {name}: {message}"
+    datefmt = "%H:%M"
+
+    formatter = MPIAwareFormatter(fmt, datefmt, style='{')
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    # Configure root logger
+    logging.basicConfig(level=verbose2level(verbose), handlers=[handler], force=force)
+
+    if quiet:
+        for name in ['healpy']:
+            logging.getLogger(name).setLevel(logging.WARNING)

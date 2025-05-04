@@ -22,7 +22,7 @@ class Logger:
 class logger_basic(Logger):
     def __call__(self, i, eps, watch=None, **kwargs):
         if rank ==0:
-            logger.info(f"[{str(watch.elapsed())}] {i} {eps:.3e}")
+            logger.info(f"[{str(watch.elapsed())}] {i} {eps:.2e}")
 
 
 class logger_none(Logger):

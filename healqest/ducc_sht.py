@@ -181,7 +181,7 @@ class Geometry:
         return maps
 
     def map2alm(self, maps, lmax=None, mmax=None, iter=0, pol=True, use_weights=False, use_pixel_weights=False,
-                nthreads=None,  rtol=1e-5, check=True, **kwargs):
+                nthreads=None,  rtol=1e-5, check=True, alms=None, **kwargs):
         """
         Computes the alm of a Healpix map. The input maps must all be in ring ordering.
 
@@ -212,6 +212,8 @@ class Geometry:
             Check if there are bad pixels in the input maps and set them to zero for computation (a copy is made
             and the input array is not mutted). If you are certain that there are no bad pixels, you can set this
             to False to save overhead. Default: True.
+        alms: array-like
+            The output alms buffer.
         """
         assert hp.get_nside(maps) == self.nside
 
@@ -222,7 +224,11 @@ class Geometry:
 
         ctype = np.complex64 if dtype == np.float32 else np.complex128
         kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
-        alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype)
+        if alms is None:
+            alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype)
+        else:
+            if alms.ndim == 1:
+                alms = alms[np.newaxis, :]
 
         func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
         if pol is False:

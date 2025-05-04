@@ -630,5 +630,6 @@ def setup_logger(verbose=3, force=True, quiet=True):
     logging.basicConfig(level=verbose2level(verbose), handlers=[handler], force=force)
 
     if quiet:
-        for name in ['healpy']:
-            logging.getLogger(name).setLevel(logging.WARNING)
+        for name in logging.root.manager.loggerDict:
+            if not name.startswith("healqest"):
+                logging.getLogger(name).setLevel(logging.WARNING)

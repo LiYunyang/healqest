@@ -8,20 +8,34 @@ import logging
 import numpy as np
 import healpy as hp
 
-from healpy import alm2map, map2alm
 from . import hp_utils, cinv_utils
 logger = logging.getLogger(__name__)
 
 
-def calc_prep(m, s_inv_filt, n_inv_filt):
+# TODO: for testing only
+def alm2map(*args, **kwargs):
+    logger.warning("using healpy alm2map")
+    return hp.alm2map(*args, **kwargs)
+
+
+# TODO: for testing only
+def map2alm(*args, **kwargs):
+    logger.warning("using healpy map2alm")
+    return hp.map2alm(*args, **kwargs)
+
+
+def calc_prep(m, s_inv_filt, n_inv_filt, g=None):
     tmap = np.copy(m)
     n_inv_filt.apply_map(tmap)
-    alm = map2alm(tmap, lmax=len(n_inv_filt.tf1d) - 1, iter=0)
-    pixarea = hp.nside2pixarea(hp.get_nside(m))
+    if g is None:
+        alm = map2alm(tmap, lmax=len(n_inv_filt.tf1d) - 1, iter=0)
+    else:
+        alm = g.map2alm(tmap, lmax=len(n_inv_filt.tf1d) - 1, iter=0)
     if n_inv_filt.tf2d is None:
         hp.almxfl(alm, n_inv_filt.tf1d, inplace=True)
     else:
         alm *= n_inv_filt.tf2d
+    pixarea = hp.nside2pixarea(hp.get_nside(m))
     return alm / pixarea
 
 
@@ -116,8 +130,9 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
 
 class NoiseInverseFilter:  # alm_filter_ninv(object):
     """Missing doc."""
-    def __init__(self, n_inv, tf1d, tf2d = None, nlev_ftl=None):
-                 #marge_monopole=False, marge_dipole=False, marge_uptolmin=-1, marge_maps=(), nlev_ftl=None):
+
+    def __init__(self, n_inv, tf1d, tf2d=None, nlev_ftl=None, g=None):
+        # marge_monopole=False, marge_dipole=False, marge_uptolmin=-1, marge_maps=(), nlev_ftl=None):
         if isinstance(n_inv, list):
             n_inv_prod = hp_utils.read_map(n_inv[0])
             if len(n_inv) > 1:
@@ -136,7 +151,12 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         self.tf2d = tf2d
         self.npix = len(self.n_inv)
         self.nside = hp.npix2nside(self.npix)
-
+        if g is None:
+            self.g = None
+        else:
+            self.g = g
+            assert self.g.nside == self.nside
+        self.pixarea = hp.nside2pixarea(self.nside)
         if nlev_ftl is None:
             nlev_ftl = np.rad2deg(np.sqrt(1 / np.sum(self.n_inv) * 4 * np.pi)) * 60
         # self.nlev_ftl = nlev_ftl
@@ -148,13 +168,21 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             hp.almxfl(alm, self.tf1d, inplace=True)
         else:
             alm *= self.tf2d
-        tmap = alm2map(alm, hp.npix2nside(npix))
-        self.apply_map(tmap)
-        alm[:] = map2alm(tmap, lmax=hp.Alm.getlmax(alm.size), iter=0)
-        if self.tf2d is None:
-            hp.almxfl(alm, self.tf1d  *  (npix / (4. * np.pi)), inplace=True)
+        if self.g is None:
+            tmap = alm2map(alm, self.nside)
         else:
-            alm *= self.tf2d * (npix / (4. * np.pi))
+            tmap = self.g.alm2map(alm,)
+        self.apply_map(tmap)
+        lmax = hp.Alm.getlmax(alm.size)
+        if self.g is None:
+            alm[:] = map2alm(tmap, lmax=lmax, iter=0)
+        else:
+            self.g.map2alm(tmap, lmax=lmax, iter=0, alms=alm)
+        if self.tf2d is None:
+            hp.almxfl(alm, self.tf1d, inplace=True)
+        else:
+            alm *= self.tf2d
+        alm /= self.pixarea
 
     def apply_map(self, tmap):
         """Missing doc."""

@@ -446,7 +446,7 @@ class Config:
 
 
 class Maps:
-    def __init__(self, nside, file_signal, file_noise=None, tf2d=None, config=None, g=None, N1=False, bundle=None):
+    def __init__(self, nside, file_signal, file_noise=None, tf2d=None, config=None, N1=False, bundle=None):
         """
         Maps class for loading maps as simulation/cinv input
 
@@ -461,11 +461,6 @@ class Maps:
         tf2d: np.array=None
             2d TF in alm space
         config: Config=None
-        g: Geometry=None
-            The `ducc` wrapper object used to speed up spherical harmonic transforms. If specified, the SHT will
-            only be applied on relevant rings, i.e., an implicit binary mask is applied.  If None, a full-sky
-            Geometry object of `nside` will be used. This should give identical results as healpy but still a 2x
-            speed-up.
         N1: bool=False
             Specify if these maps are for N1-type or std sims. This is only relevant for noise seed generations if
             `file_noise` is not given.
@@ -477,11 +472,6 @@ class Maps:
         self.file_noise = file_noise
         self.tf2d = tf2d
         self.config = config
-        if g is None:
-            self.g = Geometry(nside=nside, dec_range=None)
-        else:
-            self.g = g
-        assert self.g.nside == nside
         self.bundle = bundle
         self.N1 = N1
 
@@ -505,12 +495,11 @@ class Maps:
             file_signal=file_signal,
             file_noise=file_noise,
             config=config,
-            g=config.g,
             tf2d=config.tfbl_2d,
             N1=N1, bundle=bundle
         )
 
-    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False):
+    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
         """Load sim temperature signal and noise map separately and add"""
 
         f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
@@ -545,7 +534,10 @@ class Maps:
             almt *= self.tf2d
         else:
             pass
-        return self.g.alm2map(almt)
+        if g is None:
+            return hp.alm2map(almt, nside=self.nside)
+        else:
+            return g.alm2map(almt)
 
 
 def parser():

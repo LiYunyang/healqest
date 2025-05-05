@@ -13,11 +13,12 @@ import logging
 from . import opfilt_hp_p, opfilt_hp_t,opfilt_hp_tp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
+from healqest.ducc_sht import Geometry
 logger = logging.getLogger(__name__)
 
 
 class cinv(object):
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, eps_min, ellscale, opfilt):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, eps_min, ellscale, opfilt, g=None):
         """
         Parameters
         ----------
@@ -35,6 +36,11 @@ class cinv(object):
             If True, scale Cl as Dl.
         opfilt: module
             module object that contains routines to perform appropriate filtering
+        g: Geometry=None
+            The `ducc` wrapper object used to speed up spherical harmonic transforms. If specified, the SHT will
+            only be applied on relevant rings, i.e., an implicit binary mask is applied.  If None, a full-sky
+            Geometry object of `nside` will be used. This should give identical results as healpy but still a 2x
+            speed-up.
         """
         assert lib_dir is not None
         assert lmax >= 1024
@@ -76,6 +82,13 @@ class cinv(object):
         self.prev_eps = None
 
         self.eps = None  # tracks the convergence history
+
+        if g is None:
+            # self.g = Geometry(nside=nside, dec_range=None)  # fallback to full-sky ducc
+            self.g = None  # fallback to hp
+        else:
+            self.g = g
+            assert self.g.nside == nside
 
     def get_tal(self, a, lmax=None):
         if lmax is None:
@@ -148,11 +161,12 @@ class cinv_t(cinv):
 
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True,
+                 g=None):
         assert isinstance(ninv, list)
         # only take the first entry as the temperation ninv
         super(cinv_t, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv[0],
-                                     eps_min=eps_min, ellscale=ellscale, opfilt=opfilt_hp_t)
+                                     eps_min=eps_min, ellscale=ellscale, opfilt=opfilt_hp_t, g=g)
 
         invfac = cinv_utils.cli(self.rescal_cl)
         self.tf1d = tf1d[:lmax+1] * invfac
@@ -163,7 +177,7 @@ class cinv_t(cinv):
                                        s_cls=self.dl, nl_res=self.nl_res, lmax=self.lmax,
                                        tf1d=self.tf1d, tf2d=self.tf2d)
         self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter, n_inv=self.ninv,
-                                       tf1d=self.tf1d, tf2d=tf2d)
+                                       tf1d=self.tf1d, tf2d=tf2d, g=self.g)
 
     def _calc_ftl(self):
         ninv = self.n_inv_filt.n_inv
@@ -233,11 +247,11 @@ class cinv_p(cinv):
     """
 
     def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1dE, tf1dB,
-                 tf2dE=None, tf2dB=None, eps_min=1.0e-5, ellscale=True):
+                 tf2dE=None, tf2dB=None, eps_min=1.0e-5, ellscale=True, g=None):
 
         assert isinstance(ninv, list)
         super(cinv_p, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv, eps_min=eps_min,
-                                     ellscale=ellscale, opfilt=opfilt_hp_p)
+                                     ellscale=ellscale, opfilt=opfilt_hp_p, g=g)
 
         invfac = cinv_utils.cli(self.rescal_cl)
         self.tf1dE = tf1dE[:lmax+1] * invfac
@@ -395,11 +409,11 @@ class cinv_tp(cinv):
     """
 
     def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d_t, tf1d_p, tf2d_t, tf2d_p, eps_min=1.0e-5,
-                 ellscale=False):
+                 ellscale=False, g=None):
 
         assert len(ninv) == 2 or len(ninv) == 4  # TT, (QQ + UU)/2 or TT,QQ,QU,UU
         super(cinv_tp, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv,
-                                      eps_min=eps_min, ellscale=ellscale, opfilt=opfilt_hp_tp)
+                                      eps_min=eps_min, ellscale=ellscale, opfilt=opfilt_hp_tp, g=g)
 
         invfac = cinv_utils.cli(self.rescal_cl)
         self.tf1d_t = tf1d_t[:lmax +1] * invfac
@@ -453,6 +467,7 @@ class library_sepTP(object):
         self.lfilt = lfilt
         self.add_noise = add_noise
         self.soltn_lib = soltn_lib
+        self.g = None
 
     def get_sim_teblm(self, idx):
         """
@@ -490,7 +505,7 @@ class library_sepTP(object):
                 soltn = self.soltn_lib.get_sim_tmliklm(seed, cmbid)
             else:
                 soltn = None
-            map_in = self.sim_lib.get_tmap(seed, cmbid, add_noise=self.add_noise)
+            map_in = self.sim_lib.get_tmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
             tlm = self._apply_ivf_t(map_in, soltn=soltn)
         else:
             logger.info(f"Loading file: {tfname}")
@@ -683,6 +698,7 @@ class library_cinv_sepTP(library_sepTP):
                                                  add_noise=add_noise)
         self.cinv_t = cinvt
         self.cinv_p = cinvp
+        self.g = cinvt.g
 
     def get_fmask(self):
         return hp.read_map(os.path.join(self.lib_dir, "fmask.fits.gz"))

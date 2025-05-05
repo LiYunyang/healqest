@@ -79,9 +79,9 @@ class Config:
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
     file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.
-    file_nlm: str  # path to noise alm files for std/N0-type sims.
+    file_nlm: str = None  # path to noise alm files for std/N0-type sims.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
-    file_nlm_N1: str  # path to noise alm files for N1-type sims.
+    file_nlm_N1: str = None  # path to noise alm files for N1-type sims.
     nlev_t: float = None  # NET value, if not specified, nlev_t = nlev_p / sqrt(2)
     nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls

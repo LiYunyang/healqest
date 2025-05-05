@@ -1,4 +1,7 @@
 import numpy as np
+import logging
+
+logger = logging.getLogger(__name__)
 
 tr_cg = lambda i: i - 1
 tr_cd = lambda i: 0
@@ -78,9 +81,7 @@ def cd_solve(
         dTAd = np.zeros((n_pre_ops, n_pre_ops))
         for ip1 in range(0, n_pre_ops):
             for ip2 in range(0, ip1 + 1):
-                dTAd[ip1, ip2] = dTAd[ip2, ip1] = dot_op(
-                    searchdirs[ip1], searchfwds[ip2]
-                )
+                dTAd[ip1, ip2] = dTAd[ip2, ip1] = dot_op(searchdirs[ip1], searchfwds[ip2])
         dTAd_inv = np.linalg.inv(dTAd)
 
         # search.
@@ -94,6 +95,7 @@ def cd_solve(
         # update residual
         iter += 1
         if np.mod(iter, roundoff) == 0:
+            logger.info(f"CG roundoff at {iter}")
             residual = b - fwd_op(x)
         else:
             for searchfwd, alpha in zip(searchfwds, alphas):

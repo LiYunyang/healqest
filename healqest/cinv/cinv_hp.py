@@ -75,6 +75,9 @@ class cinv(object):
         self.nl_res = nl_res
         if self.nl_res is None:
             self.nl_res = {k: np.zeros_like(v[:lmax+1]) for k, v in cl.items()}
+        else:
+            for k, v in self.nl_res.items():
+                self.nl_res[k][:2] = 0  # enforce this cutoff is important for convergence!
 
         self.opfilt = opfilt  # filter module
         self.s_inv_filt = None

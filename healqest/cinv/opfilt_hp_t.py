@@ -24,18 +24,19 @@ def map2alm(*args, **kwargs):
     return hp.map2alm(*args, **kwargs)
 
 
-def calc_prep(m, s_inv_filt, n_inv_filt, g=None):
-    tmap = np.copy(m)
+def calc_prep(maps, s_inv_filt, n_inv_filt, g=None):
+    tmap = np.copy(maps)
     n_inv_filt.apply_map(tmap)
+    lmax = len(n_inv_filt.tf1d) - 1
     if g is None:
-        alm = map2alm(tmap, lmax=len(n_inv_filt.tf1d) - 1, iter=0)
+        alm = map2alm(tmap, lmax=lmax, iter=0)
     else:
-        alm = g.map2alm(tmap, lmax=len(n_inv_filt.tf1d) - 1, iter=0)
+        alm = g.map2alm(tmap, lmax=lmax, iter=0)
     if n_inv_filt.tf2d is None:
         hp.almxfl(alm, n_inv_filt.tf1d, inplace=True)
     else:
         alm *= n_inv_filt.tf2d
-    pixarea = hp.nside2pixarea(hp.get_nside(m))
+    pixarea = hp.nside2pixarea(hp.get_nside(maps))
     return alm / pixarea
 
 
@@ -81,10 +82,7 @@ class PreOperatorDiag:
         """returns  1/(1/S + 1/N)"""
         cltt = s_cls["tt"]
         assert len(cltt) >= len(n_inv_filt.tf1d)
-        # fsky = np.mean(n_inv_filt.n_inv>0)
-        # logger.debug(f"fsky = {fsky}")
-        fsky = 1
-        n_inv_cl = np.sum(n_inv_filt.n_inv) / (4.0 * np.pi*fsky)
+
         lmax = len(n_inv_filt.tf1d) - 1
         assert lmax <= (len(cltt) - 1)
         if nl_res is None:
@@ -92,9 +90,8 @@ class PreOperatorDiag:
 
         bl2 = n_inv_filt.tf1d[:lmax+1]**2
         filt = cinv_utils.cli(cltt[:lmax + 1]+ nl_res["tt"] * cinv_utils.cli(bl2))
-        filt += n_inv_cl*bl2
+        filt += 1/n_inv_filt.nlev_cl * bl2
         self.filt = cinv_utils.cli(filt)
-        # self.filt = cltt[:lmax + 1]  # HACK (YL): simple precond
 
     def __call__(self, talm):
         return self.calc(talm)
@@ -130,8 +127,9 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
 
 class NoiseInverseFilter:  # alm_filter_ninv(object):
     """Missing doc."""
+    nlev_cl: float  # equivalent noise level in uK^2 sr for precond
 
-    def __init__(self, n_inv, tf1d, tf2d=None, nlev_ftl=None, g=None):
+    def __init__(self, n_inv, tf1d, tf2d=None, g=None):
         # marge_monopole=False, marge_dipole=False, marge_uptolmin=-1, marge_maps=(), nlev_ftl=None):
         if isinstance(n_inv, list):
             n_inv_prod = hp_utils.read_map(n_inv[0])
@@ -157,10 +155,11 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             self.g = g
             assert self.g.nside == self.nside
         self.pixarea = hp.nside2pixarea(self.nside)
-        if nlev_ftl is None:
-            nlev_ftl = np.rad2deg(np.sqrt(1 / np.sum(self.n_inv) * 4 * np.pi)) * 60
-        # self.nlev_ftl = nlev_ftl
-        logger.info("ninv_ftl: using %.2f uK-amin noise Cl" % nlev_ftl)
+
+        fsky = np.mean(self.n_inv > 0)
+        self.nlev_cl = 1 / np.sum(self.n_inv)*4*np.pi*fsky
+        NET = np.rad2deg(np.sqrt(self.nlev_cl))*60
+        logger.info(f"ninv_ftl: using {NET:.2f} uK-amin noise Cl over fsky {fsky:.2f}")
 
     def apply_alm(self, alm):
         """Missing doc."""

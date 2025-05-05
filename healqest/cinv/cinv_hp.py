@@ -111,7 +111,7 @@ class cinv(object):
         cd_logger = cd_monitors.logger_basic() if verbose else cd_monitors.logger_none()
 
         tpn_alm = self.opfilt.calc_prep(tpn_map, self.s_inv_filt, self.n_inv_filt, g=self.g)
-        monitor = cd_monitors.MonitorBasic(dot_op, cd_logger=cd_logger, iter_max=100, eps_min=self.eps_min)
+        monitor = cd_monitors.MonitorBasic(dot_op, cd_logger=cd_logger, iter_max=np.inf, eps_min=self.eps_min)
 
         fwd_op = self.opfilt.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
 

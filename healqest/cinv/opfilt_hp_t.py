@@ -111,11 +111,10 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
 
     def __init__(self, s_cls, nl_res, lmax, tf1d, tf2d=None):
         cltt = s_cls["tt"][: lmax + 1]
-        nltt = nl_res["tt"][: lmax + 1] / tf1d**2
         cltt_2d = hp_utils.cl2almformat(cltt)
+        nltt = nl_res["tt"][: lmax + 1] / tf1d ** 2
         nltt_2d = hp_utils.cl2almformat(nltt)
         self.slinv = cinv_utils.cli(cltt_2d + nltt_2d)
-
         self.nl_res = nl_res
         self.lmax = lmax
         self.s_cls = s_cls

@@ -69,10 +69,12 @@ class cinv(object):
         # cltt has l^2 and tf^2 has 1/l^2 factor already.
         # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
         # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
-        self.dl = {k: rescal_cl ** 2 * v[: lmax + 1] for k, v in cl.items()}
+        self.dl = {k: rescal_cl**2 * v[:lmax+1] for k, v in cl.items()}
 
         self.ninv = ninv
         self.nl_res = nl_res
+        if self.nl_res is None:
+            self.nl_res = {k: np.zeros_like(v[:lmax+1]) for k, v in cl.items()}
 
         self.opfilt = opfilt  # filter module
         self.s_inv_filt = None

@@ -81,19 +81,20 @@ class PreOperatorDiag:
         """returns  1/(1/S + 1/N)"""
         cltt = s_cls["tt"]
         assert len(cltt) >= len(n_inv_filt.tf1d)
-        n_inv_cl = np.sum(n_inv_filt.n_inv) / (4.0 * np.pi)
+        # fsky = np.mean(n_inv_filt.n_inv>0)
+        # logger.debug(f"fsky = {fsky}")
+        fsky = 1
+        n_inv_cl = np.sum(n_inv_filt.n_inv) / (4.0 * np.pi*fsky)
         lmax = len(n_inv_filt.tf1d) - 1
         assert lmax <= (len(cltt) - 1)
         if nl_res is None:
             nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
 
-        filt = cinv_utils.cli(
-            cltt[: lmax + 1]
-            + nl_res["tt"] * cinv_utils.cli(n_inv_filt.tf1d[: lmax + 1] ** 2)
-        )
-        filt += n_inv_cl * n_inv_filt.tf1d[: lmax + 1] ** 2
-        # filt *= (2. * np.arange(0, lmax + 1) + 1)  # Add this line
+        bl2 = n_inv_filt.tf1d[:lmax+1]**2
+        filt = cinv_utils.cli(cltt[:lmax + 1]+ nl_res["tt"] * cinv_utils.cli(bl2))
+        filt += n_inv_cl*bl2
         self.filt = cinv_utils.cli(filt)
+        # self.filt = cltt[:lmax + 1]  # HACK (YL): simple precond
 
     def __call__(self, talm):
         return self.calc(talm)

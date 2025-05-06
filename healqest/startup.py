@@ -536,9 +536,10 @@ class Maps:
         if add_noise:
             if self.file_noise is not None:
                 f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
-                logger.debug(f"Adding noise: {f_nlm}")
+                logger.info(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=1)
             else:
+                logger.warning("Not providing nlm, generating from NET/NEP")
                 _seed = healqest_utils.generate_seed(seed=seed, cmbid=cmbid, bundle=self.bundle,
                                                      extra_tag='N1' if self.N1 else None)
                 np.random.seed(_seed)

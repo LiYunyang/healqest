@@ -589,23 +589,41 @@ class MPIAwareFormatter(logging.Formatter):
         logging.CRITICAL: "\033[41m",  # red background
     }
     RESET = "\033[0m"
+    FAINT = "\033[2;37m"
 
-    def format(self, record):
+    def format2(self, record):
         record.rank = rank  # Save rank into the record
         record.name = record.name.split('.')[-1]  # truncate to keep only the module name
-
+        record.name = f"\033[2;37m{record.name}{self.RESET}"
         asctime = self.formatTime(record, self.datefmt)
         color = self.COLORS.get(record.levelno, "")
-        prefix = f"{color}[{asctime}({rank})]{self.RESET}"
+        prefix = f"[{rank}]{color}{asctime}{self.RESET}|"
 
         # Format rest of the message
         message = super().format(record)
 
         # Replace the [asctime(rank)] part with the colored version
         # This assumes `[{asctime}({rank})]` is at the beginning of your format string
-        start = message.find("[")
-        end = message.find("]") + 1
+        end = message.find("|") + 1
         return f"{prefix}{message[end:]}"
+
+    def format(self, record):
+        # Fixed-width module name
+        name = record.name.split(".")[-1][:10].rjust(10)
+        name_colored = f"{self.FAINT}{name}{self.RESET}"
+
+        # Faint rank (global rank must be defined elsewhere)
+        rank_colored = f"{self.FAINT}{rank}{self.RESET}"
+
+        # Time colored by log level
+        asctime = self.formatTime(record, self.datefmt)
+        time_color = self.COLORS.get(record.levelno, "")
+        asctime_colored = f"{time_color}{asctime}{self.RESET}"
+
+        # Actual log message
+        message = record.getMessage()
+
+        return f"{rank_colored}|{asctime_colored}|{name_colored} {message}"
 
 
 def verbose2level(verbosity: int) -> int:
@@ -638,8 +656,8 @@ def setup_logger(verbose=3, force=True, quiet=True):
         # return
         pass
 
-    fmt = "[{asctime}({rank})] {name}: {message}"
-    datefmt = "%H:%M"
+    fmt = "[{rank}]{asctime}|{name} {message}"
+    datefmt = "%H:%M:%S"
 
     formatter = MPIAwareFormatter(fmt, datefmt, style='{')
 

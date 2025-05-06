@@ -4,6 +4,8 @@ import healpy as hp
 from pathlib import Path
 import yaml,pickle
 import logging as lg
+logger = lg.getLogger(__name__)
+
 
 def recursive_merge(main_data, included_data):
     """Recursively merge two dictionaries, with values in main_data taking precedence."""
@@ -237,7 +239,7 @@ def reduce_lmax(alm, lmax=4000):
     Reduce the lmax of input alms (1d or 2d)
     """
     lmaxin = hp.Alm.getlmax(alm.shape[-1])
-    print("-- Reducing lmax: lmax_in=%g -> lmax_out=%g"%(lmaxin,lmax))
+    logger.info("-- Reducing lmax: lmax_in=%g -> lmax_out=%g" % (lmaxin,lmax))
     almout = np.zeros((*alm.shape[:-1], hp.Alm.getsize(lmax)), dtype=np.complex128)
     oldi=0
     newi=0

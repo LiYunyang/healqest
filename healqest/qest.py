@@ -1,3 +1,4 @@
+import logging
 import sys
 from typing import TypedDict
 
@@ -6,6 +7,7 @@ import healpy as hp
 from healqest import healqest_utils as utils
 from healqest import weights, resp
 
+logger = logging.getLogger(__name__)
 np.seterr(all='ignore')
 
 class qest(object):
@@ -801,7 +803,7 @@ class Qest(qest):
             else:
                 return q, -u
 
-    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=True, verbose=False):
+    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=True):
         """
         Compute quadratic estimator
 
@@ -821,7 +823,6 @@ class Qest(qest):
             full-sky healpy functions will be used.
         cache: bool=True
             If True, the QE results will be loaded from cache if available.
-        verbose: bool=False
         Returns
         ----------
         glm: complex
@@ -831,16 +832,15 @@ class Qest(qest):
         """
 
         if cache and qe in self.glm:
-            if verbose:
-                print("We've already computed this!")
+            logger.warning("We've already computed this!")
             return self.glm[qe], self.clm[qe]
 
         if qe in ['TTprf', 'TTmask', 'TTnoise']:
             assert u is not None, "Need profile function to compute this estimator"
 
         q = weights.weights_plus(qe, self.cls, self.lmax, u=u)
-        if verbose:
-            print('Running lensing reconstruction')
+
+        logger.info('Running lensing reconstruction')
 
         retglm = 0
         retclm = 0

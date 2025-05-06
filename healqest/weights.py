@@ -1,5 +1,8 @@
+import logging
 import numpy as np
 from healqest import healqest_utils as utils
+
+logger = logging.getLogger(__name__)
 
 class weights():
     def __init__(self,est,cls,lmax,u=None,totalcls=None,crossilc=False,withT3=False):
@@ -1145,7 +1148,7 @@ class weights_plus:
 
         self.lmax = lmax
 
-        print('Computing weights -- cmblensplus style')
+        logger.info('Computing weights -- cmblensplus style')
 
         sl = {ii: cls[ii] for ii in cls.keys()}
 

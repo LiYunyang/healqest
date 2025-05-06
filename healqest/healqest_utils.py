@@ -9,6 +9,7 @@ import tempfile as tf
 from typing import Union
 import subprocess
 import hashlib
+logger = lg.getLogger(__name__)
 
 np.seterr(divide="ignore", invalid="ignore")
 
@@ -377,7 +378,7 @@ def reduce_lmax(alm, lmax=4000):
     Reduce the lmax of input alm
     """
     lmaxin = hp.Alm.getlmax(alm.shape[0])
-    # print("-- Reducing lmax: lmax_in=%g -> lmax_out=%g" % (lmaxin, lmax))
+    logger.debug("-- Reducing lmax: lmax_in=%g -> lmax_out=%g" % (lmaxin, lmax))
     ell, emm = hp.Alm.getlm(lmaxin)
     almout = np.zeros(hp.Alm.getsize(lmax), dtype=np.complex128)
     oldi = 0

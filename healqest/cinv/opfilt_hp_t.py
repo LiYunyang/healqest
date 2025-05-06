@@ -7,21 +7,11 @@ Modified from and built on plancklens/qcinv/opfilt_tt.py
 import logging
 import numpy as np
 import healpy as hp
+from functools import cached_property
 
-from . import hp_utils, cinv_utils
+from . import hp_utils, cinv_utils, opfilt_hp
+from .opfilt_hp import alm2map, map2alm
 logger = logging.getLogger(__name__)
-
-
-# TODO: for testing only
-def alm2map(*args, **kwargs):
-    logger.warning("using healpy alm2map")
-    return hp.alm2map(*args, **kwargs)
-
-
-# TODO: for testing only
-def map2alm(*args, **kwargs):
-    logger.warning("using healpy map2alm")
-    return hp.map2alm(*args, **kwargs)
 
 
 def calc_prep(maps, s_inv_filt, n_inv_filt, g=None):
@@ -77,21 +67,32 @@ class ForwardOperator:
 
 
 class PreOperatorDiag:
+    """
+    Harmonic space diagonal pre-conditioner operation.
+
+    Attributes
+    ----------
+    filt: array_like
+        1/(1/S + 1/N) used as pre-conditioner
+    fl: array_like
+        1/(S+N) used for QE weights
+    """
+
     def __init__(self, s_cls, n_inv_filt, nl_res=None):
-        """Harmonic space diagonal pre-conditioner operation."""
-        """returns  1/(1/S + 1/N)"""
+        lmax = len(n_inv_filt.tf1d) - 1
         cltt = s_cls["tt"]
         assert len(cltt) >= len(n_inv_filt.tf1d)
-
-        lmax = len(n_inv_filt.tf1d) - 1
         assert lmax <= (len(cltt) - 1)
         if nl_res is None:
             nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
 
         bl2 = n_inv_filt.tf1d[:lmax+1]**2
-        filt = cinv_utils.cli(cltt[:lmax + 1]+ nl_res["tt"] * cinv_utils.cli(bl2))
+        sl = cltt[:lmax + 1]+ nl_res["tt"] * cinv_utils.cli(bl2)
+        filt = cinv_utils.cli(sl)
         filt += 1/n_inv_filt.nlev_cl * bl2
         self.filt = cinv_utils.cli(filt)
+        self.fl = cinv_utils.cli(sl + n_inv_filt.nlev_cl * cinv_utils.cli(bl2))
+        self.fl[:2] = 0
 
     def __call__(self, talm):
         return self.calc(talm)
@@ -125,41 +126,35 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
             return alm * self.slinv
 
 
-class NoiseInverseFilter:  # alm_filter_ninv(object):
+class NoiseInverseFilter(opfilt_hp.NoiseInverseFilter):  # alm_filter_ninv(object):
     """Missing doc."""
     nlev_cl: float  # equivalent noise level in uK^2 sr for precond
 
     def __init__(self, n_inv, tf1d, tf2d=None, g=None):
         # marge_monopole=False, marge_dipole=False, marge_uptolmin=-1, marge_maps=(), nlev_ftl=None):
-        if isinstance(n_inv, list):
-            n_inv_prod = hp_utils.read_map(n_inv[0])
-            if len(n_inv) > 1:
-                for n in n_inv[1:]:
-                    n_inv_prod = n_inv_prod * hp_utils.read_map(n)
-            n_inv = n_inv_prod
-        else:
-            n_inv = hp_utils.read_map(n_inv)
 
         ninv_std = np.std(n_inv[np.where(n_inv != 0.0)])
         ninv_avg = np.average(n_inv[np.where(n_inv != 0.0)])
         logger.info(f"inverse noise map std dev / av = {ninv_std / ninv_avg:.3e}")
 
-        self.n_inv = n_inv
+        self._n_inv = n_inv
         self.tf1d = tf1d
         self.tf2d = tf2d
         self.npix = len(self.n_inv)
         self.nside = hp.npix2nside(self.npix)
+        self.pixarea = hp.nside2pixarea(self.nside)
+
         if g is None:
             self.g = None
         else:
             self.g = g
             assert self.g.nside == self.nside
-        self.pixarea = hp.nside2pixarea(self.nside)
 
-        fsky = np.mean(self.n_inv > 0)
-        self.nlev_cl = 1 / np.sum(self.n_inv)*4*np.pi*fsky
-        NET = np.rad2deg(np.sqrt(self.nlev_cl))*60
-        logger.info(f"ninv_ftl: using {NET:.2f} uK-amin noise Cl over fsky {fsky:.2f}")
+        self.nlev_cl, fsky, NET = self.ninv2nlev(self.n_inv)
+
+    @cached_property
+    def n_inv(self):
+        return self.load_ninvs(self._n_inv)
 
     def apply_alm(self, alm):
         """Missing doc."""

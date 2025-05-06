@@ -85,6 +85,7 @@ class Config:
     nlev_t: float = None  # NET value, if not specified, nlev_t = nlev_p / sqrt(2)
     nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
+    cinvdir: str = None # The output directory for cinv maps. If not specified, set to "recdir"
 
     # === lensrec ===
     rectype: str  # [sqe,gmv,mh,xilc,gmvph]
@@ -163,9 +164,12 @@ class Config:
         # set default paths
         if self.recdir is None:
             self.recdir = self.outdir
+        if self.cinvdir is None:
+            self.cinvdir = self.recdir
         if self.field is not None:
             self.outdir = self.outdir.format(field=self.field)
             self.recdir = self.recdir.format(field=self.field)
+            self.cinvdir = self.cinvdir.format(field=self.field)
 
         # set field specific settings
         if isinstance(self.dec_range, dict):
@@ -367,6 +371,29 @@ class Config:
         return self.mask_qe !=0
 
     # === setup paths ===
+    def p_cinv(self, cinv_type:str, seed, cmbset, N1=False, bundle=None, ):
+        """
+        Path to the cinv files (as output of cinv, or input of reclens)
+
+        Parameter
+        ---------
+        cinv_type: str
+            Type of the cinv file. Can be stp or jtp
+        seed: int
+        cmbset: str
+            Single letter strings. Accepted values are 'a', 'b'
+        N1: bool=False
+        bundle: int=None
+        """
+
+        N1_tag = "_N1" if N1 else ""
+        suffix = "npz"
+        subdir = 'cinv'
+        if bundle is not None:  # MF and N1 don't do bundle
+            subdir = f"{subdir}/bundle{bundle}"
+        fname = f'cinv_{cinv_type}_{seed}_{cmbset}{N1_tag}.{suffix}'
+        return self.path(self.cinvdir, subdir, fname)
+
     def p_plm(self, tag=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None,
               bundle=None):
         """

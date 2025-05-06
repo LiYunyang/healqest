@@ -5,32 +5,37 @@ maps.
 Modified from and built on plancklens/qcinv/opfilt_pp.py
 """
 
+import logging
 import numpy as np
 import healpy as hp
+from functools import cached_property
 
-from healpy import alm2map_spin, map2alm_spin
-from . import cinv_utils, hp_utils
+from . import cinv_utils, hp_utils, opfilt_hp
+from .cinv_utils import clhash
+from .hp_utils import eblm
+from .opfilt_hp import alm2map, map2alm
+logger = logging.getLogger(__name__)
 
-clhash = cinv_utils.clhash
-eblm = hp_utils.eblm
 
-
-def calc_prep(maps, s_inv_filt, n_inv_filt):
+def calc_prep(maps, s_inv_filt, n_inv_filt, g=None):
     qmap = np.copy(hp_utils.read_map(maps[0]))
     umap = np.copy(hp_utils.read_map(maps[1]))
     assert len(qmap) == len(umap)
     lmax = len(n_inv_filt.tf1dE) - 1
-    npix = len(qmap)
 
     n_inv_filt.apply_map([qmap, umap])
-    elm, blm = map2alm_spin([qmap, umap], 2, lmax=lmax)
-    if n_inv_filt.tf2dE is None or n_inv_filt.tf2dB is None:
-        hp.almxfl(elm, n_inv_filt.tf1dE * npix / (4.0 * np.pi), inplace=True)
-        hp.almxfl(blm, n_inv_filt.tf1dB * npix / (4.0 * np.pi), inplace=True)
+    if g is None:
+        elm, blm = map2alm([qmap, umap],  lmax=lmax)
     else:
-        elm *= n_inv_filt.tf2dE * npix / (4.0 * np.pi)
-        blm *= n_inv_filt.tf2dB * npix / (4.0 * np.pi)
-    return eblm([elm, blm])
+        elm, blm = g.map2alm_spin([qmap, umap], 2, lmax=lmax)
+    if n_inv_filt.tf2dE is None or n_inv_filt.tf2dB is None:
+        hp.almxfl(elm, n_inv_filt.tf1dE, inplace=True)
+        hp.almxfl(blm, n_inv_filt.tf1dB, inplace=True)
+    else:
+        elm *= n_inv_filt.tf2dE
+        blm *= n_inv_filt.tf2dB
+    pixarea = hp.nside2pixarea(hp.get_nside(maps))
+    return eblm([elm/pixarea, blm/pixarea])
 
 
 def calc_fini(alm, s_inv_filt, n_inv_filt):
@@ -77,21 +82,18 @@ class PreOperatorDiag:
 
     def __init__(self, s_cls, n_inv_filt, nl_res=None):
         lmax = len(n_inv_filt.tf1dE) - 1
-        clbb = s_cls["bb"][: lmax + 1]
-        clee = s_cls["ee"][: lmax + 1]
+        clbb = s_cls["bb"][:lmax + 1]
+        clee = s_cls["ee"][:lmax + 1]
         if nl_res is None:
             nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
 
-        ninv_fel, ninv_fbl = n_inv_filt.get_febl()
+        bl2ee = n_inv_filt.tf1dE[:lmax+1]**2
+        bl2bb = n_inv_filt.tf1dB[:lmax+1]**2
+        filt_e = cinv_utils.cli(clee + nl_res["ee"] * cinv_utils.cli(bl2ee))
+        filt_b = cinv_utils.cli(clbb + nl_res["bb"] * cinv_utils.cli(bl2bb))
 
-        filt_e = cinv_utils.cli(
-            clee + nl_res["ee"] * cinv_utils.cli(n_inv_filt.tf1dE[: lmax + 1] ** 2)
-        )
-        filt_e += ninv_fel[: lmax + 1]
-        filt_b = cinv_utils.cli(
-            clbb + nl_res["bb"] * cinv_utils.cli(n_inv_filt.tf1dB[: lmax + 1] ** 2)
-        )
-        filt_b += ninv_fbl[: lmax + 1]
+        filt_e += 1/n_inv_filt.nlev_cl * bl2ee
+        filt_b += 1/n_inv_filt.nlev_cl * bl2bb
 
         self.filt_e = cinv_utils.cli(filt_e)
         self.filt_b = cinv_utils.cli(filt_b)
@@ -136,8 +138,10 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
         return eblm([relm, rblm])
 
 
-class NoiseInverseFilter:
-    def __init__(self, n_inv, tf1dE, tf1dB, tf2dE, tf2dB, nlev_febl=None):
+class NoiseInverseFilter(opfilt_hp.NoiseInverseFilter):
+    nlev_cl: float  # equivalent noise level in uK^2 sr for precond
+
+    def __init__(self, n_inv, tf1dE, tf1dB, tf2dE, tf2dB, g=None):
         # , marge_qmaps=(), marge_umaps=()):
         """Inverse-variance filtering instance for polarization only
 
@@ -153,73 +157,35 @@ class NoiseInverseFilter:
 
         """
 
+        # self.nlev_febl = nlev_febl
+        self._n_inv = n_inv  # could be paths or list of paths
         self.tf1dE = tf1dE
         self.tf1dB = tf1dB
-
         self.tf2dE = tf2dE
         self.tf2dB = tf2dB
+        self.npix = len(self.n_inv[0])
+        self.nside = hp.npix2nside(self.npix)
+        self.pixarea = hp.nside2pixarea(self.nside)
 
-        # These three things will be instantiated later on
-        self.nside = None
-        self.n_inv = None
-
-        self.nlev_febl = nlev_febl
-        self._n_inv = n_inv  # could be paths or list of paths
-        self._load_ninv()
-
-    def _load_ninv(self):
-        if self.n_inv is None:
-            self.n_inv = []
-            for i, tn in enumerate(self._n_inv):
-                if isinstance(tn, list):
-                    n_inv_prod = hp_utils.read_map(tn[0])
-                    if len(tn) > 1:
-                        for n in tn[1:]:
-                            n_inv_prod = n_inv_prod * hp_utils.read_map(n)
-                    self.n_inv.append(n_inv_prod)
-                else:
-                    self.n_inv.append(hp_utils.read_map(self._n_inv[i]))
-            assert len(self.n_inv) in [1, 3], len(self.n_inv)
-            self.nside = hp.npix2nside(len(self.n_inv[0]))
-
-    def _calc_febl(self):
-        self._load_ninv()
-        if len(self.n_inv) == 1:
-            nlev_febl = 10800.0 / np.sqrt(np.sum(self.n_inv[0]) / (4.0 * np.pi)) / np.pi
-        elif len(self.n_inv) == 3:
-            nlev_febl = (
-                10800.0
-                / np.sqrt(np.sum(0.5 * (self.n_inv[0] + self.n_inv[2])) / (4.0 * np.pi))
-                / np.pi
-            )
+        if g is None:
+            self.g = None
         else:
-            assert 0
-        print("ninv_febl: using %.2f uK-amin noise Cl" % nlev_febl)
-        return nlev_febl
+            self.g = g
+            assert self.g.nside == self.nside
 
-    def get_ninv(self):
-        self._load_ninv()
-        return self.n_inv
+        ninv = (self.n_inv[0] + self.n_inv[-1]) / 2  # QU avg ninv
+        self.nlev_cl, fsky, NET = self.ninv2nlev(ninv)
 
-    def get_mask(self):
-        ninv = self.get_ninv()
-        assert len(ninv) in [1, 3], len(ninv)
-        self.nside = hp.npix2nside(len(ninv[0]))
-        mask = np.where(ninv[0] > 0, 1.0, 0)
-        for ni in ninv[1:]:
-            mask *= ni > 0
-        return mask
-
-    def get_febl(self):
-        if self.nlev_febl is None:
-            self.nlev_febl = self._calc_febl()
-        n_inv_cl_e = self.tf1dE**2 / (self.nlev_febl / 180.0 / 60.0 * np.pi) ** 2
-        n_inv_cl_b = self.tf1dB**2 / (self.nlev_febl / 180.0 / 60.0 * np.pi) ** 2
-        return n_inv_cl_e, n_inv_cl_b
+    @cached_property
+    def n_inv(self):
+        out = []
+        for i, tn in enumerate(self._n_inv):
+            out.append(self.load_ninvs(tn))
+        assert len(out) in [1, 3], len(out)
+        return out
 
     def apply_alm(self, alm):
         """B^dagger N^{-1} B"""
-        self._load_ninv()
         lmax = alm.lmax
 
         if self.tf2dE is None and self.tf2dB is None:
@@ -228,24 +194,29 @@ class NoiseInverseFilter:
         else:
             alm.elm *= self.tf2dE
             alm.blm *= self.tf2dB
-        qmap, umap = alm2map_spin((alm.elm, alm.blm), self.nside, 2, lmax)
+
+        if self.g is None:
+            qmap, umap = alm2map((alm.elm, alm.blm), self.nside, lmax)
+        else:
+            qmap, umap = self.g.alm2map_spin((alm.elm, alm.blm), 2, lmax)
 
         self.apply_map([qmap, umap])  # applies N^{-1}
-        npix = len(qmap)
 
-        telm, tblm = map2alm_spin([qmap, umap], 2, lmax=lmax)
+        if self.g is None:
+            telm, tblm = map2alm([qmap, umap], lmax=lmax)
+        else:
+            telm, tblm = self.g.map2alm_spin([qmap, umap], 2, lmax=lmax)
         alm.elm[:] = telm
         alm.blm[:] = tblm
 
         if self.tf2dE is None and self.tf2dB is None:
-            hp.almxfl(alm.elm, self.tf1dE * (npix / (4.0 * np.pi)), inplace=True)
-            hp.almxfl(alm.blm, self.tf1dB * (npix / (4.0 * np.pi)), inplace=True)
+            hp.almxfl(alm.elm, self.tf1dE / self.pixarea, inplace=True)
+            hp.almxfl(alm.blm, self.tf1dB / self.pixarea, inplace=True)
         else:
-            alm.elm *= self.tf2dE * (npix / (4.0 * np.pi))
-            alm.blm *= self.tf2dB * (npix / (4.0 * np.pi))
+            alm.elm *= self.tf2dE / self.pixarea
+            alm.blm *= self.tf2dB / self.pixarea
 
     def apply_map(self, amap):
-        self._load_ninv()
         [qmap, umap] = amap
         if len(self.n_inv) == 1:  # TT, QQ=UU
             qmap *= self.n_inv[0]

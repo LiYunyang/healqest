@@ -85,6 +85,7 @@ class cinv(object):
 
         self.iter_tot = None
         self.prev_eps = None
+        self._pre_op = None  # placeholder for pre_op cache
 
         self.eps = None  # tracks the convergence history
 
@@ -112,16 +113,13 @@ class cinv(object):
 
         tpn_alm = self.opfilt.calc_prep(tpn_map, self.s_inv_filt, self.n_inv_filt, g=self.g)
         monitor = cd_monitors.MonitorBasic(dot_op, cd_logger=cd_logger, iter_max=np.inf, eps_min=self.eps_min)
-
         fwd_op = self.opfilt.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
-
-        pre_op = self.opfilt.PreOperatorDiag(self.s_inv_filt.s_cls, self.n_inv_filt, nl_res=self.s_inv_filt.nl_res)
 
         cd_solve.cd_solve(
             soltn,
             b=tpn_alm,
             fwd_op=fwd_op,
-            pre_ops=[pre_op],
+            pre_ops=[self.pre_op],
             dot_op=dot_op,
             criterion=monitor,
             tr=cd_solve.tr_cg,
@@ -129,6 +127,16 @@ class cinv(object):
         )
         self.eps = monitor.eps
         finifunc(soltn, self.s_inv_filt, self.n_inv_filt)
+
+    def get_fl(self, pol, lmax):
+        pass
+
+    @property
+    def pre_op(self):
+        if self._pre_op is None:
+            self._pre_op = self.opfilt.PreOperatorDiag(self.s_inv_filt.s_cls, self.n_inv_filt,
+                                                       nl_res=self.s_inv_filt.nl_res)
+        return self._pre_op
 
 
 class cinv_t(cinv):
@@ -184,28 +192,6 @@ class cinv_t(cinv):
         self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter, n_inv=self.ninv,
                                        tf1d=self.tf1d, tf2d=tf2d, g=self.g)
 
-    def _calc_ftl(self):
-        ninv = self.n_inv_filt.n_inv
-        npix = len(ninv[:])
-        NlevT_uKamin = (
-            np.sqrt(4.0 * np.pi / npix / np.sum(ninv) * len(np.where(ninv != 0.0)[0]))
-            * 180.0
-            * 60.0
-            / np.pi
-        )
-        logger.debug("cinv_t::noiseT_uk_arcmin = %.3f" % NlevT_uKamin)
-
-        s_cls = self.cl
-        tf1d = self.tf1d
-
-        ftl = cinv_utils.cli(
-            s_cls["tt"][0: self.lmax + 1]
-            + (NlevT_uKamin * np.pi / 180.0 / 60.0) ** 2 / tf1d[0 : self.lmax + 1] ** 2
-        )
-        ftl[0:2] = 0.0
-
-        return ftl
-
     def apply_ivf(self, tmap, soltn=None):
         if soltn is None:
             talm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
@@ -214,6 +200,14 @@ class cinv_t(cinv):
         self.solve(talm, tmap)
         hp.almxfl(talm, self.rescal_cl, inplace=True)
         return talm
+
+    def get_fl(self, pol, lmax):
+        assert pol.lower()=='t'
+        out = self.pre_op.fl[:self.lmax + 1] * self.rescal_cl[:self.lmax + 1] ** 2
+        if lmax is None:
+            return out
+        else:
+            return out[:lmax+1]
 
 
 class cinv_p(cinv):
@@ -370,6 +364,15 @@ class cinv_p(cinv):
             assert hp.npix2nside(len(ninv)) == self.nside
             mask *= ninv > 0.0
         return mask
+
+    def get_fl(self, pol, lmax):
+        assert pol.lower() in 'eb'
+        i = 'eb'.index(pol.lower())
+        out = self.pre_op.fl[i, :self.lmax+1]*self.rescal_cl[:self.lmax+1]**2
+        if lmax is None:
+            return out
+        else:
+            return out[:lmax+1]
 
 
 class cinv_tp(cinv):

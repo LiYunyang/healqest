@@ -349,21 +349,21 @@ class Config:
         if self.fmask_qe:
             return self._load_mask(self.fmask_qe)
         else:
-            return None
+            return np.ones(hp.nside2npix(self.nside))
 
     @cached_property
     def mask_ps(self):
         if self.fmask_ps:
             return self._load_mask(self.fmask_ps)
         else:
-            return None
+            return self.mask_qe
 
     @cached_property
     def mask_resp(self):
         if self.fmask_resp:
             return self._load_mask(self.fmask_resp)
         else:
-            return None
+            return self.mask_ps
 
     @cached_property
     def mask_bounary(self):

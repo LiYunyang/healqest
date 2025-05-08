@@ -627,15 +627,16 @@ class MPIAwareFormatter(logging.Formatter):
 
 
 def verbose2level(verbosity: int) -> int:
-
+    verbose = int(verbosity)
+    verbose = max(verbose, 0)
+    verbose = min(verbose, 4)
     return {
         0: logging.CRITICAL,
         1: logging.ERROR,
         2: logging.WARNING,
         3: logging.INFO,
         4: logging.DEBUG,
-        5: logging.DEBUG,
-    }.get(verbosity, logging.INFO)
+    }[verbose]
 
 
 def setup_logger(verbose=3, force=True, quiet=True):
@@ -669,5 +670,7 @@ def setup_logger(verbose=3, force=True, quiet=True):
 
     if quiet:
         for name in logging.root.manager.loggerDict:
-            if not name.startswith("healqest"):
+            if not name.startswith("healqest") and name != "__main__":
                 logging.getLogger(name).setLevel(logging.WARNING)
+            else:
+                pass

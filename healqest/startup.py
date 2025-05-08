@@ -366,7 +366,7 @@ class Config:
             return self.mask_ps
 
     @cached_property
-    def mask_bounary(self):
+    def mask_boundary(self):
         """boundary mask used to save plm as partial maps"""
         return self.mask_qe !=0
 

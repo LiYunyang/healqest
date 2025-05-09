@@ -372,7 +372,7 @@ class Config:
         return self.mask_qe !=0
 
     # === setup paths ===
-    def p_cinv(self, cinv_type:str, seed, cmbset, N1=False, bundle=None, ):
+    def p_cinv(self, cinv_type:str, seed, cmbset, N1=False, bundle=None, suffix='fits'):
         """
         Path to the cinv files (as output of cinv, or input of reclens)
 
@@ -388,7 +388,6 @@ class Config:
         """
 
         N1_tag = "_N1" if N1 else ""
-        suffix = "npz"
         subdir = 'cinv'
         if bundle is not None:  # MF and N1 don't do bundle
             subdir = f"{subdir}/bundle{bundle}"

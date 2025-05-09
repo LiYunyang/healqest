@@ -1,8 +1,10 @@
-import os, sys, yaml
+import os
+import sys
+from astropy.io import fits
 import numpy as np
 import healpy as hp
 from pathlib import Path
-import yaml, pickle
+import yaml
 import logging as lg
 from tqdm import tqdm
 import tempfile as tf
@@ -1734,3 +1736,39 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
 def generate_seed(seed, cmbid, bundle=None, extra_tag=None):
     """Generate random seed."""
     return int(hashlib.sha256(f"{cmbid}/{seed}/{bundle}/{extra_tag}".encode()).hexdigest()[:8], base=16)
+
+
+def cinv_io(fname, maps=None, fl=None):
+    """
+    Read and write cinv maps.
+
+    Parameters
+    ----------
+    fname : str
+        File name.
+    maps: array=None
+        shape (1, npix) or (3, npix) map. If None, read and return the maps.
+    fl: array=None
+        shape (1, lmax+1) or (3, lmax+1) for QE weights flT, flE, flB. If None, read and return the weights.
+
+    Returns
+    -------
+    maps: array
+        shape (1, npix) or (3, npix) map
+    fl: array
+        shape (1, lmax+1) or (3, lmax+1) for QE weights flT, flE, flB
+    """
+    if maps is None:
+        maps = hp.read_map(fname, field=None)
+        maps[maps==hp.UNSEEN] = 0
+        hdu = fits.open(fname)[2]
+        fl = np.array([hdu.data[_.name] for _ in hdu.columns])
+        return np.atleast_2d(maps), fl
+    else:
+        assert len(maps) in (1, 3)
+        assert len(fl) in (1, 3)
+        hp.write_map(fname, maps, overwrite=True, dtype=np.float64, partial=True)
+        with fits.open(fname, mode='update') as hdul:
+            hdul.append(fits.BinTableHDU.from_columns([
+                fits.Column(name=f"fl{'teb'[i]}", array=_fl, format='D') for i, _fl in enumerate(fl)]))
+            hdul.flush()

@@ -526,8 +526,9 @@ class Maps:
             N1=N1, bundle=bundle
         )
 
-    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
-        """Load sim temperature signal and noise map separately and add"""
+    def get_tmap(self, seed, cmbid, add_noise:callable = True, apply_tf=False, g=None):
+        """Load sim temperature signal and noise map separately and add
+        """
 
         f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
         logger.debug(f"loading {f_slm}")
@@ -539,14 +540,8 @@ class Maps:
                 logger.info(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=1)
             else:
-                logger.warning("Not providing nlm, generating from NET/NEP")
-                _seed = healqest_utils.generate_seed(seed=seed, cmbid=cmbid, bundle=self.bundle,
-                                                     extra_tag='N1' if self.N1 else None)
-                np.random.seed(_seed)
-                lmax = hp.Alm.getlmax(len(almt))
-                nl = np.full(lmax+1, np.deg2rad(self.config.nlev_t/60)**2)
-                nlm = hp.synalm(nl, lmax=lmax, new=True)
-
+                nlm = add_noise(seed, cmbid, self.bundle, self.N1)
+                nlm = healqest_utils.reduce_lmax(nlm, lmax=hp.Alm.getlmax(len(almt)))
             almt += nlm
             del nlm
         else:

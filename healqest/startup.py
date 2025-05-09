@@ -338,6 +338,7 @@ class Config:
         mask = None
         for _ in self.as_list(item):
             _mask = hp.read_map(self.path(_, field=self.field))
+            _mask[hp.mask_bad(_mask)] = 0
             if mask is None:
                 mask = _mask
             else:

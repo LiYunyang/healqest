@@ -6,6 +6,7 @@ This module provides setups needed at startup, including
 """
 import argparse
 from functools import cached_property
+from importlib import resources
 import logging
 import os
 import string
@@ -15,10 +16,11 @@ from typing import Union, get_type_hints
 import warnings
 
 import numpy as np
-import yaml
-from healqest import utils, healqest_utils
-from importlib import resources
 import healpy as hp
+import yaml
+from git import Repo, InvalidGitRepositoryError
+
+from healqest import utils, healqest_utils
 from healqest.ducc_sht import Geometry
 try:
     from mpi4py import MPI
@@ -30,6 +32,18 @@ except ImportError:
     rank = 0
 
 logger = logging.getLogger(__name__)
+
+
+def get_git_version():
+    """Get the current git commit hash of the repository."""
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        repo = Repo(repo_dir, search_parent_directories=True)
+        commit_hash = repo.head.commit.hexsha[:7]  # Short hash
+        dirty = repo.is_dirty()
+        return commit_hash + ("-dirty" if dirty else "")
+    except InvalidGitRepositoryError:
+        return "unknown"
 
 
 class PartialFormatter(string.Formatter):
@@ -139,9 +153,10 @@ class Config:
         obj = cls.from_yaml(fname, field=args.field)
         if rank == 0:
             os.makedirs(obj.path(obj.outdir), exist_ok=True)
-            shutil.copy(fname, obj.path(obj.outdir))
-            script = sys._getframe(1).f_globals['__file__']
-            shutil.copy(script, obj.path(obj.outdir))
+            for f in [fname, sys._getframe(1).f_globals['__file__']]:
+                name, ext = os.path.splitext(os.path.basename(f))
+                out_fname = f"{name}.{get_git_version()}{ext}"
+                shutil.copy(f, obj.path(obj.outdir, out_fname))
         return obj
 
     def _validate_config(self, config_dict: dict):

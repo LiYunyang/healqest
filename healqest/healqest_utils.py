@@ -1411,6 +1411,7 @@ def kspice(m1: Union[np.ndarray, str, list],
            m2: Union[np.ndarray, str, list] = None,
            weight1: Union[np.ndarray, str] = None,
            weight2: Union[np.ndarray, str] = None,
+           *,
            lmax=-1,
            apodizetype=1,
            apodizesigma: Union[float, str] = "NO",
@@ -1419,7 +1420,7 @@ def kspice(m1: Union[np.ndarray, str, list],
            subav:bool = False,
            subdipole:bool = False,
            script=False,
-           cl_out: str = None, spice:str = None):
+           cl_out: str = None, spice:str = None, kernel=False):
     """
     A python wrapper for PolSpice for temperature (kappa) file only.
 
@@ -1467,6 +1468,8 @@ def kspice(m1: Union[np.ndarray, str, list],
         If present, the output Cl will be write to this file
     spice: str=None
         Path to spice binary
+    kernel: bool=False
+        If True, return the mode coupling matrix of shape (lmax+1, 2lmax+1).
 
     Returns
     -------
@@ -1474,6 +1477,9 @@ def kspice(m1: Union[np.ndarray, str, list],
         The command line script to be executed.
     [clhat]: np.ndarray(1, nlmax+1)
         PS in orders of: TT
+    [kernel]: np.ndarray
+        shape (lmax+1, 2lmax+1)
+
     Notes
     -----
     The wrapper forces ``decouple`` to be True.
@@ -1501,28 +1507,6 @@ def kspice(m1: Union[np.ndarray, str, list],
     if not os.path.exists(polspice_config):
         os.makedirs(polspice_config, exist_ok=True)
 
-    """
-    # ignoring window files for temp-only PS
-    if lmax == -1:
-        if isinstance(m1, str):
-            nside_in = hp.get_nside(hp.read_map(m1))
-        else:
-            nside_in = hp.get_nside(m1)
-        nlmax = 3 * nside_in - 1
-    else:
-        nlmax = lmax
-    configfile = os.path.join(
-        polspice_config,
-        f"window_apodizesigma{apodizesigma}_thetamax{thetamax}"
-        f"_apodizetype{apodizetype}_nlmax{nlmax}.fits",
-    )
-    if os.path.exists(configfile):
-        windowfilein = configfile
-        windowfileout = "NO"
-    else:
-        windowfileout = configfile
-        windowfilein = "NO"
-    """
     command = [
         spice,
         "-verbosity", "0",
@@ -1541,8 +1525,6 @@ def kspice(m1: Union[np.ndarray, str, list],
         "-subdipole", "NO" if not subdipole else "YES",
         "-corfile", "NO",
         # "-verbosity", "2",
-        # "-windowfileout", windowfileout,
-        # "-windowfilein", windowfilein,
     ]
     if m2 is None and weight2 is not None:
         # normally we don't want to do this
@@ -1561,6 +1543,9 @@ def kspice(m1: Union[np.ndarray, str, list],
         if cl_out is None:
             cl_out = os.path.join(tmp, f"cls.dat")
         command += [f"-clfile", cl_out]
+        if kernel:
+            kernel_out = os.path.join(tmp, f"kernel.dat")
+            command += ["-kernelsfileout", kernel_out]
         if script:
             return command
         try:
@@ -1573,6 +1558,9 @@ def kspice(m1: Union[np.ndarray, str, list],
             if e.stderr:
                 print(f"📣 Stderr:\n{e.stderr.strip()}")
             sys.exit(e.returncode)
+
+        if kernel:
+            return fits.open(kernel_out)[0].data[0, :, :].T
         try:
             ell, *clhat = np.loadtxt(cl_out).T
         except ValueError as e:
@@ -1772,3 +1760,33 @@ def cinv_io(fname, maps=None, fl=None):
             hdul.append(fits.BinTableHDU.from_columns([
                 fits.Column(name=f"fl{'teb'[i]}", array=_fl, format='D') for i, _fl in enumerate(fl)]))
             hdul.flush()
+
+
+def get_spice_kernel(nside, lmax, thetamax=None, apodizesigma=None, apodizetype=None):
+    """Return the polspice coupling kernel of shape (lmax+1, 2lmax+1)"""
+
+    if thetamax is None:
+        thetamax = kspice.__kwdefaults__['thetamax']
+    if apodizesigma is None:
+        apodizesigma = kspice.__kwdefaults__['apodizesigma']
+    if apodizetype is None:
+        apodizetype = kspice.__kwdefaults__['apodizetype']
+    fname = f"n{nside}_lmax{lmax}_thetamax{thetamax}_apodizesigma{apodizesigma}_apodizetype{apodizetype}.npy"
+    cache_dir = os.environ.get("HEALQEST_IO_ROOT")
+    if cache_dir is None:
+        cache_dir = os.path.join(os.path.expanduser("~/.local/share"), "healqest")
+    else:
+        cache_dir = os.path.join(cache_dir, ".cache")
+    os.makedirs(cache_dir, exist_ok=True)
+
+    path = os.path.join(cache_dir, fname)
+    if os.path.exists(path):
+        return np.load(path)
+    else:
+        logger.warning(f"cache {fname} not found, computing it...")
+        zero = np.random.normal(0, 1, hp.nside2npix(nside))
+        K = kspice(m1=zero, lmax=lmax, thetamax=thetamax, apodizesigma=apodizesigma, apodizetype=apodizetype,
+                   kernel=True)
+        logger.info(f"cache saved to {path}")
+        np.save(path, K)
+        return K

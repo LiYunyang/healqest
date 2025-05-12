@@ -153,9 +153,13 @@ class Config:
         obj = cls.from_yaml(fname, field=args.field)
         if rank == 0:
             os.makedirs(obj.path(obj.outdir), exist_ok=True)
-            for f in [fname, sys._getframe(1).f_globals['__file__']]:
-                name, ext = os.path.splitext(os.path.basename(f))
-                out_fname = f"{name}.{get_git_version()}{ext}"
+            for i, f in enumerate([fname, sys._getframe(1).f_globals['__file__']]):
+                if i > 0:
+                    # add git hash for scripts, not the config file.
+                    name, ext = os.path.splitext(os.path.basename(f))
+                    out_fname = f"{name}.{get_git_version()}{ext}"
+                else:
+                    out_fname = os.path.basename(f)
                 shutil.copy(f, obj.path(obj.outdir, out_fname))
         return obj
 

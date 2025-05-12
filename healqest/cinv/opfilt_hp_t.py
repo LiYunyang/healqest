@@ -79,19 +79,19 @@ class PreOperatorDiag:
     """
 
     def __init__(self, s_cls, n_inv_filt, nl_res=None):
-        lmax = len(n_inv_filt.tf1d) - 1
+        lmax = n_inv_filt.lmax
         cltt = s_cls["tt"]
-        assert len(cltt) >= len(n_inv_filt.tf1d)
+        assert len(cltt) >= lmax+1
         assert lmax <= (len(cltt) - 1)
         if nl_res is None:
             nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
 
-        bl2 = n_inv_filt.tf1d[:lmax+1]**2
+        bl2 = n_inv_filt.tf.tf1d_t[:lmax+1]**2
         sl = cltt[:lmax + 1]+ nl_res["tt"] * cinv_utils.cli(bl2)
         filt = cinv_utils.cli(sl)
-        filt += 1/n_inv_filt.nlev_cl * bl2
+        filt += 1/n_inv_filt.nlev_cl_t * bl2
         self.filt = cinv_utils.cli(filt)
-        self.fl = cinv_utils.cli(sl + n_inv_filt.nlev_cl * cinv_utils.cli(bl2))
+        self.fl = cinv_utils.cli(sl + n_inv_filt.nlev_cl_t * cinv_utils.cli(bl2))
         self.fl[:2] = 0
 
     def __call__(self, talm):

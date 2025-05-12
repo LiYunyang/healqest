@@ -10,15 +10,14 @@ import sys
 import healpy as hp
 import numpy as np
 import logging
-from . import opfilt_hp_p, opfilt_hp_t,opfilt_hp_tp
+from . import opfilt_hp_p, opfilt_hp_tp, opfilt_hp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
-from healqest.ducc_sht import Geometry
 logger = logging.getLogger(__name__)
 
 
 class cinv(object):
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, eps_min, ellscale, opfilt, g=None):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, eps_min, ellscale, tf, g=None):
         """
         Parameters
         ----------
@@ -34,8 +33,8 @@ class cinv(object):
         eps_min: float
         ellscale: bool
             If True, scale Cl as Dl.
-        opfilt: module
-            module object that contains routines to perform appropriate filtering
+        tf: opfilt_hp.TFObj
+            Transfer function object
         g: Geometry=None
             The `ducc` wrapper object used to speed up spherical harmonic transforms. If specified, the SHT will
             only be applied on relevant rings, i.e., an implicit binary mask is applied.  If None, a full-sky
@@ -63,6 +62,10 @@ class cinv(object):
             rescal_cl = np.ones_like(ell)
         self.rescal_cl = rescal_cl
 
+        self.tf = tf
+        invfac = cinv_utils.cli(self.rescal_cl)
+        self.tf *= invfac
+
         self.cl = cl
         # rescaled cls (Dls by default)
         # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
@@ -79,7 +82,6 @@ class cinv(object):
             for k, v in self.nl_res.items():
                 self.nl_res[k][:2] = 0  # enforce this cutoff is important for convergence!
 
-        self.opfilt = opfilt  # filter module
         self.s_inv_filt = None
         self.n_inv_filt = None
 
@@ -105,15 +107,15 @@ class cinv(object):
         return ret[: lmax + 1]
 
     def solve(self, soltn, tpn_map, verbose=True):
-        finifunc = getattr(self.opfilt, "calc_fini")
         self.iter_tot = 0
         self.prev_eps = None
-        dot_op = self.opfilt.DotOperator()
+        dot_op = opfilt_hp.DotOperator()
         cd_logger = cd_monitors.logger_basic() if verbose else cd_monitors.logger_none()
 
-        tpn_alm = self.opfilt.calc_prep(tpn_map, self.s_inv_filt, self.n_inv_filt, g=self.g)
+        # tpn_alm = self.opfilt.calc_prep(tpn_map, self.s_inv_filt, self.n_inv_filt, g=self.g)
+        tpn_alm = self.n_inv_filt.calc_prep(tpn_map)
         monitor = cd_monitors.MonitorBasic(dot_op, cd_logger=cd_logger, iter_max=np.inf, eps_min=self.eps_min)
-        fwd_op = self.opfilt.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
+        fwd_op = opfilt_hp.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
 
         cd_solve.cd_solve(
             soltn,
@@ -126,7 +128,7 @@ class cinv(object):
             cache=cd_solve.CacheMemory(),
         )
         self.eps = monitor.eps
-        finifunc(soltn, self.s_inv_filt, self.n_inv_filt)
+        opfilt_hp.calc_fini(soltn, self.s_inv_filt)
 
     def get_fl(self, pol, lmax):
         pass
@@ -134,8 +136,8 @@ class cinv(object):
     @property
     def pre_op(self):
         if self._pre_op is None:
-            self._pre_op = self.opfilt.PreOperatorDiag(self.s_inv_filt.s_cls, self.n_inv_filt,
-                                                       nl_res=self.s_inv_filt.nl_res)
+            self._pre_op = opfilt_hp.PreOperatorDiag(self.s_inv_filt.s_cls, self.n_inv_filt, tf=self.tf,
+                                                     nl_res=self.s_inv_filt.nl_res)
         return self._pre_op
 
 
@@ -177,20 +179,14 @@ class cinv_t(cinv):
     def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True,
                  g=None):
         assert isinstance(ninv, list)
+        tf = opfilt_hp.TFObj(npol=1, lmax=lmax, tf1d=tf1d, tf2d=tf2d)
         # only take the first entry as the temperation ninv
         super(cinv_t, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv[0],
-                                     eps_min=eps_min, ellscale=ellscale, opfilt=opfilt_hp_t, g=g)
-
-        invfac = cinv_utils.cli(self.rescal_cl)
-        self.tf1d = tf1d[:lmax+1] * invfac
-        self.tf2d = hp.almxfl(tf2d, invfac) if tf2d is not None else None
+                                     eps_min=eps_min, ellscale=ellscale, tf=tf, g=g)
 
         # Set up s_inv_filt and n_inv_filt
-        self.s_inv_filt = hp_utils.jit(self.opfilt.SkyInverseFilter,
-                                       s_cls=self.dl, nl_res=self.nl_res, lmax=self.lmax,
-                                       tf1d=self.tf1d, tf2d=self.tf2d)
-        self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter, n_inv=self.ninv,
-                                       tf1d=self.tf1d, tf2d=tf2d, g=self.g)
+        self.s_inv_filt = hp_utils.jit(opfilt_hp.SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
+        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, n_inv=self.ninv, tf=self.tf, g=self.g)
 
     def apply_ivf(self, tmap, soltn=None):
         if soltn is None:
@@ -203,7 +199,7 @@ class cinv_t(cinv):
 
     def get_fl(self, pol, lmax):
         assert pol.lower()=='t'
-        out = self.pre_op.fl[:self.lmax + 1] * self.rescal_cl[:self.lmax + 1] ** 2
+        out = self.pre_op.fl[0, :self.lmax + 1] * self.rescal_cl[:self.lmax + 1] ** 2
         if lmax is None:
             return out
         else:
@@ -259,7 +255,6 @@ class cinv_p(cinv):
         self.tf2dB = hp.almxfl(tf2dB, invfac) if tf2dB is not None else None
 
         # Set up s_inv_filt and n_inv_filt
-
         self.s_inv_filt = hp_utils.jit(self.opfilt.SkyInverseFilter,
                                        self.dl, nl_res=self.nl_res, lmax=self.lmax,
                                        tf1dE=self.tf1dE, tf1dB=self.tf1dB,
@@ -605,24 +600,28 @@ class library_sepTP(object):
 
         return tlm, elm, blm
 
-    def get_sim_eblm(self, idx):
+    def get_sim_eblm(self, seed, cmbid):
         """Returns an inverse-filtered E-polarization simulation.
-        Args:idx: simulation index
-        Returns: inverse-filtered E-polarization healpy alm array
+
+        Parameters
+        ----------
+        seed: int
+        cmbid: int
+
+        Returns
+        -------
+        elm, blm
+            inverse-filtered E/B alm arrays
         """
         if self.soltn_lib is None:
             soltn = None
         else:
-            soltn = np.array(
-                [
-                    self.soltn_lib.get_sim_emliklm(idx),
-                    self.soltn_lib.get_sim_bmliklm(idx),
-                ]
-            )
+            raise NotImplementedError
+            # soltn = np.array([self.soltn_lib.get_sim_emliklm(idx),
+            #                   self.soltn_lib.get_sim_bmliklm(idx),])
 
-        elm, blm = self._apply_ivf_p(
-            self.sim_lib.get_pmap(idx, add_noise=self.add_noise), soltn=soltn
-        )
+        map_in = self.sim_lib.get_pmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
+        elm, blm = self._apply_ivf_p(map_in, soltn=soltn)
 
         if self.lfilt is not None:
             hp.almxfl(elm, self.lfilt, inplace=True)

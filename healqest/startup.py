@@ -302,7 +302,13 @@ class Config:
 
     @cached_property
     def cinv_cls(self) -> dict:
-        """return the CMB and foreground cls for cinv"""
+        """the CMB and beam-convolved foreground cls for cinv
+
+        Note
+        ----
+        The lmax is set to `cinv_lmax`, which should be large than any other possible
+        lmax used elsewhere in the pipeline.
+        """
         out = dict()
 
         def dat2dict(ell, dat):
@@ -332,11 +338,13 @@ class Config:
 
     @cached_property
     def tfbl_1d(self) -> dict:
-        """Return a 1d bl functions for T/E/B"""
+        """Return 1d bl functions for T/E/B with lmax=`cinv_lmax`"""
         if self.file_bl is None:
+            logger.error("beam file not given! assuming unity bl for now.")
             bl = np.ones(self.cinv_lmax)
         else:
             beam_file = self.path(self.file_bl)
+            logger.warning("temporarily loading the 150 GHz beam file")
             bl = np.loadtxt(beam_file)[:self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
         return dict(t=bl, e=bl, b=bl)
 
@@ -344,8 +352,10 @@ class Config:
     def tfbl_2d(self) -> Union[dict, None]:
         """Return a 2d bl/tf functions for T/E/B"""
         if self.file_tf2d:
+            raise NotImplementedError
             return np.load(self.file_tf2d)  # TODO: actually implement this when needed
         else:
+            logger.warning("No 2d TF given.")
             return None
 
     @cached_property
@@ -550,9 +560,9 @@ class Maps:
         """
 
         f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
-        logger.debug(f"loading {f_slm}")
+        logger.debug(f"loading signal sim from {f_slm}")
         almt = hp.read_alm(f_slm, hdu=1)
-
+        lmax_in = hp.Alm.getlmax(almt.shape[-1])
         if add_noise:
             if self.file_noise is not None:
                 f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
@@ -560,7 +570,7 @@ class Maps:
                 nlm = hp.read_alm(f_nlm, hdu=1)
             else:
                 nlm = add_noise(seed, cmbid, self.bundle, self.N1)
-                nlm = healqest_utils.reduce_lmax(nlm, lmax=hp.Alm.getlmax(len(almt)))
+                nlm = utils.reduce_lmax(nlm, lmax=lmax_in)
             almt += nlm
             del nlm
         else:
@@ -570,9 +580,8 @@ class Maps:
             logger.debug("Applying tf")
             assert self.tf2d is not None
             lmax = hp.Alm.getlmax(len(self.tf2d))
-            lmaxin = hp.Alm.getlmax(len(almt))
-            if lmaxin > lmax:
-                almt = healqest_utils.reduce_lmax(almt, lmax)
+            if lmax_in > lmax:
+                almt = utils.reduce_lmax(almt, lmax)
             almt *= self.tf2d
         else:
             pass
@@ -580,6 +589,41 @@ class Maps:
             return hp.alm2map(almt, nside=self.nside)
         else:
             return g.alm2map(almt)
+
+    def get_pmap(self, seed, cmbid, add_noise: callable = True, apply_tf=False, g=None):
+        """Load sim E/B signal and noise map separately and add"""
+
+        f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
+        logger.debug(f"loading signal sim from {f_slm}")
+        almeb = hp.read_alm(f_slm, hdu=[2, 3])
+        lmax_in = hp.Alm.getlmax(almeb.shape[-1])
+
+        if add_noise:
+            if self.file_noise is not None:
+                f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
+                logger.info(f"Adding noise: {f_nlm}")
+                nlm = hp.read_alm(f_nlm, hdu=[2, 3])
+            else:
+                nlm = add_noise(seed, cmbid, self.bundle, self.N1)
+                nlm = utils.reduce_lmax(nlm, lmax=lmax_in)
+            almeb += nlm
+            del nlm
+        else:
+            pass
+
+        if apply_tf:
+            logger.debug("Applying tf")
+            assert self.tf2d is not None
+            lmax = hp.Alm.getlmax(len(self.tf2d))
+            if lmax_in > lmax:
+                almeb = utils.reduce_lmax(almeb, lmax)
+            almeb *= self.tf2d
+        else:
+            pass
+        if g is None:
+            return hp.alm2map_spin(almeb, nside=self.nside, spin=2)
+        else:
+            return g.alm2map(almeb)
 
 
 def parser():

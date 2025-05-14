@@ -10,14 +10,14 @@ import sys
 import healpy as hp
 import numpy as np
 import logging
-from . import opfilt_hp_p, opfilt_hp_tp, opfilt_hp
+from . import opfilt_hp_tp, opfilt_hp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
 logger = logging.getLogger(__name__)
 
 
 class cinv(object):
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, eps_min, ellscale, tf, g=None):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, eps_min, ellscale, tf, g=None):
         """
         Parameters
         ----------
@@ -28,8 +28,6 @@ class cinv(object):
         cl: dict
             Dictionary of CMB power spectra, including 'tt', 'ee', 'bb', 'te'.
         nl_res:
-        ninv: list of arrays
-            inverse variance map for each components
         eps_min: float
         ellscale: bool
             If True, scale Cl as Dl.
@@ -66,7 +64,7 @@ class cinv(object):
         invfac = cinv_utils.cli(self.rescal_cl)
         self.tf *= invfac
 
-        self.cl = cl
+        self.cl = cl.copy()
         # rescaled cls (Dls by default)
         # Do not scale nl_res here. Forward model has 1/(cltt+nltt/tf1d^2).
         # cltt has l^2 and tf^2 has 1/l^2 factor already.
@@ -74,8 +72,7 @@ class cinv(object):
         # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
         self.dl = {k: rescal_cl**2 * v[:lmax+1] for k, v in cl.items()}
 
-        self.ninv = ninv
-        self.nl_res = nl_res
+        self.nl_res = nl_res.copy()
         if self.nl_res is None:
             self.nl_res = {k: np.zeros_like(v[:lmax+1]) for k, v in cl.items()}
         else:
@@ -92,8 +89,9 @@ class cinv(object):
         self.eps = None  # tracks the convergence history
 
         if g is None:
-            # self.g = Geometry(nside=nside, dec_range=None)  # fallback to full-sky ducc
-            self.g = None  # fallback to hp
+            from healqest.ducc_sht import Geometry
+            self.g = Geometry(nside=nside, dec_range=None)  # fallback to full-sky ducc
+            # self.g = None  # fallback to hp
         else:
             self.g = g
             assert self.g.nside == nside
@@ -116,6 +114,8 @@ class cinv(object):
         tpn_alm = self.n_inv_filt.calc_prep(tpn_map)
         monitor = cd_monitors.MonitorBasic(dot_op, cd_logger=cd_logger, iter_max=np.inf, eps_min=self.eps_min)
         fwd_op = opfilt_hp.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
+
+        # soltn = self.pre_op.get_initial_guess(tpn_map, self.rescal_cl, g=self.g)
 
         cd_solve.cd_solve(
             soltn,
@@ -161,10 +161,8 @@ class cinv_t(cinv):
     nl_res : array_like
         Dictionary of noise residual used in the filtering.
         (Additional details on the expected format should be provided.)
-    ninv : list
-        Inverse pixel variance maps. Must be a list containing either 3 elements
-        (for QQ, QU, and UU noise) or 1 element (for QQ = UU noise). Each element
-        can be a file path or a Healpy map, and they must be consistent with the given nside.
+    ninv: list of np.array or str
+        Inverse pixel variance maps.
     tf1d : array_like
         1d transfer function.
     tf2d : array_like
@@ -178,21 +176,22 @@ class cinv_t(cinv):
 
     def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True,
                  g=None):
-        assert isinstance(ninv, list)
+        assert len(ninv) == 1
         tf = opfilt_hp.TFObj(npol=1, lmax=lmax, tf1d=tf1d, tf2d=tf2d)
         # only take the first entry as the temperation ninv
-        super(cinv_t, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv[0],
-                                     eps_min=eps_min, ellscale=ellscale, tf=tf, g=g)
+        super(cinv_t, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
+                                     ellscale=ellscale, tf=tf, g=g)
 
         # Set up s_inv_filt and n_inv_filt
         self.s_inv_filt = hp_utils.jit(opfilt_hp.SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
-        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, n_inv=self.ninv, tf=self.tf, g=self.g)
+        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
 
     def apply_ivf(self, tmap, soltn=None):
         if soltn is None:
             talm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
         else:
             talm = soltn.copy()
+        logger.info("cinv_t.solve")
         self.solve(talm, tmap)
         hp.almxfl(talm, self.rescal_cl, inplace=True)
         return talm
@@ -241,48 +240,36 @@ class cinv_p(cinv):
 
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1dE, tf1dB,
-                 tf2dE=None, tf2dB=None, eps_min=1.0e-5, ellscale=True, g=None):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True,
+                 g=None):
 
         assert isinstance(ninv, list)
-        super(cinv_p, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv, eps_min=eps_min,
-                                     ellscale=ellscale, opfilt=opfilt_hp_p, g=g)
-
-        invfac = cinv_utils.cli(self.rescal_cl)
-        self.tf1dE = tf1dE[:lmax+1] * invfac
-        self.tf1dB = tf1dB[:lmax+1] * invfac
-        self.tf2dE = hp.almxfl(tf2dE, invfac) if tf2dE is not None else None
-        self.tf2dB = hp.almxfl(tf2dB, invfac) if tf2dB is not None else None
+        assert len(ninv) in [2]
+        tf = opfilt_hp.TFObj(npol=2, lmax=lmax, tf1d=tf1d, tf2d=tf2d)
+        super(cinv_p, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
+                                     ellscale=ellscale, tf=tf, g=g)
 
         # Set up s_inv_filt and n_inv_filt
-        self.s_inv_filt = hp_utils.jit(self.opfilt.SkyInverseFilter,
-                                       self.dl, nl_res=self.nl_res, lmax=self.lmax,
-                                       tf1dE=self.tf1dE, tf1dB=self.tf1dB,
-                                       tf2dE=self.tf2dE, tf2dB=self.tf2dB)
+        self.s_inv_filt = hp_utils.jit(opfilt_hp.SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
 
-        self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter,
-                                       n_inv=self.ninv, tf1dE=self.tf1dE, tf1dB=self.tf1dB,
-                                       tf2dE=self.tf2dE, tf2dB=self.tf2dB)
+        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
 
-    def apply_ivf(self, tmap, soltn=None):
+    def apply_ivf(self, qumap, soltn=None):
         if soltn is not None:
             logger.debug("soltn is not None")
             assert len(soltn) == 2
-            assert hp.Alm.getlmax(soltn[0].size) == self.lmax
-            assert hp.Alm.getlmax(soltn[1].size) == self.lmax
-            talm = hp_utils.eblm([soltn[0], soltn[1]])
+            assert hp.Alm.getlmax(soltn.shape[-1]) == self.lmax
+            eblm = soltn.copy()
         else:
             logger.debug("soltn is None")
-            telm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
-            tblm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
-            talm = hp_utils.eblm([telm, tblm])
+            eblm = np.zeros((2, hp.Alm.getsize(self.lmax)), dtype=np.complex128)
 
-        assert len(tmap) == 2
+        assert len(qumap) == 2
         logger.info("cinv_p.solve")
-        self.solve(talm, [tmap[0], tmap[1]])
-        hp.almxfl(talm.elm, self.rescal_cl, inplace=True)
-        hp.almxfl(talm.blm, self.rescal_cl, inplace=True)
-        return talm.elm, talm.blm
+        self.solve(eblm, qumap)
+        hp.almxfl(eblm[0], self.rescal_cl, inplace=True)
+        hp.almxfl(eblm[1], self.rescal_cl, inplace=True)
+        return eblm
 
     def _calc_febl(self):
         assert "eb" not in self.cl.keys()
@@ -730,6 +717,14 @@ class library_cinv_sepTP(library_sepTP):
 
     def _apply_ivf_p(self, pmap, soltn=None):
         return self.cinv_p.apply_ivf(pmap, soltn=soltn)
+
+    def get_eps(self, ):
+        out = []
+        if self.cinv_t is not None:
+            out += list(self.cinv_t.eps)
+        if self.cinv_p is not None:
+            out += list(self.cinv_p.eps)
+        return np.array(out)
 
 
 class library_jTP(object):

@@ -19,7 +19,8 @@ logger = logging.getLogger(__name__)
 def alm2map(alms, *args, **kwargs):
     logger.warning("using healpy alm2map")
     if alms.ndim == 2 and alms.shape[0] == 2:
-        return hp.alm2map_spin(alms, *args, **kwargs, spin=2)
+        lmax = hp.Alm.getlmax(alms.shape[-1])
+        return hp.alm2map_spin(alms, *args, **kwargs, spin=2, lmax=lmax)
     else:
         assert alms.ndim == 1 or alms.shape[0] in [1, 3], f"{alms.shape}"
         return hp.alm2map(alms, *args, **kwargs)
@@ -122,7 +123,7 @@ class TFObj:
             setattr(self, f"tf1d_{s}", tf1d*fl)
             if tf2d is not None:
                 setattr(self, f"tf2d_{s}", hp.almxfl(tf2d, fl))
-        return self  #
+        return self
 
 
 class DotOperator:
@@ -166,13 +167,14 @@ class PreOperatorDiag:
     Attributes
     ----------
     filt: array_like
-        1/(1/S + 1/N) used as pre-conditioner
+        1/(1/S + bl2/N) used as pre-conditioner
     fl: array_like
-        1/(S+N) used for QE weights
+        1/(S+N/bl2) used for QE weights
     """
     def __init__(self, s_cls, n_inv_filt, tf, nl_res=None):
 
         self.tf = tf
+        self.cls = dict()
         lmax = self.tf.lmax
 
         if nl_res is None:
@@ -187,10 +189,10 @@ class PreOperatorDiag:
 
             bl2 = getattr(tf, f"tf1d_{s}")[:lmax+1]**2
             sl = cl+ nl * cinv_utils.cli(bl2)
-            _filt = cinv_utils.cli(sl)
+            self.cls[s] = sl
             nlev = n_inv_filt.nlev_cl_t if s == 't' else n_inv_filt.nlev_cl_p
+            _filt = cinv_utils.cli(sl) + 1/nlev * bl2
 
-            _filt += 1/nlev * bl2
             _fl = cinv_utils.cli(sl + nlev * cinv_utils.cli(bl2))
             _fl[:2] = 0
             filt.append(_filt)
@@ -207,6 +209,21 @@ class PreOperatorDiag:
         assert alms.shape[0] == self.filt.shape[0]
         almsf = [hp.almxfl(alms[i], self.filt[i]) for i in range(alms.shape[0])]
         return np.squeeze(almsf)
+
+    def get_initial_guess(self, maps, rescale_cl, g=None):
+        """
+        The initial guess is S/bl/(N/bl2+S)/rescale_cl
+        """
+        # HACK: temporary
+        logger.warning("making educated guess as the initial solution")
+
+        alms = np.atleast_2d(g.map2alm(maps, lmax=self.tf.lmax))
+        assert alms.shape[0] == len(self.tf.pols)
+        for idx, s in enumerate(self.tf.pols):
+            fl = self.cls[s]/rescale_cl*self.fl[idx]
+            fl *= cinv_utils.cli(getattr(self.tf, f"tf1d_{s}"))
+            hp.almxfl(alms[idx], fl, inplace=True)
+        return np.squeeze(alms)
 
 
 class SkyInverseFilter:  # alm_filter_sinv_nocorr:
@@ -259,7 +276,7 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         """
 
         _ninv = np.atleast_2d(n_inv)
-        assert _ninv.shape[0] in [1, 2]
+        assert _ninv.shape[0] in [1, 2, 3]
 
         self.tf = tf
         self.lmax = tf.lmax
@@ -269,15 +286,22 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         self.pixarea = hp.nside2pixarea(self.nside)
 
         self.n_inv_t = None
-        self.n_inv_p = None
+        self.n_inv_q = None
+        self.n_inv_u = None
 
         self.npol = tf.npol
+        assert self.npol in [1, 2, 3]
+        assert self.npol == _ninv.shape[0], f"ninv maps should match npol={self.npol}, got {_ninv.shape[0]}"
         if self.npol in [1, 3]:
+            logger.warning(f"input ninv has shape {_ninv.shape}, taking the first row as T")
             self.n_inv_t = _ninv[0]
             self.nlev_cl_t, fsky, NET = self.ninv2nlev(self.n_inv_t)
         if self.npol in [2, 3]:
-            self.n_inv_p = _ninv[-1]
-            self.nlev_cl_p, fsky, NET = self.ninv2nlev(self.n_inv_p)
+            logger.warning(f"input ninv has shape {_ninv.shape}, taking the second to last as Q")
+            self.n_inv_q = _ninv[-2]
+            logger.warning(f"input ninv has shape {_ninv.shape}, taking the last row as U")
+            self.n_inv_u = _ninv[-1]
+            self.nlev_cl_p, fsky, NET = self.ninv2nlev((self.n_inv_q+self.n_inv_u)/2)
 
         if g is None:
             self.g = None
@@ -297,8 +321,12 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             return hp_utils.read_map(fnames)
 
     @staticmethod
-    def ninv2nlev(ninv):
-        fsky = np.mean(ninv > 0)
+    def ninv2nlev(ninv, fsky=None):
+        if fsky is None:
+            fsky = np.mean(ninv > 0)
+        else:
+            # YL: this option is left for debugging
+            logger.error("temporarily using fixed fsky")
         nlev = 1 / np.sum(ninv) * 4 * np.pi * fsky
         NET = np.rad2deg(np.sqrt(nlev)) * 60
         logger.info(f"ninv2nlev: {NET:.2f} uK-amin noise Cl over fsky {fsky:.2f}")
@@ -320,15 +348,11 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         if maps.ndim == 1:
             maps *= self.n_inv_t
         else:
-            if maps.shape[0] == 1:
+            if maps.shape[0] in (1, 3):
                 maps[0] *= self.n_inv_t
-            elif maps.shape[0] == 2:
-                maps *= self.n_inv_p
-            elif maps.shape[0] == 3:
-                maps[0] *= self.n_inv_t
-                maps[1:] *= self.n_inv_p
-            else:
-                raise ValueError
+            if maps.shape[0] in (2, 3):
+                maps[-2] *= self.n_inv_q
+                maps[-1] *= self.n_inv_u
 
     def apply_alm(self, alms):
         """apply A^T N^-1 A on alms"""

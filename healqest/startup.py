@@ -555,7 +555,7 @@ class Maps:
             N1=N1, bundle=bundle
         )
 
-    def get_tmap(self, seed, cmbid, add_noise:callable = True, apply_tf=False, g=None):
+    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
         """Load sim temperature signal and noise map separately and add
         """
 
@@ -569,7 +569,7 @@ class Maps:
                 logger.info(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=1)
             else:
-                nlm = add_noise(seed, cmbid, self.bundle, self.N1)
+                nlm = self.add_noise_t(seed=seed, cmbid=cmbid, bundle=self.bundle, N1=self.N1)
                 nlm = utils.reduce_lmax(nlm, lmax=lmax_in)
             almt += nlm
             del nlm
@@ -586,11 +586,12 @@ class Maps:
         else:
             pass
         if g is None:
+            logger.warning("using healpy alm2map")
             return hp.alm2map(almt, nside=self.nside)
         else:
             return g.alm2map(almt)
 
-    def get_pmap(self, seed, cmbid, add_noise: callable = True, apply_tf=False, g=None):
+    def get_pmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
         """Load sim E/B signal and noise map separately and add"""
 
         f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
@@ -604,7 +605,7 @@ class Maps:
                 logger.info(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=[2, 3])
             else:
-                nlm = add_noise(seed, cmbid, self.bundle, self.N1)
+                nlm = self.add_noise_p(seed=seed, cmbid=cmbid, bundle=self.bundle, N1=self.N1)
                 nlm = utils.reduce_lmax(nlm, lmax=lmax_in)
             almeb += nlm
             del nlm
@@ -621,9 +622,18 @@ class Maps:
         else:
             pass
         if g is None:
-            return hp.alm2map_spin(almeb, nside=self.nside, spin=2)
+            logger.warning("using healpy alm2map")
+            return hp.alm2map_spin(almeb, nside=self.nside, spin=2, lmax=hp.Alm.getlmax(almeb.shape[-1]))
         else:
             return g.alm2map(almeb)
+
+    @staticmethod
+    def add_noise_t(seed, cmbid, bundle, N1) -> np.ndarray:
+        pass
+
+    @staticmethod
+    def add_noise_p(seed, cmbid, bundle, N1) -> np.ndarray:
+        pass
 
 
 def parser():

@@ -8,7 +8,6 @@ import abc
 import logging
 import numpy as np
 from numpy.typing import NDArray
-from array import array as ArrayType
 import healpy as hp
 
 from . import hp_utils, cinv_utils
@@ -20,7 +19,7 @@ def alm2map(alms, *args, **kwargs):
     logger.warning("using healpy alm2map")
     if alms.ndim == 2 and alms.shape[0] == 2:
         lmax = hp.Alm.getlmax(alms.shape[-1])
-        return hp.alm2map_spin(alms, *args, **kwargs, spin=2, lmax=lmax)
+        return np.array(hp.alm2map_spin(alms, *args, **kwargs, spin=2, lmax=lmax))
     else:
         assert alms.ndim == 1 or alms.shape[0] in [1, 3], f"{alms.shape}"
         return hp.alm2map(alms, *args, **kwargs)
@@ -30,7 +29,9 @@ def alm2map(alms, *args, **kwargs):
 def map2alm(maps, *args, **kwargs):
     logger.warning("using healpy map2alm")
     if maps.ndim == 2 and maps.shape[0] == 2:
-        return hp.map2alm_spin(maps, *args, **kwargs, spin=2)
+        if 'iter' in kwargs:
+            kwargs.pop('iter')
+        return np.array(hp.map2alm_spin(maps, *args, **kwargs, spin=2))
     else:
         assert maps.ndim == 1 or maps.shape[0] in [1, 3], f"{maps.shape}"
         return hp.map2alm(maps, *args, **kwargs)
@@ -106,6 +107,9 @@ class TFObj:
 
     def apply_tf(self, alms):
         """Apply the 2d/1d (if 2d is not set) TF to alm(s) inplace"""
+        assert isinstance(alms, np.ndarray)
+        # atleast_2d creates a view (for inplace modification), only if
+        # the input is not already numpy array!
         alms = np.atleast_2d(alms)
         for i, s in enumerate(self.pols):
             tf1d = getattr(self, f"tf1d_{s}")
@@ -137,8 +141,8 @@ class DotOperator:
         alm2 = np.atleast_2d(alm2)
         lmax = hp.Alm.getlmax(alm1.shape[-1])
         assert alm1.shape == alm2.shape
-        tcl = [hp.alm2cl(alm1[i], alm2[i]) for i in range(alm1.shape[0])]
-        ell = np.arange(0, lmax + 1)
+        tcl = np.array([hp.alm2cl(alm1[i], alm2[i]) for i in range(alm1.shape[0])])
+        ell = np.arange(lmax+1)
         return np.einsum('ij,j->', tcl, (2.0 * ell + 1))
 
 
@@ -251,6 +255,9 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
 
     def calc(self, alms, inplace=False):
         # if self.n_cls is not None and self.tf2d is not None:
+        assert isinstance(alms, np.ndarray)
+        # atleast_2d creates a view (for inplace modification), only if
+        # the input is not already numpy array!
         alms = np.atleast_2d(alms)
         if inplace:
             alms *= self.slinv

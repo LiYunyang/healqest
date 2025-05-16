@@ -82,6 +82,7 @@ class Config:
     dec_range: Union[list, dict] = None
     save_as_map: bool = False  # save plm as map, otherwise as alm.
     nbundle: int = None  # number of bundles, if any.
+    tf_lc: int=2  # the ell-cut in transfer functions. This will be used in sims and added to tf1d/tf2d for cinv.
 
     # === cinv ===
     eps_t: float  # convergence threshold for cinv T component
@@ -338,24 +339,42 @@ class Config:
 
     @cached_property
     def tfbl_1d(self) -> dict:
-        """Return 1d bl functions for T/E/B with lmax=`cinv_lmax`"""
+        """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`"""
         if self.file_bl is None:
             logger.error("beam file not given! assuming unity bl for now.")
-            bl = np.ones(self.cinv_lmax)
+            bl = np.ones(self.cinv_lmax+1)
         else:
             beam_file = self.path(self.file_bl)
             logger.warning("temporarily loading the 150 GHz beam file")
-            bl = np.loadtxt(beam_file)[:self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
+            bl = np.loadtxt(beam_file)[:self.cinv_lmax+1, 2]  # TODO: default to 150 GHz for the test file
+        if self.tf1d is not None:
+            bl *= self.tf1d
         return dict(t=bl, e=bl, b=bl)
 
     @cached_property
     def tfbl_2d(self) -> Union[dict, None]:
-        """Return a 2d bl/tf functions for T/E/B"""
+        """Return a 2d TFxbl functions for T/E/B"""
         if self.file_tf2d:
             raise NotImplementedError
             return np.load(self.file_tf2d)  # TODO: actually implement this when needed
         else:
             logger.warning("No 2d TF given.")
+            return None
+
+    @cached_property
+    def tf1d(self) -> np.ndarray | None:
+        """
+        Return 1d TF functions.
+
+        Note
+        ----
+        This is separate from `tfbl_1d` because when used for simulation, we might only want to apply this.
+        """
+        if self.tf_lc:
+            out = np.ones(self.cinv_lmax+1)
+            out[:self.tf_lc] = 0
+            return out
+        else:
             return None
 
     @cached_property
@@ -502,7 +521,7 @@ class Config:
 
 
 class Maps:
-    def __init__(self, nside, file_signal, file_noise=None, tf2d=None, config=None, N1=False, bundle=None):
+    def __init__(self, nside, file_signal, lmax=None, file_noise=None, tf2d=None, config=None, N1=False, bundle=None):
         """
         Maps class for loading maps as simulation/cinv input
 
@@ -530,6 +549,7 @@ class Maps:
         self.config = config
         self.bundle = bundle
         self.N1 = N1
+        self.lmax = lmax
 
     @classmethod
     def from_config(cls, config: Config, N1=False, bundle=None):
@@ -552,80 +572,60 @@ class Maps:
             file_noise=file_noise,
             config=config,
             tf2d=config.tfbl_2d,
-            N1=N1, bundle=bundle
+            N1=N1, bundle=bundle, lmax=config.cinv_lmax,
         )
 
-    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
-        """Load sim temperature signal and noise map separately and add
-        """
-
+    def _get_maps(self, pol, seed, cmbid, add_noise=True, apply_tf=False, g=None):
+        """Load sim T or E/B signal and noise map separately and add"""
+        assert pol in ['t', 'p', 'tp']
+        hdu = dict(t=[1], p=[2, 3], tp=[1,2,3])[pol]
         f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
         logger.debug(f"loading signal sim from {f_slm}")
-        almt = hp.read_alm(f_slm, hdu=1)
-        lmax_in = hp.Alm.getlmax(almt.shape[-1])
+        alms = utils.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
+
+        if self.config.tf1d is not None:
+            logger.warning(f"cutting lmin at {self.config.tf_lc}")
+            for i in range(alms.shape[0]):
+                hp.almxfl(alms[i], self.config.tf1d, inplace=True)
+
+        if apply_tf:
+            logger.info("Applying tf")
+            assert self.tf2d is not None
+            alms *= self.tf2d
+        else:
+            pass
+
         if add_noise:
             if self.file_noise is not None:
                 f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
                 logger.info(f"Adding noise: {f_nlm}")
-                nlm = hp.read_alm(f_nlm, hdu=1)
+                nlm = hp.read_alm(f_nlm, hdu=hdu)
+                alms += nlm
+                del nlm
             else:
-                nlm = self.add_noise_t(seed=seed, cmbid=cmbid, bundle=self.bundle, N1=self.N1)
-                nlm = utils.reduce_lmax(nlm, lmax=lmax_in)
-            almt += nlm
-            del nlm
+                if 't' in pol:
+                    alms[0] += utils.reduce_lmax(self.add_noise_t(seed=seed, cmbid=cmbid, bundle=self.bundle,
+                                                                  N1=self.N1), lmax=self.lmax)
+                if 'p' in pol:
+                    alms[-2:] += utils.reduce_lmax(self.add_noise_p(seed=seed, cmbid=cmbid, bundle=self.bundle,
+                                                                   N1=self.N1), lmax=self.lmax)
         else:
             pass
 
-        if apply_tf:
-            logger.debug("Applying tf")
-            assert self.tf2d is not None
-            lmax = hp.Alm.getlmax(len(self.tf2d))
-            if lmax_in > lmax:
-                almt = utils.reduce_lmax(almt, lmax)
-            almt *= self.tf2d
-        else:
-            pass
         if g is None:
             logger.warning("using healpy alm2map")
-            return hp.alm2map(almt, nside=self.nside)
+            if pol == 'p':
+                return hp.alm2map_spin(alms, nside=self.nside, spin=2, lmax=hp.Alm.getlmax(alms.shape[-1]))
+            else:
+                return hp.alm2map(alms, nside=self.nside, lmax=hp.Alm.getlmax(alms.shape[-1]))
         else:
-            return g.alm2map(almt)
+            return g.alm2map(alms)
 
     def get_pmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
-        """Load sim E/B signal and noise map separately and add"""
+        return self._get_maps('p', seed=seed, cmbid=cmbid, add_noise=add_noise, apply_tf=apply_tf, g=g)
 
-        f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
-        logger.debug(f"loading signal sim from {f_slm}")
-        almeb = hp.read_alm(f_slm, hdu=[2, 3])
-        lmax_in = hp.Alm.getlmax(almeb.shape[-1])
-
-        if add_noise:
-            if self.file_noise is not None:
-                f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
-                logger.info(f"Adding noise: {f_nlm}")
-                nlm = hp.read_alm(f_nlm, hdu=[2, 3])
-            else:
-                nlm = self.add_noise_p(seed=seed, cmbid=cmbid, bundle=self.bundle, N1=self.N1)
-                nlm = utils.reduce_lmax(nlm, lmax=lmax_in)
-            almeb += nlm
-            del nlm
-        else:
-            pass
-
-        if apply_tf:
-            logger.debug("Applying tf")
-            assert self.tf2d is not None
-            lmax = hp.Alm.getlmax(len(self.tf2d))
-            if lmax_in > lmax:
-                almeb = utils.reduce_lmax(almeb, lmax)
-            almeb *= self.tf2d
-        else:
-            pass
-        if g is None:
-            logger.warning("using healpy alm2map")
-            return hp.alm2map_spin(almeb, nside=self.nside, spin=2, lmax=hp.Alm.getlmax(almeb.shape[-1]))
-        else:
-            return g.alm2map(almeb)
+    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
+        return self._get_maps('t', seed=seed, cmbid=cmbid, add_noise=add_noise, apply_tf=apply_tf, g=g)
 
     @staticmethod
     def add_noise_t(seed, cmbid, bundle, N1) -> np.ndarray:

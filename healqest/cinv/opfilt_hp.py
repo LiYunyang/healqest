@@ -89,7 +89,7 @@ class TFObj:
                 logger.debug(f"raw tf2d shape: {_tf2d.shape}, taking first/last row for E/B")
         elif npol == 3:
             self.tf1d_t, self.tf1d_e, self.tf1d_b = _tf1d[0], _tf1d[-1], _tf1d[-1]
-            self.tf1d_t, self.tf2d_e, self.tf2d_b = _tf2d[0], _tf2d[-1], _tf2d[-1]
+            self.tf2d_t, self.tf2d_e, self.tf2d_b = _tf2d[0], _tf2d[-1], _tf2d[-1]
             logger.debug(f"raw tf1d shape: {_tf1d.shape}, taking first row for T, last row for EB")
             if tf2d is not None:
                 logger.debug(f"raw tf2d shape: {_tf2d.shape}, taking first row for T, last row for EB")

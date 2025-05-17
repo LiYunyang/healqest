@@ -1,10 +1,9 @@
 """
-Similar to opfilt_teb.py for flatsky, this is for T-only and for healpix maps.
-
 Modified from and built on plancklens/qcinv/opfilt_tt.py
+
+Mergerd from opfilt_hp_[t/p/tp].py
 """
 
-import abc
 import logging
 import numpy as np
 from numpy.typing import NDArray
@@ -39,10 +38,11 @@ def map2alm(maps, *args, **kwargs):
 
 def calc_fini(alms, s_inv_filt):
     """This final operation turns the Wiener-filtered CMB cg-solution to the inverse-variance filtered CMB."""
-    s_inv_filt.calc(alms, inplace=True)
+    return s_inv_filt.calc(alms, inplace=False)
 
 
 class TFObj:
+    """Transfer function object, takes list of tf1d and tf2d and parse them into T/E/B TFs"""
     lmax: int
     tf1d_t: NDArray = None  # (lmax+1, )
     tf1d_e: NDArray = None  # (lmax+1, )
@@ -230,11 +230,64 @@ class PreOperatorDiag:
         return np.squeeze(alms)
 
 
-class SkyInverseFilter:  # alm_filter_sinv_nocorr:
-    """Class allowing spectrum-formed covariances
-    from signal and also 1/ell noise.
-    For non-TT-only cases, does not include TE correlation
+class PreOperatorDiagJoint(PreOperatorDiag):
     """
+    Harmonic space diagonal pre-conditioner operation for TEB with TE correlation
+
+    Attributes
+    ----------
+    filt: array_like
+        (S^{-1} + bl2/N)^-1 used as pre-conditioner
+    fl: array_like
+        1/(S+N/bl2) used for QE weights
+    """
+    def __init__(self, s_cls, n_inv_filt, tf, nl_res=None, te_only=True):
+        if not te_only:
+            raise NotImplementedError("Only TE-only case is implemented")
+
+        self.tf = tf
+        assert self.tf.npol == 3, "Joint preconditioner needs all T/E/B"
+
+        self.cls = dict()
+        lmax = self.tf.lmax
+
+        if nl_res is None:
+            nl_res = {key: np.zeros(lmax + 1) for key in s_cls}
+
+        fl = list()
+        s_mat = np.zeros((3, lmax + 1))
+        n_mat = np.zeros((3, lmax + 1))
+        for i, s in enumerate('teb'):
+            ss = f"{s}{s}"
+            cl = s_cls[ss][:lmax + 1]
+            nl = nl_res[ss][:lmax + 1]
+            bl2 = getattr(tf, f"tf1d_{s}")[:lmax + 1] ** 2
+            s_mat[i] = cl + nl * cinv_utils.cli(bl2)
+
+            nlev = n_inv_filt.nlev_cl_t if s == 't' else n_inv_filt.nlev_cl_p
+            n_mat[i] = 1 / nlev * bl2
+
+            _fl = cinv_utils.cli(s_mat[i] + nlev * cinv_utils.cli(bl2))
+            _fl[:2] = 0
+            fl.append(_fl)
+
+        blte2 = (getattr(tf, f"tf1d_t") * getattr(tf, f"tf1d_e"))[:lmax + 1]
+        _te = s_cls['te'][:lmax + 1] + nl_res['te'][:lmax + 1] * cinv_utils.cli(blte2)
+        sinv, sinv_te = cinv_utils.invert_teb(np.array(s_mat), te=_te)
+        self.filt, self.filt_te = cinv_utils.invert_teb(sinv + n_mat, te=sinv_te)
+        self.fl = np.array(fl)
+
+    def calc(self, alms):
+        alms = np.atleast_2d(alms)
+        assert alms.shape[0] == self.filt.shape[0]
+        almsf = [hp.almxfl(alms[i], self.filt[i]) for i in range(alms.shape[0])]
+        almsf[0] += hp.almxfl(alms[1], self.filt_te)
+        almsf[1] += hp.almxfl(alms[0], self.filt_te)
+        return np.squeeze(almsf)
+
+
+class SkyInverseFilter:  # alm_filter_sinv_nocorr:
+    """ class that performs single (+1/ell noise) inverse filtering: S^-1 for T/EB or TEB without TE correlation"""
 
     def __init__(self, s_cls, nl_res, tf):
         self.tf = tf
@@ -254,7 +307,6 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
         self.slinv = np.array(slinv)
 
     def calc(self, alms, inplace=False):
-        # if self.n_cls is not None and self.tf2d is not None:
         assert isinstance(alms, np.ndarray)
         # atleast_2d creates a view (for inplace modification), only if
         # the input is not already numpy array!
@@ -265,8 +317,39 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
             return np.squeeze(alms * self.slinv)
 
 
+class SkyInverseFilterJoint(SkyInverseFilter):
+    """ class that performs single (+1/ell noise) inverse filtering: S^-1 for TEB with TE correlation"""
+    def __init__(self, s_cls, nl_res, tf):
+        self.tf = tf
+        self.lmax = tf.lmax
+        self.s_cls = s_cls
+        self.nl_res = nl_res
+        almsize = hp.Alm.getsize(self.lmax)
+
+        slinv = np.zeros((3, almsize), dtype=float)
+        for i, s in enumerate('teb'):
+            ss = f"{s}{s}"
+            cl = s_cls[ss][:self.lmax + 1]
+            nl = nl_res[ss][:self.lmax + 1]
+            bl2 = getattr(tf, f"tf1d_{s}")[:self.lmax + 1] ** 2
+            slinv[i] = hp_utils.cl2almformat(cl + nl * cinv_utils.cli(bl2))
+
+        blte2 = (getattr(tf, f"tf1d_t") * getattr(tf, f"tf1d_e"))[:self.lmax + 1]
+        _te = s_cls['te'][:self.lmax + 1] + nl_res['te'][:self.lmax + 1] * cinv_utils.cli(blte2)
+        _te = hp_utils.cl2almformat(_te)
+        self.slinv, self.slinv_te = cinv_utils.invert_teb(slinv, te=_te)
+
+    def calc(self, alms, inplace=False):
+        # This is the case where EB=BE=TB=BT==0
+        assert not inplace
+        alms_out = alms*self.slinv
+        alms_out[0] += alms[1]*self.slinv_te
+        alms_out[1] += alms[0] * self.slinv_te
+        return alms_out
+
+
 class NoiseInverseFilter:  # alm_filter_ninv(object):
-    """Missing doc."""
+    """class that performs inverse variance filtering: [tfbl] [m2a] N-1 [a2m] [tfbl]"""
     nlev_cl_t: float = None  # equivalent noise level in uK^2 sr for precond
     nlev_cl_p: float = None  # equivalent noise level in uK^2 sr for precond
     almsize: int
@@ -351,7 +434,7 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         return alms
 
     def apply_map(self, maps):
-        """Missing doc."""
+        """map-based Ninv operation: N^-1"""
         if maps.ndim == 1:
             maps *= self.n_inv_t
         else:
@@ -362,7 +445,7 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
                 maps[-1] *= self.n_inv_u
 
     def apply_alm(self, alms):
-        """apply A^T N^-1 A on alms"""
+        """harmonic-space Ninv operation: apply A^T N^-1 A on alms"""
         assert alms.shape[-1] == self.almsize
         self.tf.apply_tf(alms)
         if self.g is None:

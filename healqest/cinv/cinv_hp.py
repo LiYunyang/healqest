@@ -10,7 +10,7 @@ import sys
 import healpy as hp
 import numpy as np
 import logging
-from . import opfilt_hp_tp, opfilt_hp
+from . import opfilt_hp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
 logger = logging.getLogger(__name__)
@@ -39,7 +39,6 @@ class cinv(object):
             Geometry object of `nside` will be used. This should give identical results as healpy but still a 2x
             speed-up.
         """
-        assert lib_dir is not None
         assert lmax >= 1024
         assert nside >= 512
         self.lib_dir = lib_dir  # Output directory
@@ -110,12 +109,9 @@ class cinv(object):
         dot_op = opfilt_hp.DotOperator()
         cd_logger = cd_monitors.logger_basic() if verbose else cd_monitors.logger_none()
 
-        # tpn_alm = self.opfilt.calc_prep(tpn_map, self.s_inv_filt, self.n_inv_filt, g=self.g)
         tpn_alm = self.n_inv_filt.calc_prep(tpn_map)
         monitor = cd_monitors.MonitorBasic(dot_op, cd_logger=cd_logger, iter_max=np.inf, eps_min=self.eps_min)
         fwd_op = opfilt_hp.ForwardOperator(self.s_inv_filt, self.n_inv_filt)
-
-        # soltn = self.pre_op.get_initial_guess(tpn_map, self.rescal_cl, g=self.g)
 
         cd_solve.cd_solve(
             soltn,
@@ -398,43 +394,44 @@ class cinv_tp(cinv):
         Whether to scale by multipole ell, by default True.
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d_t, tf1d_p, tf2d_t, tf2d_p, eps_min=1.0e-5,
-                 ellscale=False, g=None):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d, eps_min=1.0e-5, ellscale=False, g=None):
 
-        assert len(ninv) == 2 or len(ninv) == 4  # TT, (QQ + UU)/2 or TT,QQ,QU,UU
-        super(cinv_tp, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, ninv=ninv,
-                                      eps_min=eps_min, ellscale=ellscale, opfilt=opfilt_hp_tp, g=g)
+        assert isinstance(ninv, list)
+        assert len(ninv) in [3]  # TT/PP or TT/QQ/UU
+        tf = opfilt_hp.TFObj(npol=3, lmax=lmax, tf1d=tf1d, tf2d=tf2d)
 
-        invfac = cinv_utils.cli(self.rescal_cl)
-        self.tf1d_t = tf1d_t[:lmax +1] * invfac
-        self.tf1d_p = tf1d_p[:lmax +1] * invfac
-        self.tf2d_t = hp.almxfl(tf2d_t, invfac) if tf2d_t is not None else None
-        self.tf2d_p = hp.almxfl(tf2d_p, invfac) if tf2d_p is not None else None
+        super(cinv_tp, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
+                                      ellscale=ellscale, g=g, tf=tf)
+        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, ninv, tf=self.tf, g=g)
+        self.s_inv_filt = hp_utils.jit(opfilt_hp.SkyInverseFilterJoint, s_cls=self.dl, nl_res=nl_res, tf=self.tf)
 
-        self.s_inv_filt = hp_utils.jit(self.opfilt.SkyInverseFilter,
-                                       self.dl, self.nl_res, self.lmax,
-                                       self.tf1d_t, self.tf1d_p,
-                                       self.tf2d_t, self.tf2d_p)
-
-        self.n_inv_filt = hp_utils.jit(self.opfilt.NoiseInverseFilter, n_inv=self.ninv,
-                                       tf1d_t=self.tf1d_t, tf1d_p=self.tf1d_p,
-                                       tf2d_t=self.tf2d_t, tf2d_p=self.tf2d_p)
+    @property
+    def pre_op(self):
+        if self._pre_op is None:
+            self._pre_op = opfilt_hp.PreOperatorDiagJoint(self.s_inv_filt.s_cls, self.n_inv_filt, tf=self.tf,
+                                                          nl_res=self.s_inv_filt.nl_res)
+        return self._pre_op
 
     def apply_ivf(self, tqumap, soltn=None):  # , apply_fini=''):
         assert len(tqumap) == 3
         if soltn is not None:
             ttlm, telm, tblm = soltn
         else:
-            ttlm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
-            telm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
-            tblm = np.zeros(hp.Alm.getsize(self.lmax), dtype=np.complex128)
+            teblm = np.zeros((3, hp.Alm.getsize(self.lmax)), dtype=np.complex128)
+        self.solve(teblm, [tqumap[0], tqumap[1], tqumap[2]])  # , apply_fini=apply_fini)
+        hp.almxfl(teblm[0], self.rescal_cl, inplace=True)
+        hp.almxfl(teblm[1], self.rescal_cl, inplace=True)
+        hp.almxfl(teblm[2], self.rescal_cl, inplace=True)
+        return teblm
 
-        talm = hp_utils.teblm([ttlm, telm, tblm])
-        self.solve(talm, [tqumap[0], tqumap[1], tqumap[2]])  # , apply_fini=apply_fini)
-        hp.almxfl(talm.tlm, self.rescal_cl, inplace=True)
-        hp.almxfl(talm.elm, self.rescal_cl, inplace=True)
-        hp.almxfl(talm.blm, self.rescal_cl, inplace=True)
-        return talm.tlm, talm.elm, talm.blm
+    def get_fl(self, pol, lmax):
+        assert pol.lower() in 'teb'
+        i = 'teb'.index(pol.lower())
+        out = self.pre_op.fl[i, :self.lmax+1]*self.rescal_cl[:self.lmax+1]**2
+        if lmax is None:
+            return out
+        else:
+            return out[:lmax+1]
 
 
 class library_sepTP(object):
@@ -739,26 +736,26 @@ class library_jTP(object):
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cl_weights, lfilt=None, soltn_lib=None):
+    def __init__(self, lib_dir, sim_lib, cl_weights, lfilt=None, soltn_lib=None, add_noise=False):
         # assert np.all([k in cl_weights.keys() for k in ['tt', 'ee', 'bb']])
         self.lib_dir = lib_dir
         self.sim_lib = sim_lib
         self.cl = cl_weights
         self.lfilt = lfilt
         self.soltn_lib = soltn_lib
+        self.add_noise = add_noise
+        self.g = None
 
-    def _get_alms(self, a, idx):
+    def _get_alms(self, a, seed, cmbid):
         assert a in ["t", "e", "b", "teb"]
-        tfname = os.path.join(
-            self.lib_dir, "sim_%04d_tlm.fits" % idx if idx >= 0 else "dat_tlm.fits"
-        )
-        fname = tfname.replace("tlm.fits", a + "lm.fits")
-        if not os.path.exists(fname):
-            T = self.sim_lib.get_tmap(idx)
-            Q, U = self.sim_lib.get_pmap(idx)
+
+        if True:
+            T = self.sim_lib.get_tmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
+            Q, U = self.sim_lib.get_pmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
             if self.soltn_lib is None:
                 soltn = None
             else:
+                raise NotImplementedError
                 tlm = self.soltn_lib.get_sim_tmliklm(idx)
                 elm = self.soltn_lib.get_sim_emliklm(idx)
                 blm = self.soltn_lib.get_sim_bmliklm(idx)
@@ -775,8 +772,8 @@ class library_jTP(object):
 
         return {"teb": (tlm, elm, blm), "t": tlm, "e": elm, "b": blm}[a]
 
-    def get_sim_teblm(self, idx):
-        return self._get_alms("teb", idx)
+    def get_sim_teblm(self, seed, cmbid):
+        return self._get_alms("teb", seed, cmbid)
 
     def get_sim_eblm(self, idx):
         elm = self._get_alms("e", idx)
@@ -854,14 +851,19 @@ class library_cinv_jTP(library_jTP):
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cinv_jtp: cinv_tp, cl_weights: dict, soltn_lib=None, lfilt=None):
+    def __init__(self, lib_dir, sim_lib, cinv_jtp: cinv_tp, cl_weights: dict, soltn_lib=None, lfilt=None,
+                 add_noise=False):
+
+        super(library_cinv_jTP, self).__init__(lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt,
+                                               add_noise=add_noise)
         self.cinv_tp = cinv_jtp
-        super(library_cinv_jTP, self).__init__(
-            lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt
-        )
+        self.g = cinv_jtp.g
 
     def get_fal(self, lmax=None):
         return self.cinv_tp.get_fal(lmax=lmax)
 
     def _apply_ivf(self, tqumap, soltn=None):
         return self.cinv_tp.apply_ivf(tqumap, soltn=soltn)
+
+    def get_fl(self, pol, lmax=None):
+        return self.cinv_tp.get_fl(pol=pol, lmax=lmax)

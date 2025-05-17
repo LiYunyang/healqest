@@ -98,6 +98,29 @@ def cli(cl):
     return ret
 
 
+def invert_teb(teb, te=None):
+    """
+    Compute the inverse of the TEB covariance where only TE correlations are non-zero.
+
+    Parameters
+    ----------
+    teb : np.ndarray
+        shape (3, ..., lmax+1), for TT/EE/BB
+    te: np.ndarray, optional
+        shape(..., lmax+1, ), for TE terms.
+    """
+    if te is None:
+        return cli(teb)
+    else:
+        assert teb.shape[0] == 3
+        assert teb.shape[-1] == te.shape[-1]
+        bb = cli(teb[2])
+        norm = cli(teb[0]*teb[1]-te**2)
+        teb_out = np.array([teb[1]*norm, teb[0]*norm, bb])
+        te_out = -te*norm
+        return teb_out, te_out
+
+
 def cache_pk(suffix="", trim_lm=True):
     """decorator which can be used to cache the output of
     a function using pickle.

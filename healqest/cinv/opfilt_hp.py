@@ -38,7 +38,7 @@ def map2alm(maps, *args, **kwargs):
 
 def calc_fini(alms, s_inv_filt):
     """This final operation turns the Wiener-filtered CMB cg-solution to the inverse-variance filtered CMB."""
-    return s_inv_filt.calc(alms, inplace=False)
+    s_inv_filt.calc(alms, inplace=True)
 
 
 class TFObj:
@@ -341,10 +341,12 @@ class SkyInverseFilterJoint(SkyInverseFilter):
 
     def calc(self, alms, inplace=False):
         # This is the case where EB=BE=TB=BT==0
-        assert not inplace
         alms_out = alms*self.slinv
         alms_out[0] += alms[1]*self.slinv_te
         alms_out[1] += alms[0] * self.slinv_te
+        if inplace:
+            alms[:] = alms_out
+            return
         return alms_out
 
 

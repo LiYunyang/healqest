@@ -851,7 +851,7 @@ class library_cinv_jTP(library_jTP):
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cinv_jtp: cinv_tp, cl_weights: dict, soltn_lib=None, lfilt=None,
+    def __init__(self, lib_dir, sim_lib, cinv_jtp: cinv_tp, cl_weights: dict=None, soltn_lib=None, lfilt=None,
                  add_noise=False):
 
         super(library_cinv_jTP, self).__init__(lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt,
@@ -867,3 +867,9 @@ class library_cinv_jTP(library_jTP):
 
     def get_fl(self, pol, lmax=None):
         return self.cinv_tp.get_fl(pol=pol, lmax=lmax)
+
+    def get_eps(self, ):
+        out = []
+        if self.cinv_tp is not None:
+            out += list(self.cinv_tp.eps)
+        return np.array(out)

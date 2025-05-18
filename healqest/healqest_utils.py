@@ -740,6 +740,9 @@ def get_qes(qeset):
         "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
         "GMVTTEETE": ["TT", "EE", "TE", "ET"],
         "GMVTBEB": ["TB", "BT", "EB", "BE"],
+        "qGMV": ["TT", "EE", "EB", "TE", "TB"],
+        "qGMVTTEETE": ["TT", "EE", "TE"],
+        "qGMVTBEB": ["TB", "EB"],
         "MV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
         "qMV": ["TT", "EE", "EB", "TE", "TB"],
         "MVnoTT": ["EE", "EB", "TE", "TB", "EB", "TE", "TB"],
@@ -1726,7 +1729,7 @@ def generate_seed(seed, cmbid, bundle=None, extra_tag=None):
     return int(hashlib.sha256(f"{cmbid}/{seed}/{bundle}/{extra_tag}".encode()).hexdigest()[:8], base=16)
 
 
-def cinv_io(fname, maps=None, fl=None):
+def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
     """
     Read and write cinv maps.
 
@@ -1738,6 +1741,10 @@ def cinv_io(fname, maps=None, fl=None):
         shape (1, npix) or (3, npix) map. If None, read and return the maps.
     fl: array=None
         shape (1, lmax+1) or (3, lmax+1) for QE weights flT, flE, flB. If None, read and return the weights.
+    eps: array= None
+        1d array containing the convergence chain of the cinv run.
+    return_eps: bool=False
+        If True, return the eps chain of the cinv file
 
     Returns
     -------
@@ -1747,6 +1754,9 @@ def cinv_io(fname, maps=None, fl=None):
         shape (1, lmax+1) or (3, lmax+1) for QE weights flT, flE, flB
     """
     if maps is None:
+        if return_eps:
+            hdu = fits.open(fname)[3]
+            return hdu.data['eps']
         maps = hp.read_map(fname, field=None)
         maps[maps==hp.UNSEEN] = 0
         hdu = fits.open(fname)[2]
@@ -1759,6 +1769,8 @@ def cinv_io(fname, maps=None, fl=None):
         with fits.open(fname, mode='update') as hdul:
             hdul.append(fits.BinTableHDU.from_columns([
                 fits.Column(name=f"fl{'teb'[i]}", array=_fl, format='D') for i, _fl in enumerate(fl)]))
+            if eps is not None:
+                hdul.append(fits.BinTableHDU.from_columns([fits.Column(name="eps", array=eps, format='D')]))
             hdul.flush()
 
 

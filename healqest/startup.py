@@ -100,7 +100,7 @@ class Config:
     nlev_t: float = None  # NET value, if not specified, nlev_t = nlev_p / sqrt(2)
     nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
-    cinvdir: str = None # The output directory for cinv maps. If not specified, set to "recdir"
+    cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
 
     # === lensrec ===
     rectype: str  # [sqe,gmv,mh,xilc,gmvph]
@@ -129,7 +129,7 @@ class Config:
     fmask_resp: Union[str, list[str]] = None  # path(s) to mask used for MC resp
     spice_kwargs: dict = None  # polspice settings
 
-    def __init__(self, cinv=None, **kwargs):
+    def __init__(self, **kwargs):
         self._validate_config(kwargs)
         self.__dict__.update(kwargs)
         self._set_defaults()
@@ -190,6 +190,15 @@ class Config:
             self.outdir = self.outdir.format(field=self.field)
             self.recdir = self.recdir.format(field=self.field)
             self.cinvdir = self.cinvdir.format(field=self.field)
+
+        # append a second level of directory to distinguish rectypes
+        self.outdir =f"{self.outdir}/{self.rectype}"
+        self.recdir = f"{self.recdir}/{self.rectype}"
+        self.cinvdir = f"{self.cinvdir}/{self.rectype}"
+
+        logger.info(f"cinv IO directory (`cinvdir`): {self.cinvdir}")
+        logger.info(f"lensrec IO directory (`recdir`): {self.recdir}")
+        logger.info(f"main IO directory (`outdir`): {self.outdir}")
 
         # set field specific settings
         if isinstance(self.dec_range, dict):
@@ -288,8 +297,10 @@ class Config:
             return healqest_utils.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
             return healqest_utils.get_qes(mvtype)
-        elif mvtype == 'GMV':
-            return ['TT_GMV', 'EE_GMV', 'TE_GMV', 'ET_GMV', 'TB_GMV', 'BT_GMV', 'EB_GMV', 'BE_GMV']
+        elif mvtype in ['GMV', 'GMVTTEETE', 'GMVTETB']:
+            return healqest_utils.get_qes(mvtype)
+        elif mvtype in ['qGMV', 'qGMVTTEETE', 'qGMVTETB']:
+            return healqest_utils.get_qes(mvtype)
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
 

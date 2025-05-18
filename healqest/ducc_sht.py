@@ -11,6 +11,9 @@ if version.parse(ducc0.__version__)<version.parse('0.36.0'):
         f"The promised performance gain is not guaranteed.", UserWarning,
     )
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 def _load_pixel_weights(nside):
     from astropy.utils import data
@@ -163,6 +166,7 @@ class Geometry:
         mask = None
         masked = None
         if check:
+            logger.warning("checking bad pixel for map2alm. this is slow, so set check=False if possible")
             mask = hp.mask_bad(maps)
             masked = np.any(mask)
             if masked:

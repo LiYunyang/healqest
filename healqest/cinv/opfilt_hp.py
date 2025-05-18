@@ -354,7 +354,7 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
     nlev_cl_p: float = None  # equivalent noise level in uK^2 sr for precond
     almsize: int
 
-    def __init__(self, n_inv, tf, g=None, **kwargs):
+    def __init__(self, n_inv, tf, g=None, fast=True, **kwargs):
         """
         Parameters
         ----------
@@ -363,10 +363,14 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         tf: TFObj
         g: Geometry
             ducc wrapper to speed up alm2map/map2alm
+        fast: bool=False
+            If True, only store partial maps. This should significantly speedup `apply_map`
         """
 
         _ninv = np.atleast_2d(n_inv)
         assert _ninv.shape[0] in [1, 2, 3]
+        self.nonzero = np.where(np.sum(_ninv, axis=0)>0)[0]
+        # saving index is fastest compared to masks for nside2048 masks
 
         self.tf = tf
         self.lmax = tf.lmax
@@ -375,6 +379,9 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         self.nside = hp.npix2nside(self.npix)
         self.pixarea = hp.nside2pixarea(self.nside)
 
+        fsky = np.count_nonzero(self.nonzero)/_ninv.shape[-1]
+        if fast:
+            _ninv = np.ascontiguousarray(_ninv[:, self.nonzero])
         self.n_inv_t = None
         self.n_inv_q = None
         self.n_inv_u = None
@@ -385,13 +392,13 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         if self.npol in [1, 3]:
             logger.warning(f"input ninv has shape {_ninv.shape}, taking the first row as T")
             self.n_inv_t = _ninv[0]
-            self.nlev_cl_t, fsky, NET = self.ninv2nlev(self.n_inv_t)
+            self.nlev_cl_t, fsky, NET = self.ninv2nlev(self.n_inv_t, fsky=fsky)
         if self.npol in [2, 3]:
             logger.warning(f"input ninv has shape {_ninv.shape}, taking the second to last as Q")
             self.n_inv_q = _ninv[-2]
             logger.warning(f"input ninv has shape {_ninv.shape}, taking the last row as U")
             self.n_inv_u = _ninv[-1]
-            self.nlev_cl_p, fsky, NET = self.ninv2nlev((self.n_inv_q+self.n_inv_u)/2)
+            self.nlev_cl_p, fsky, NET = self.ninv2nlev((self.n_inv_q+self.n_inv_u)/2, fsky=fsky)
 
         if g is None:
             self.g = None
@@ -413,10 +420,10 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
     @staticmethod
     def ninv2nlev(ninv, fsky=None):
         if fsky is None:
-            fsky = np.mean(ninv > 0)
+            fsky = np.mean(ninv)
         else:
             # YL: this option is left for debugging
-            logger.error("temporarily using fixed fsky")
+            pass
         nlev = 1 / np.sum(ninv) * 4 * np.pi * fsky
         NET = np.rad2deg(np.sqrt(nlev)) * 60
         logger.info(f"ninv2nlev: {NET:.2f} uK-amin noise Cl over fsky {fsky:.2f}")
@@ -424,25 +431,26 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
 
     def calc_prep(self, maps):
         maps_copy = np.copy(maps)
+
         self.apply_map(maps_copy)
-        maps_copy /= self.pixarea
+
         if self.g is None:
             alms = map2alm(maps_copy, lmax=self.lmax, iter=0)
         else:
-            alms = self.g.map2alm(maps_copy, lmax=self.lmax, iter=0)
+            alms = self.g.map2alm(maps_copy, lmax=self.lmax, iter=0, check=False)
         self.tf.apply_tf(alms)
         return alms
 
     def apply_map(self, maps):
         """map-based Ninv operation: N^-1"""
         if maps.ndim == 1:
-            maps *= self.n_inv_t
+            maps[self.nonzero] *= self.n_inv_t/self.pixarea
         else:
             if maps.shape[0] in (1, 3):
-                maps[0] *= self.n_inv_t
+                maps[0, self.nonzero] *= self.n_inv_t/self.pixarea
             if maps.shape[0] in (2, 3):
-                maps[-2] *= self.n_inv_q
-                maps[-1] *= self.n_inv_u
+                maps[-2, self.nonzero] *= self.n_inv_q/self.pixarea
+                maps[-1, self.nonzero] *= self.n_inv_u/self.pixarea
 
     def apply_alm(self, alms):
         """harmonic-space Ninv operation: apply A^T N^-1 A on alms"""
@@ -454,10 +462,9 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             maps = self.g.alm2map(alms)
 
         self.apply_map(maps)
-        maps /= self.pixarea
 
         if self.g is None:
             alms[:] = map2alm(maps, lmax=self.lmax, iter=0)
         else:
-            self.g.map2alm(maps, lmax=self.lmax, iter=0, alms=alms)
+            self.g.map2alm(maps, lmax=self.lmax, iter=0, alms=alms, check=False)
         self.tf.apply_tf(alms)

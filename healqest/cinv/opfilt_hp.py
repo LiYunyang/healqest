@@ -422,7 +422,7 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
     @staticmethod
     def ninv2nlev(ninv, fsky=None):
         if fsky is None:
-            fsky = np.mean(ninv)
+            fsky = np.mean(ninv > 0)
         else:
             # YL: this option is left for debugging
             pass

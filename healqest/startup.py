@@ -152,6 +152,11 @@ class Config:
     def from_args(cls, args):
         fname = args.config
         obj = cls.from_yaml(fname, field=args.field)
+
+        logger.info(f"cinv IO directory (`cinvdir`): {obj.cinvdir}")
+        logger.info(f"lensrec IO directory (`recdir`): {obj.recdir}")
+        logger.info(f"main IO directory (`outdir`): {obj.outdir}")
+
         if rank == 0:
             os.makedirs(obj.path(obj.outdir), exist_ok=True)
             for i, f in enumerate([fname, sys._getframe(1).f_globals['__file__']]):
@@ -195,10 +200,6 @@ class Config:
         self.outdir =f"{self.outdir}/{self.rectype}"
         self.recdir = f"{self.recdir}/{self.rectype}"
         self.cinvdir = f"{self.cinvdir}/{self.rectype}"
-
-        logger.info(f"cinv IO directory (`cinvdir`): {self.cinvdir}")
-        logger.info(f"lensrec IO directory (`recdir`): {self.recdir}")
-        logger.info(f"main IO directory (`outdir`): {self.outdir}")
 
         # set field specific settings
         if isinstance(self.dec_range, dict):

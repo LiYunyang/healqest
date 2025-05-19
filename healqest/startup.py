@@ -24,6 +24,7 @@ from git import Repo, InvalidGitRepositoryError
 
 from healqest import utils, healqest_utils
 from healqest.ducc_sht import Geometry
+
 try:
     from mpi4py import MPI
     comm = MPI.COMM_WORLD
@@ -482,7 +483,10 @@ class Config:
         subdir = 'lensrec_N1' if N1 else 'lensrec'
         if bundle is not None and not N1:  # MF and N1 don't do bundle
             subdir = f"{subdir}/bundle{bundle}"
-        suffix = 'fits' if self.save_as_map else 'npz'
+        if self.save_as_map:
+            suffix = 'npy' if not stack_type else 'fits'
+        else:
+            suffix = 'npz'
         if not stack_type:
             if self.save_as_map:
                 # when saving as partial maps, save all QEs together as columns, so QE doesn't appear in fname.
@@ -515,6 +519,11 @@ class Config:
         """paths to response functions."""
         bundle_tag = f'_bundle{bundle}' if bundle is not None else ''
         return self.path(self.outdir, f"respavg_{tag}{bundle_tag}.npz")
+
+    @property
+    def p_index(self, ):
+        """path the the parital map index array"""
+        return self.path(self.recdir, 'index.npz')
 
     @staticmethod
     def f_tmp(tag, seed1=None, seed2=None, ktype=None, N1=False, mf_group=0, bundle=None):

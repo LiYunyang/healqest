@@ -1677,7 +1677,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
 
 
 def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
-    """A wrapper to read the phi maps.
+    """A wrapper to read the partial maps, as fits or npy files.
 
     Parameters
     ----------
@@ -1699,29 +1699,53 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
     h : bool, optional
     If True, return also the header. Default: False.
     """
-
-    from astropy.io import fits
-    with fits.open(fname) as hdul:
-        names = hdul[hdu].columns.names
-        try:
-            # for partial maps, we skip the index column
-            names.remove('PIXEL')
-        except ValueError:
-            pass
-        if isinstance(field, (str, int)):
-            field = [field]
-        fields = []
-        for c in field:
-            if isinstance(c, str):
-                if c in names:
-                    fields.append(names.index(c))
+    if isinstance(field, (str, int)):
+        field = [field]
+    if os.path.splitext(fname)[1] == '.npy':
+        """load npy partial maps with index stored in parent directories"""
+        idx_dir = fname
+        c = 3
+        while c > 0:
+            idx_dir = os.path.dirname(idx_dir)
+            try:
+                loaded = np.load(os.path.join(idx_dir, 'index.npz'))
+                break
+            except FileNotFoundError:
+                c -= 1
+        else:
+            raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
+        index = loaded['index']
+        m = np.load(fname, mmap_mode='r')
+        nside = loaded['nside']
+        if partial:
+            out = np.full((len(field), hp.nside2npix(nside)), hp.UNSEEN, dtype=dtype)
+        else:
+            out = np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
+        for idx, j in enumerate(field):
+            out[idx, index] = m[j]
+        return np.squeeze(out)
+    else:
+        """load fits partial maps"""
+        from astropy.io import fits
+        with fits.open(fname) as hdul:
+            names = hdul[hdu].columns.names
+            try:
+                # for partial maps, we skip the index column
+                names.remove('PIXEL')
+            except ValueError:
+                pass
+            fields = []
+            for c in field:
+                if isinstance(c, str):
+                    if c in names:
+                        fields.append(names.index(c))
+                    else:
+                        raise ValueError(f"Column {c} not found in the FITS file: {names}")
+                elif isinstance(c, int):
+                    fields.append(c)
                 else:
-                    raise ValueError(f"Column {c} not found in the FITS file: {names}")
-            elif isinstance(c, int):
-                fields.append(c)
-            else:
-                raise TypeError
-        return hp.read_map(fname, field=tuple(fields), dtype=dtype, hdu=hdu, h=h, partial=partial)
+                    raise TypeError
+            return hp.read_map(fname, field=tuple(fields), dtype=dtype, hdu=hdu, h=h, partial=partial)
 
 
 def generate_seed(seed, cmbid, bundle=None, extra_tag=None):

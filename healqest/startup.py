@@ -6,6 +6,8 @@ This module provides setups needed at startup, including
 """
 import argparse
 from functools import cached_property
+import filecmp
+import glob
 from importlib import resources
 import logging
 import os
@@ -164,6 +166,11 @@ class Config:
                     # add git hash for scripts, not the config file.
                     name, ext = os.path.splitext(os.path.basename(f))
                     out_fname = f"{name}.{get_git_version()}{ext}"
+
+                    existing_files = glob.glob(os.path.join(obj.path(obj.outdir), name) + '*' + ext)
+                    existing_files.sort(key=os.path.getmtime)
+                    if existing_files and filecmp.cmp(existing_files[-1], f):
+                        continue  # don't save a copy if the file isn't updated.
                 else:
                     out_fname = os.path.basename(f)
                 shutil.copy(f, obj.path(obj.outdir, out_fname))

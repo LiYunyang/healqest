@@ -306,9 +306,7 @@ class Config:
             return healqest_utils.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
             return healqest_utils.get_qes(mvtype)
-        elif mvtype in ['GMV', 'GMVTTEETE', 'GMVTBEB']:
-            return healqest_utils.get_qes(mvtype)
-        elif mvtype in ['qGMV', 'qGMVTTEETE', 'qGMVTBEB']:
+        elif mvtype in ['TBEB', 'qTBEB']:
             return healqest_utils.get_qes(mvtype)
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
@@ -489,8 +487,7 @@ class Config:
             suffix = 'npz'
         if not stack_type:
             if self.save_as_map:
-                # when saving as partial maps, save all QEs together as columns, so QE doesn't appear in fname.
-                fname = f'plm_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
+                fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
             else:
                 fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
         else:

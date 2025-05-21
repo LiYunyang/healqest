@@ -239,7 +239,7 @@ def reduce_lmax(alm, lmax=4000):
     Reduce the lmax of input alms (1d or 2d)
     """
     lmaxin = hp.Alm.getlmax(alm.shape[-1])
-    logger.info(f"Reducing lmax: lmax_in={lmaxin} -> lmax_out={lmax}")
+    logger.debug(f"Reducing lmax: lmax_in={lmaxin} -> lmax_out={lmax}")
     almout = np.zeros((*alm.shape[:-1], hp.Alm.getsize(lmax)), dtype=alm.dtype)
     oldi=0
     newi=0

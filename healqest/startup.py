@@ -664,12 +664,18 @@ class Maps:
 def parser():
     p = argparse.ArgumentParser()
 
+    def none_str(value):
+        return None if value.lower() == 'none' else value
+
+    def none_int(value):
+        return None if value.lower() == 'none' else int(value)
+
     p.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
-    p.add_argument('-f', '--field', default=None, type=str, help='SPT field')
+    p.add_argument('-f', '--field', default=None, type=none_str, help='SPT field')
 
     # bundle and n1 are mutually exclusive: N1-type calculations should be the same for all bundles.
     group = p.add_mutually_exclusive_group()
-    group.add_argument('-b', '--bundle', type=int, help='Bundle id')
+    group.add_argument('-b', '--bundle', type=none_int, help='Bundle id')
     group.add_argument('-n1', action='store_true', help='Do N1-type operations')
 
     p.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')

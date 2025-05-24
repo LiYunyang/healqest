@@ -840,7 +840,7 @@ class Qest(qest):
 
         q = weights.weights_plus(qe, self.cls, self.lmax, u=u)
 
-        logger.info('Running lensing reconstruction')
+        logger.info(f'Running lensing reconstruction: {qe}')
 
         retglm = 0
         retclm = 0

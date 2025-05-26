@@ -306,7 +306,7 @@ class Config:
             return healqest_utils.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
             return healqest_utils.get_qes(mvtype)
-        elif mvtype in ['TBEB', 'qTBEB']:
+        elif mvtype in ['TBEB', 'qTBEB', 'TEET']:
             return healqest_utils.get_qes(mvtype)
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
@@ -346,7 +346,7 @@ class Config:
             ell, *dat = np.loadtxt(self.path(self.file_noisefg))[:self.cinv_lmax + 1, :5].T
             out['nl_res'] = dat2dict(ell, dat)
         else:
-            out['nl_res'] = None
+            out['nl_res'] = {k: np.zeros_like(v) for k, v in out['cmb'].items()}
         return out
 
     @cached_property

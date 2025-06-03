@@ -292,7 +292,7 @@ class Config:
                 seed1, seed2 = 0, i
             else:
                 raise AssertionError
-        elif ktype in ['ab', 'ba']:
+        elif ktype in ['ab', 'ba', 'aa', 'bb']:
             cmbset1, cmbset2 = ktype
             seed1, seed2 = i, i
         else:
@@ -352,7 +352,11 @@ class Config:
     @cached_property
     def cmbcl(self):
         cambcls = str(resources.files('healqest') / 'camb' / self.file_cmb)
-        ell, sltt, slee, slbb, slte = utils.get_lensedcls(cambcls, lmax=self.lmax)
+        try:
+            ell, sltt, slee, slbb, slte = utils.get_lensedcls(cambcls, lmax=self.lmax)
+        except ValueError:
+            logger.warning(f"loading UNLENSED cls from {cambcls}")
+            ell, sltt, slee, slbb, slte = utils.get_unlensedcls(cambcls, lmax=self.lmax)[:5]
         return dict(tt=sltt, ee=slee, bb=slbb, te=slte)
 
     @cached_property
@@ -503,7 +507,7 @@ class Config:
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2)
         tag1 = f"{s1}{c1}_{s2}{c2}"
         if ktype2 is not None:
-            assert set(ktype1) == set(ktype2)
+            # assert set(ktype1) == set(ktype2)
             s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2)
             tag2 = f"{s1}{c1}_{s2}{c2}"
             fname = f'clkk_k{tag}_{tag1}_{tag2}.{ext}'

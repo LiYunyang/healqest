@@ -156,13 +156,18 @@ class Config:
         fname = args.config
         obj = cls.from_yaml(fname, field=args.field)
 
-        logger.info(f"cinv IO directory (`cinvdir`): {obj.cinvdir}")
-        logger.info(f"lensrec IO directory (`recdir`): {obj.recdir}")
+        # calling script
+        script = sys._getframe(1).f_globals['__file__']
+        logger.info(f"script: {os.path.basename(script)}")
         logger.info(f"main IO directory (`outdir`): {obj.outdir}")
+        if obj.cinvdir != obj.outdir:
+            logger.info(f"cinv IO directory (`cinvdir`): {obj.cinvdir}")
+        if obj.recdir != obj.outdir:
+            logger.info(f"lensrec IO directory (`recdir`): {obj.recdir}")
 
         if rank == 0:
             os.makedirs(obj.path(obj.outdir), exist_ok=True)
-            for i, f in enumerate([fname, sys._getframe(1).f_globals['__file__']]):
+            for i, f in enumerate([fname, script]):
                 if i > 0:
                     # add git hash for scripts, not the config file.
                     name, ext = os.path.splitext(os.path.basename(f))
@@ -441,6 +446,16 @@ class Config:
         """boundary mask used to save plm as partial maps"""
         return self.mask_qe !=0
 
+    @staticmethod
+    def bundle2str(bundle):
+        if bundle is None:
+            return ""
+        elif isinstance(bundle, int):
+            return f"bundle{bundle}"
+        else:
+            b1, b2 = bundle
+            return f"bundle{b1}.{b2}"
+
     # === setup paths ===
     def p_cinv(self, cinv_type:str, seed, cmbset, N1=False, bundle=None, suffix='fits'):
         """
@@ -480,11 +495,11 @@ class Config:
             Indicate if the target file is for N1 calculation (they live in a separate directory).
         stack_type: str
             Indicate the stacking type for mean-field calculations.
-        bundle: int=None
+        bundle: int, tuple of ints =None
         """
         subdir = 'lensrec_N1' if N1 else 'lensrec'
         if bundle is not None and not N1:  # MF and N1 don't do bundle
-            subdir = f"{subdir}/bundle{bundle}"
+            subdir = f"{subdir}/{self.bundle2str(bundle)}"
         if self.save_as_map:
             suffix = 'npy' if not stack_type else 'fits'
         else:
@@ -518,7 +533,7 @@ class Config:
 
     def p_resp(self, tag, bundle=None):
         """paths to response functions."""
-        bundle_tag = f'_bundle{bundle}' if bundle is not None else ''
+        bundle_tag = f'_{self.bundle2str(bundle)}' if bundle is not None else ''
         return self.path(self.outdir, f"respavg_{tag}{bundle_tag}.npz")
 
     @property

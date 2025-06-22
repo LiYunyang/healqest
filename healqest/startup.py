@@ -159,11 +159,11 @@ class Config:
         # calling script
         script = sys._getframe(1).f_globals['__file__']
         logger.info(f"script: {os.path.basename(script)}")
-        logger.info(f"main IO directory (`outdir`): {obj.outdir}")
+        logger.info(f"main IO directory (`outdir`): {obj.path(obj.outdir)}")
         if obj.cinvdir != obj.outdir:
-            logger.info(f"cinv IO directory (`cinvdir`): {obj.cinvdir}")
+            logger.info(f"cinv IO directory (`cinvdir`): {obj.path(obj.cinvdir)}")
         if obj.recdir != obj.outdir:
-            logger.info(f"lensrec IO directory (`recdir`): {obj.recdir}")
+            logger.info(f"lensrec IO directory (`recdir`): {obj.path(obj.recdir)}")
 
         if rank == 0:
             os.makedirs(obj.path(obj.outdir), exist_ok=True)
@@ -171,6 +171,7 @@ class Config:
                 if i > 0:
                     # add git hash for scripts, not the config file.
                     name, ext = os.path.splitext(os.path.basename(f))
+                    name = name.split('.')[0]  # strip suffix like "reclens.test.py"
                     out_fname = f"{name}.{get_git_version()}{ext}"
 
                     existing_files = glob.glob(os.path.join(obj.path(obj.outdir), name) + '*' + ext)

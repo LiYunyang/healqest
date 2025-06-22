@@ -179,7 +179,9 @@ class Config:
                     if existing_files and filecmp.cmp(existing_files[-1], f):
                         continue  # don't save a copy if the file isn't updated.
                 else:
-                    out_fname = os.path.basename(f)
+                    name, ext = os.path.splitext(os.path.basename(f))
+                    name = os.path.splitext(fname)[0]
+                    out_fname = f"{name}{ext}"
                 shutil.copy(f, obj.path(obj.outdir, out_fname))
         return obj
 

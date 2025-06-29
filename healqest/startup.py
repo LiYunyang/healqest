@@ -315,7 +315,7 @@ class Config:
             return healqest_utils.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
             return healqest_utils.get_qes(mvtype)
-        elif mvtype in ['TBEB', 'qTBEB', 'TEET']:
+        elif mvtype in ['TBEB', 'qTBEB', 'TEET','EBBE']:
             return healqest_utils.get_qes(mvtype)
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')

@@ -478,7 +478,7 @@ class library_sepTP(object):
 
         return tlm, elm, blm
 
-    def get_sim_tlm(self, seed, cmbid):
+    def get_sim_tlm(self, seed, cmbid, bundle):
         """
         Returns an inverse-filtered temperature simulation.
 
@@ -492,7 +492,7 @@ class library_sepTP(object):
                 soltn = self.soltn_lib.get_sim_tmliklm(seed, cmbid)
             else:
                 soltn = None
-            map_in = self.sim_lib.get_tmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
+            map_in = self.sim_lib.get_tmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
             tlm = self._apply_ivf_t(map_in, soltn=soltn)
         else:
             logger.info(f"Loading file: {tfname}")
@@ -584,7 +584,7 @@ class library_sepTP(object):
 
         return tlm, elm, blm
 
-    def get_sim_eblm(self, seed, cmbid):
+    def get_sim_eblm(self, seed, cmbid, bundle):
         """Returns an inverse-filtered E-polarization simulation.
 
         Parameters
@@ -604,7 +604,7 @@ class library_sepTP(object):
             # soltn = np.array([self.soltn_lib.get_sim_emliklm(idx),
             #                   self.soltn_lib.get_sim_bmliklm(idx),])
 
-        map_in = self.sim_lib.get_pmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
+        map_in = self.sim_lib.get_pmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
         elm, blm = self._apply_ivf_p(map_in, soltn=soltn)
 
         if self.lfilt is not None:
@@ -746,12 +746,12 @@ class library_jTP(object):
         self.add_noise = add_noise
         self.g = None
 
-    def _get_alms(self, a, seed, cmbid):
+    def _get_alms(self, a, seed, cmbid, bundle):
         assert a in ["t", "e", "b", "teb"]
 
         if True:
-            T = self.sim_lib.get_tmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
-            Q, U = self.sim_lib.get_pmap(seed, cmbid, add_noise=self.add_noise, g=self.g)
+            T = self.sim_lib.get_tmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
+            Q, U = self.sim_lib.get_pmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
             if self.soltn_lib is None:
                 soltn = None
             else:
@@ -772,8 +772,8 @@ class library_jTP(object):
 
         return {"teb": (tlm, elm, blm), "t": tlm, "e": elm, "b": blm}[a]
 
-    def get_sim_teblm(self, seed, cmbid):
-        return self._get_alms("teb", seed, cmbid)
+    def get_sim_teblm(self, seed, cmbid, bundle):
+        return self._get_alms("teb", seed, cmbid, bundle=bundle)
 
     def get_sim_eblm(self, idx):
         elm = self._get_alms("e", idx)

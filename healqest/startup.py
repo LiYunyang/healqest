@@ -14,6 +14,7 @@ import os
 import string
 import shutil
 import sys
+from itertools import combinations
 from typing import Union, get_type_hints
 import warnings
 
@@ -180,7 +181,7 @@ class Config:
                         continue  # don't save a copy if the file isn't updated.
                 else:
                     name, ext = os.path.splitext(os.path.basename(f))
-                    name = os.path.splitext(fname)[0]
+                    name = os.path.splitext(name)[0]
                     out_fname = f"{name}{ext}"
                 shutil.copy(f, obj.path(obj.outdir, out_fname))
         return obj
@@ -327,6 +328,11 @@ class Config:
             qes += self.mvtype2qe(mvtype)
         return list(set(qes))
 
+    @property
+    def bundle_pairs(self):
+        """return the m-choose-2 pairs of bundles"""
+        return list(combinations(np.arange(self.nbundle), 2)) if self.nbundle else None
+
     @cached_property
     def cinv_cls(self) -> dict:
         """the CMB and beam-convolved foreground cls for cinv
@@ -453,11 +459,16 @@ class Config:
     def bundle2str(bundle):
         if bundle is None:
             return ""
+        elif isinstance(bundle, str):
+            return f"bundle{bundle}"  # this is for cases like `X0`, `X` (cached maps for Mat's fast algorithm)
         elif isinstance(bundle, int):
             return f"bundle{bundle}"
         else:
             b1, b2 = bundle
-            return f"bundle{b1}.{b2}"
+            if b1 is None and b2 is None:
+                return ""
+            else:
+                return f"bundle{b1}.{b2}"
 
     # === setup paths ===
     def p_cinv(self, cinv_type:str, seed, cmbset, N1=False, bundle=None, suffix='fits'):
@@ -478,7 +489,7 @@ class Config:
         N1_tag = "_N1" if N1 else ""
         subdir = 'cinv'
         if bundle is not None:  # MF and N1 don't do bundle
-            subdir = f"{subdir}/bundle{bundle}"
+            subdir = f"{subdir}/{self.bundle2str(bundle)}"
         fname = f'cinv_{cinv_type}_{seed}_{cmbset}{N1_tag}.{suffix}'
         return self.path(self.cinvdir, subdir, fname)
 
@@ -562,13 +573,13 @@ class Config:
         bundle: int=None
         """
 
-        bundle_tag = f'_bundle{bundle}' if bundle is not None else ''
+        bundle_tag = f'_{Config.bundle2str(bundle)}' if bundle is not None else ''
         N1_tag = '_N1' if N1 else ''
         return os.path.join(f"kmap_{tag}{bundle_tag}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp")
 
 
 class Maps:
-    def __init__(self, nside, file_signal, lmax=None, file_noise=None, tf2d=None, config=None, N1=False, bundle=None):
+    def __init__(self, nside, file_signal_tmp, lmax=None, file_noise_tmp=None, tf2d=None, config=None, N1=False):
         """
         Maps class for loading maps as simulation/cinv input
 
@@ -576,57 +587,49 @@ class Maps:
         ----------
         nside: int
             Nside for the maps
-        file_signal: str
-            String or format string that expects {seed} and {cmbid} substitutions. This points to signal alm files.
-        file_noise: str=None
-            String or format string that expects {seed} and {cmbid} substitutions. This points to noise alm files.
+        file_signal_tmp: str
+            Format string that expects {seed}, {cmbid}, and ({bundle}) substitutions. This points to signal alm files.
+        file_noise_tmp: str=None
+            String or format string that expects {seed}, {cmbid}, and {bundle} substitutions. This points to noise
+            alm files.
         tf2d: np.array=None
             2d TF in alm space
         config: Config=None
         N1: bool=False
             Specify if these maps are for N1-type or std sims. This is only relevant for noise seed generations if
             `file_noise` is not given.
-        bundle: int=None
-            Specify if the bundle. This is only relevant for noise seed generations if `file_noise` is not given.
         """
         self.nside = nside
-        self.file_cmb = file_signal
-        self.file_noise = file_noise
+        self.file_cmb_tmp = file_signal_tmp
+        self.file_noise_tmp = file_noise_tmp
         self.tf2d = tf2d
         self.config = config
-        self.bundle = bundle
+
         self.N1 = N1
         self.lmax = lmax
 
     @classmethod
-    def from_config(cls, config: Config, N1=False, bundle=None):
+    def from_config(cls, config: Config, N1=False):
         if not N1:
             _file_signal, _file_noise = config.file_slm, config.file_nlm
         else:
             _file_signal, _file_noise = config.file_slm_N1, config.file_nlm_N1
 
-        # Apply additional bundle/field specifications with PartialFormatter
-        f = PartialFormatter()
-        file_signal = f.format(config.path(_file_signal), field=config.field, bundle=bundle)
-        if _file_noise is not None:
-            file_noise = f.format(config.path(_file_noise), field=config.field, bundle=bundle)
-        else:
-            file_noise = None
-
         return cls(
             nside=config.nside,
-            file_signal=file_signal,
-            file_noise=file_noise,
+            file_signal_tmp=_file_signal,
+            file_noise_tmp=_file_noise,
             config=config,
             tf2d=config.tfbl_2d,
-            N1=N1, bundle=bundle, lmax=config.cinv_lmax,
+            N1=N1, lmax=config.cinv_lmax,
         )
 
-    def _get_maps(self, pol, seed, cmbid, add_noise=True, apply_tf=False, g=None):
+    def _get_maps(self, pol, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
         """Load sim T or E/B signal and noise map separately and add"""
         assert pol in ['t', 'p', 'tp']
         hdu = dict(t=[1], p=[2, 3], tp=[1,2,3])[pol]
-        f_slm = self.file_cmb.format(seed=seed, cmbid=cmbid)
+        f_slm = self.config.path(self.file_cmb_tmp, seed=seed, cmbid=cmbid, bundle=bundle)
+
         logger.debug(f"loading signal sim from {f_slm}")
         alms = utils.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
 
@@ -643,19 +646,19 @@ class Maps:
             pass
 
         if add_noise:
-            if self.file_noise is not None:
-                f_nlm = self.file_noise.format(seed=seed, cmbid=cmbid)
+            if self.file_noise_tmp is not None:
+                f_nlm = self.config.path(self.file_noise_tmp, seed=seed, cmbid=cmbid, bundle=bundle)
                 logger.info(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=hdu)
                 alms += nlm
                 del nlm
             else:
                 if 't' in pol:
-                    alms[0] += utils.reduce_lmax(self.add_noise_t(seed=seed, cmbid=cmbid, bundle=self.bundle,
+                    alms[0] += utils.reduce_lmax(self.add_noise_t(seed=seed, cmbid=cmbid, bundle=bundle,
                                                                   N1=self.N1), lmax=self.lmax)
                 if 'p' in pol:
-                    alms[-2:] += utils.reduce_lmax(self.add_noise_p(seed=seed, cmbid=cmbid, bundle=self.bundle,
-                                                                   N1=self.N1), lmax=self.lmax)
+                    alms[-2:] += utils.reduce_lmax(self.add_noise_p(seed=seed, cmbid=cmbid, bundle=bundle,
+                                                                    N1=self.N1), lmax=self.lmax)
         else:
             pass
 
@@ -668,11 +671,13 @@ class Maps:
         else:
             return g.alm2map(alms)
 
-    def get_pmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
-        return self._get_maps('p', seed=seed, cmbid=cmbid, add_noise=add_noise, apply_tf=apply_tf, g=g)
+    def get_pmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
+        return self._get_maps('p', seed=seed, cmbid=cmbid, bundle=bundle, add_noise=add_noise,
+                              apply_tf=apply_tf, g=g)
 
-    def get_tmap(self, seed, cmbid, add_noise=True, apply_tf=False, g=None):
-        return self._get_maps('t', seed=seed, cmbid=cmbid, add_noise=add_noise, apply_tf=apply_tf, g=g)
+    def get_tmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
+        return self._get_maps('t', seed=seed, cmbid=cmbid, bundle=bundle, add_noise=add_noise,
+                              apply_tf=apply_tf, g=g)
 
     @staticmethod
     def add_noise_t(seed, cmbid, bundle, N1) -> np.ndarray:

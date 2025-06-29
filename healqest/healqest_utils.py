@@ -740,7 +740,7 @@ def get_qes(qeset):
         "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
         "GMVTTEETE": ["TT", "EE", "TE", "ET"],
         "GMVTBEB": ["TB", "BT", "EB", "BE"],
-        "MV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
+        "MV": ["TT", "EE", "EB", "TE", "TB", "BE", "ET", "BT"],
         "qMV": ["TT", "EE", "EB", "TE", "TB"],
         "MVnoTT": ["EE", "EB", "TE", "TB", "EB", "TE", "TB"],
         "qMVnoTT": ["EE", "EB", "TE", "TB"],

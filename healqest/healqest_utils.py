@@ -1673,19 +1673,19 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
 
 
-def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
+def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_hp=True):
     """A wrapper to read the partial maps, as fits or npy files.
 
     Parameters
     ----------
     fname: str
+        a path to '.npy' or '.fits' file.
     field: int/str or list of int/str
         column(s) to read from the FITS file.
-    dtype: str or np.dtype
+    dtype: str or type
     partial : bool, optional
-        If True, fits file is assumed to be a partial-sky file with explicit indexing,
-        if the indexing scheme cannot be determined from the header.
-        If False, implicit indexing is assumed.  Default: False.
+        If True, fits file is assumed to be a partial-sky file with explicit indexing, and the bad pixels are set
+        to hp.UNSEEN. If False, implicit indexing is assumed and bad pixels are set to 0  Default: False.
         A partial sky file is one in which OBJECT=PARTIAL and INDXSCHM=EXPLICIT,
         and the first column is then assumed to contain pixel indices.
         A full sky file is one in which OBJECT=FULLSKY and INDXSCHM=IMPLICIT.
@@ -1694,10 +1694,19 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
     hdu : int, optional
         the header number to look at (start at 0)
     h : bool, optional
-    If True, return also the header. Default: False.
+        If True, return also the header. Default: False.
+    use_hp: bool=True
+        If True, use the healpy read_map to read fits map, otherwise, use the faster IO code.
     """
     if isinstance(field, (str, int)):
         field = [field]
+
+    def _allocate(nside,):
+        if partial:
+            return np.full((len(field), hp.nside2npix(nside)), hp.UNSEEN, dtype=dtype)
+        else:
+            return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
+
     if os.path.splitext(fname)[1] == '.npy':
         """load npy partial maps with index stored in parent directories"""
         idx_dir = fname
@@ -1713,36 +1722,46 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False):
             raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
         index = loaded['index']
         m = np.load(fname, mmap_mode='r')
-        nside = loaded['nside']
-        if partial:
-            out = np.full((len(field), hp.nside2npix(nside)), hp.UNSEEN, dtype=dtype)
-        else:
-            out = np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
+
+        out = _allocate(nside=loaded['nside'])
+
         for idx, j in enumerate(field):
             out[idx, index] = m[j]
         return np.squeeze(out)
     else:
         """load fits partial maps"""
         from astropy.io import fits
-        with fits.open(fname) as hdul:
-            names = hdul[hdu].columns.names
+        with fits.open(fname, memmap=True) as hdul:
+            names = hdul[hdu].columns.names.copy()
             try:
                 # for partial maps, we skip the index column
                 names.remove('PIXEL')
             except ValueError:
                 pass
-            fields = []
+            fields_num = []
+            fields_name = []
             for c in field:
                 if isinstance(c, str):
                     if c in names:
-                        fields.append(names.index(c))
+                        fields_num.append(names.index(c))
+                        fields_name.append(c)
                     else:
                         raise ValueError(f"Column {c} not found in the FITS file: {names}")
                 elif isinstance(c, int):
-                    fields.append(c)
+                    fields_num.append(c)
+                    fields_name.append(names[c])
                 else:
                     raise TypeError
-            return hp.read_map(fname, field=tuple(fields), dtype=dtype, hdu=hdu, h=h, partial=partial)
+            if use_hp:
+                return hp.read_map(fname, field=tuple(fields_num), dtype=dtype, hdu=hdu, h=h, partial=partial)
+            else:
+                out = _allocate(nside=int(dict(hdul[hdu].header)['NSIDE']))
+                for j, name in enumerate(fields_name):
+                    out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]
+                if h:
+                    return np.squeeze(out), hdul[hdu].header
+                else:
+                    return np.squeeze(out)
 
 
 def generate_seed(seed, cmbid, bundle=None, extra_tag=None):

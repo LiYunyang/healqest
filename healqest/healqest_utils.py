@@ -11,9 +11,26 @@ import tempfile as tf
 from typing import Union
 import subprocess
 import hashlib
+import string
 logger = lg.getLogger(__name__)
 
 np.seterr(divide="ignore", invalid="ignore")
+
+
+class EvalFormatter(string.Formatter):
+    """
+    More capable string formatter that can evaluate expressions.
+
+    Usage:
+    >>> template_string = "original_{A}_and_lower_{B.lower()}"
+    >>> EvalFormatter().format(template_string, A='A', B='B')
+    """
+    def get_field(self, field_name, args, kwargs):
+        try:
+            val = eval(field_name, {}, kwargs)
+        except (NameError, AttributeError):
+            val = super().get_field(field_name, args, kwargs)
+        return val, field_name
 
 
 def recursive_merge(main_data, included_data):
@@ -1842,3 +1859,4 @@ def get_spice_kernel(nside, lmax, thetamax=None, apodizesigma=None, apodizetype=
         logger.info(f"cache saved to {path}")
         np.save(path, K)
         return K
+

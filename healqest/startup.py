@@ -101,6 +101,7 @@ class Config:
     file_nlm: str = None  # path to noise alm files for std/N0-type sims.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
     file_nlm_N1: str = None  # path to noise alm files for N1-type sims.
+    add_noise: bool=True  # whether to add noise in simulations (either through file_nlm or customized noise generation functions)
     nlev_t: float = None  # NET value, if not specified, nlev_t = nlev_p / sqrt(2)
     nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
@@ -241,6 +242,7 @@ class Config:
 
     @staticmethod
     def path(path, *args, **kwargs):
+
         """
         Formatting the dir/file name.
 
@@ -263,7 +265,8 @@ class Config:
         if args:
             out = os.path.join(out, *args)
         if kwargs:
-            out = out.format(**{k: v for k, v in kwargs.items() if v is not None})
+            out = healqest_utils.EvalFormatter().format(out, **{k: v for k, v in kwargs.items() if v is not None})
+            # out = out.format(**{k: v for k, v in kwargs.items() if v is not None})
         if os.path.exists(out):
             pass
         else:
@@ -624,11 +627,11 @@ class Maps:
             N1=N1, lmax=config.cinv_lmax,
         )
 
-    def _get_maps(self, pol, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
+    def _get_maps(self, pol, seed, cmbid, bundle, field=None, add_noise=True, apply_tf=False, g=None):
         """Load sim T or E/B signal and noise map separately and add"""
         assert pol in ['t', 'p', 'tp']
         hdu = dict(t=[1], p=[2, 3], tp=[1,2,3])[pol]
-        f_slm = self.config.path(self.file_cmb_tmp, seed=seed, cmbid=cmbid, bundle=bundle)
+        f_slm = self.config.path(self.file_cmb_tmp, seed=seed, cmbid=cmbid, bundle=bundle, field=field)
 
         logger.debug(f"loading signal sim from {f_slm}")
         alms = utils.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
@@ -647,7 +650,7 @@ class Maps:
 
         if add_noise:
             if self.file_noise_tmp is not None:
-                f_nlm = self.config.path(self.file_noise_tmp, seed=seed, cmbid=cmbid, bundle=bundle)
+                f_nlm = self.config.path(self.file_noise_tmp, seed=seed, cmbid=cmbid, bundle=bundle, field=field)
                 logger.info(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=hdu)
                 alms += nlm

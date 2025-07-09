@@ -98,6 +98,7 @@ class Config:
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
     file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.
+    file_slm0: str=None  # path to data file, if differs from file_slm
     file_nlm: str = None  # path to noise alm files for std/N0-type sims.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
     file_nlm_N1: str = None  # path to noise alm files for N1-type sims.
@@ -582,7 +583,7 @@ class Config:
 
 
 class Maps:
-    def __init__(self, nside, file_signal_tmp, lmax=None, file_noise_tmp=None, tf2d=None, config=None, N1=False):
+    def __init__(self, nside, file_data_tmp, file_signal_tmp, lmax=None, file_noise_tmp=None, tf2d=None, config=None, N1=False):
         """
         Maps class for loading maps as simulation/cinv input
 
@@ -603,11 +604,12 @@ class Maps:
             `file_noise` is not given.
         """
         self.nside = nside
+        self.file_data_tmp = file_data_tmp
         self.file_cmb_tmp = file_signal_tmp
         self.file_noise_tmp = file_noise_tmp
         self.tf2d = tf2d
         self.config = config
-
+        self.field = config.field
         self.N1 = N1
         self.lmax = lmax
 
@@ -615,11 +617,13 @@ class Maps:
     def from_config(cls, config: Config, N1=False):
         if not N1:
             _file_signal, _file_noise = config.file_slm, config.file_nlm
+            _file_signal0 = config.file_slm0 if config.file_slm0 else _file_signal
         else:
             _file_signal, _file_noise = config.file_slm_N1, config.file_nlm_N1
-
+            _file_signal0 = None
         return cls(
             nside=config.nside,
+            file_data_tmp=_file_signal0,
             file_signal_tmp=_file_signal,
             file_noise_tmp=_file_noise,
             config=config,
@@ -627,14 +631,22 @@ class Maps:
             N1=N1, lmax=config.cinv_lmax,
         )
 
-    def _get_maps(self, pol, seed, cmbid, bundle, field=None, add_noise=True, apply_tf=False, g=None):
+    def _get_maps(self, pol, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
         """Load sim T or E/B signal and noise map separately and add"""
         assert pol in ['t', 'p', 'tp']
         hdu = dict(t=[1], p=[2, 3], tp=[1,2,3])[pol]
-        f_slm = self.config.path(self.file_cmb_tmp, seed=seed, cmbid=cmbid, bundle=bundle, field=field)
-
+        if seed == 0:
+            add_noise = False
+            f_slm = self.config.path(self.file_data_tmp, cmbid=cmbid, bundle=bundle, field=self.field)
+        else:
+            f_slm = self.config.path(self.file_cmb_tmp, seed=seed, cmbid=cmbid, bundle=bundle, field=self.field)
         logger.debug(f"loading signal sim from {f_slm}")
-        alms = utils.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
+        try:
+            alms = utils.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
+        except (ValueError, IndexError):
+            logger.warning(f"reading map as alm failed, trying reading as maps.")
+            maps = healqest_utils.read_map(f_slm, field=np.array(hdu)-1, dtype=np.float64, use_hp=False)
+            alms = g.map2alm(maps, lmax=self.lmax, pol=True, check=False)
 
         if self.config.tf1d is not None:
             logger.warning(f"cutting lmin at {self.config.tf_lc}")
@@ -649,8 +661,10 @@ class Maps:
             pass
 
         if add_noise:
+
             if self.file_noise_tmp is not None:
-                f_nlm = self.config.path(self.file_noise_tmp, seed=seed, cmbid=cmbid, bundle=bundle, field=field)
+                f_nlm = self.config.path(self.file_noise_tmp, seed=seed, cmbid=cmbid, bundle=bundle,
+                                         field=self.field)
                 logger.info(f"Adding noise: {f_nlm}")
                 nlm = hp.read_alm(f_nlm, hdu=hdu)
                 alms += nlm

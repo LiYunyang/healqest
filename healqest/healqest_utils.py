@@ -1764,11 +1764,11 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
                         fields_name.append(c)
                     else:
                         raise ValueError(f"Column {c} not found in the FITS file: {names}")
-                elif isinstance(c, int):
+                elif isinstance(c, (int, np.integer)):
                     fields_num.append(c)
                     fields_name.append(names[c])
                 else:
-                    raise TypeError
+                    raise TypeError(f"field {c} ({type(c)})?")
             if use_hp:
                 return hp.read_map(fname, field=tuple(fields_num), dtype=dtype, hdu=hdu, h=h, partial=partial)
             else:

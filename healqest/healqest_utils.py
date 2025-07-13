@@ -1691,7 +1691,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
 
 
-def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_hp=True):
+def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_hp=False):
     """A wrapper to read the partial maps, as fits or npy files.
 
     Parameters
@@ -1699,7 +1699,7 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
     fname: str
         a path to '.npy' or '.fits' file.
     field: int/str or list of int/str
-        column(s) to read from the FITS file.
+        column(s) to read from the FITS file or column index for npy arrays. If now, grab all data columns.
     dtype: str or type
     partial : bool, optional
         If True, fits file is assumed to be a partial-sky file with explicit indexing, and the bad pixels are set
@@ -1713,7 +1713,7 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
         the header number to look at (start at 0)
     h : bool, optional
         If True, return also the header. Default: False.
-    use_hp: bool=True
+    use_hp: bool=False
         If True, use the healpy read_map to read fits map, otherwise, use the faster IO code.
     """
     if isinstance(field, (str, int)):
@@ -1740,7 +1740,8 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
             raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
         index = loaded['index']
         m = np.load(fname, mmap_mode='r')
-
+        if field is None:
+            field = np.arange(m.shape[0])
         out = _allocate(nside=loaded['nside'])
 
         for idx, j in enumerate(field):
@@ -1758,6 +1759,8 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
                 pass
             fields_num = []
             fields_name = []
+            if field is None:
+                field = names
             for c in field:
                 if isinstance(c, str):
                     if c in names:

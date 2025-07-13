@@ -4,6 +4,7 @@ This module provides setups needed at startup, including
     - initiating the global logger
     - modules for map io (might move maps sometime).
 """
+import abc
 import argparse
 from functools import cached_property
 import filecmp
@@ -592,8 +593,67 @@ class Config:
         return os.path.join(f"kmap_{tag}{bundle_tag}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp")
 
 
-class Maps:
-    def __init__(self, nside, file_data_tmp, file_signal_tmp, lmax=None, file_noise_tmp=None, tf2d=None, config=None, N1=False):
+class MapsBase(abc.ABC):
+    """Base class for maps, used for testing and as a base for Maps class."""
+    def __init__(self, nside, ):
+        pass
+
+    @abc.abstractmethod
+    def get_tmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
+        """Get T map for the given seed and cmbid.
+
+        Parameters
+        ----------
+        seed: int
+            Seed for the map. "0" is reserved for data maps.
+        cmbid: int
+            cmbid for the map. This is used to distinguish different CMB sets.
+        bundle: int
+            integer number from 0--`config.nbundle`-1.
+        add_noise: bool=False
+            For simulations, this controls whether to add noise to the map.
+        apply_tf: bool=False
+            Whether to apply transfer function to the signal map.
+        g: Geometry=None
+            If provided, use the ducc_sht.Geometry to speed up SHT operations (recommended).
+
+        Returns
+        -------
+        np.ndarray
+            T map for the given seed and cmbid, shape (npix, ).
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_pmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
+        """Get Q/U map for the given seed and cmbid.
+
+        Parameters
+        ----------
+        seed: int
+            Seed for the map. "0" is reserved for data maps.
+        cmbid: int
+            cmbid for the map. This is used to distinguish different CMB sets.
+        bundle: int
+            integer number from 0--`config.nbundle`-1.
+        add_noise: bool=False
+            For simulations, this controls whether to add noise to the map.
+        apply_tf: bool=False
+            Whether to apply transfer function to the signal map.
+        g: Geometry=None
+            If provided, use the ducc_sht.Geometry to speed up SHT operations (recommended).
+
+        Returns
+        -------
+        np.ndarray
+            Q/U map for the given seed and cmbid, shape (2, npix).
+        """
+        pass
+
+
+class Maps(MapsBase):
+    def __init__(self, nside, file_data_tmp, file_signal_tmp, lmax=None, file_noise_tmp=None, tf2d=None,
+                 config=None, N1=False):
         """
         Maps class for loading maps as simulation/cinv input
 

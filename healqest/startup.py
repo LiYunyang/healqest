@@ -172,6 +172,8 @@ class Config:
         # save a hard copy of the config file and current script
         obj.copy_scripts(fname, git_track=False)
         obj.copy_scripts(script, git_track=True)
+        if hasattr(args, 'module_path'):
+            obj.copy_scripts(args.module_path, git_track=True)
         return obj
 
     def copy_scripts(self, script_file, git_track=False):

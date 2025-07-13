@@ -168,25 +168,35 @@ class Config:
         if obj.recdir != obj.outdir:
             logger.info(f"lensrec IO directory (`recdir`): {obj.path(obj.recdir)}")
 
-        if rank == 0:
-            os.makedirs(obj.path(obj.outdir), exist_ok=True)
-            for i, f in enumerate([fname, script]):
-                if i > 0:
-                    # add git hash for scripts, not the config file.
-                    name, ext = os.path.splitext(os.path.basename(f))
-                    name = name.split('.')[0]  # strip suffix like "reclens.test.py"
-                    out_fname = f"{name}.{get_git_version()}{ext}"
-
-                    existing_files = glob.glob(os.path.join(obj.path(obj.outdir), name) + '*' + ext)
-                    existing_files.sort(key=os.path.getmtime)
-                    if existing_files and filecmp.cmp(existing_files[-1], f):
-                        continue  # don't save a copy if the file isn't updated.
-                else:
-                    name, ext = os.path.splitext(os.path.basename(f))
-                    name = os.path.splitext(name)[0]
-                    out_fname = f"{name}{ext}"
-                shutil.copy(f, obj.path(obj.outdir, out_fname))
+        # save a hard copy of the config file and current script
+        obj.copy_scripts(fname, git_track=False)
+        obj.copy_scripts(script, git_track=True)
         return obj
+
+    def copy_scripts(self, script_file, git_track=False):
+        """
+        Copy the script/config file to the output directory.
+
+        script_file: str
+            absolute path to the script file (e.g., __file__).
+        git_track: bool=False
+            If True, append the git commit hash to the copied script file name.
+        """
+        if rank == 0:
+            os.makedirs(self.path(self.outdir), exist_ok=True)
+            name, ext = os.path.splitext(os.path.basename(script_file))
+            name = name.split('.')[0]  # strip suffix like "reclens.test.py"
+            if git_track:
+                out_fname = f"{name}.{get_git_version()}{ext}"
+            else:
+                out_fname = f"{name}{ext}"
+            existing_files = glob.glob(os.path.join(self.path(self.outdir), name) + '*' + ext)
+            existing_files.sort(key=os.path.getmtime)
+            if existing_files and filecmp.cmp(existing_files[-1], script_file):
+                exist_file = os.path.basename(existing_files[-1])
+                logger.info(f"new script {out_fname} is identical to {exist_file}, skipping copy.")
+            else:
+                shutil.copy(script_file, self.path(self.outdir, out_fname))
 
     def _validate_config(self, config_dict: dict):
         expected_keys = get_type_hints(self)

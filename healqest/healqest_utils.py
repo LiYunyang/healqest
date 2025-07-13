@@ -3,6 +3,7 @@ import sys
 from astropy.io import fits
 import numpy as np
 import healpy as hp
+import importlib
 from pathlib import Path
 import yaml
 import logging as lg
@@ -1860,3 +1861,18 @@ def get_spice_kernel(nside, lmax, thetamax=None, apodizesigma=None, apodizetype=
         np.save(path, K)
         return K
 
+
+def load_module(module_name, file_path):
+    """load a module from a given file path.
+
+    Parameters
+    ----------
+    module_name: str
+        A designated name for the module (used only internally for namespace consistency).
+    file_path: str
+        Path to the Python file containing the module.
+    """
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module

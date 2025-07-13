@@ -1148,7 +1148,7 @@ class weights_plus:
 
         self.lmax = lmax
 
-        logger.info('Computing weights -- cmblensplus style')
+        logger.debug('Computing weights -- cmblensplus style')
 
         sl = {ii: cls[ii] for ii in cls.keys()}
 

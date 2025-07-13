@@ -1868,7 +1868,8 @@ def load_module(module_name, file_path):
     Parameters
     ----------
     module_name: str
-        A designated name for the module (used only internally for namespace consistency).
+        A designated name for the module (used only internally for namespace consistency). If the name starts with
+        "healqest.", then the logging level is set properly as the rest of the healqest modules.
     file_path: str
         Path to the Python file containing the module.
     """

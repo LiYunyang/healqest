@@ -1815,8 +1815,7 @@ def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
         if return_eps:
             hdu = fits.open(fname)[3]
             return hdu.data['eps']
-        maps = hp.read_map(fname, field=None)
-        maps[maps==hp.UNSEEN] = 0
+        maps = read_map(fname, field=None, partial=False, hdu=1)
         hdu = fits.open(fname)[2]
         fl = np.array([hdu.data[_.name] for _ in hdu.columns])
         return np.atleast_2d(maps), fl

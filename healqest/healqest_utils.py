@@ -1876,3 +1876,16 @@ def load_module(module_name, file_path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def get_diag_almbar(s, alms, config, cls, nlres):
+    ss = f"{s.lower()}{s.lower()}"
+    assert ss in ['tt', 'ee', 'bb']
+    lmax = getattr(config, 'lmaxT' if ss == 'tt' else 'lmaxP')
+    lmin = getattr(config, 'lminT' if ss == 'tt' else 'lminP')
+    fl = 1.0 / (cls[ss][:lmax + 1] + nlres[ss][:lmax + 1])
+    fl[:lmin] = 0
+    fl[lmax + 1:] = 0
+    alm = reduce_lmax(alms['teb'.index(s.lower())], config.lmax)
+    alm = hp.almxfl(alm, fl)
+    return alm, fl

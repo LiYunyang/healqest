@@ -546,10 +546,16 @@ class Config:
         out = self.path(self.recdir, subdir, fname)
         return out
 
-    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, ext='dat'):
+    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat'):
         """paths to power spectra files."""
-
-        subdir = 'cls/lensrec_N1' if N1 else 'cls'
+        subdir = 'cls'
+        if SAN0:
+            assert N1 is False
+            assert ktype2 == ktype1
+            assert seed2 == seed1
+            subdir = 'cls/san0'
+        elif N1:
+            subdir = 'cls/lensrec_N1'
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2)
         tag1 = f"{s1}{c1}_{s2}{c2}"
         if ktype2 is not None:

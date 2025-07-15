@@ -69,12 +69,16 @@ def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_Z
 
     lmax_fX      = len(fX)-1
     lmax_fY      = len(fY)-1
-    
+
+    tl1max = min([qeXY.lmax, qeZA.lmax, lmax_fX])
+    tl2max = min([qeXY.lmax, qeZA.lmax, lmax_fY])
+
+    glq = wignerd.gauss_legendre_quadrature((tl1max + tl2max + lmax) / 2 + 1)
     for i in range(0, qeXY.ntrm):
         for j in range(0, qeZA.ntrm):
             # l1 part
             tl1min = max(abs(qeXY.s[i][0]), abs(qeZA.s[j][i1_ZA]))
-            tl1max = min( [qeXY.lmax, qeZA.lmax, lmax_fX] )
+
             
             cl1 = np.zeros( tl1max+1, dtype=np.complex128 )
         
@@ -82,11 +86,10 @@ def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_Z
                 #print(tl1)
                 #print(qeXY.w[i][0][tl1])
                 cl1[tl1] = qeXY.w[i][0][tl1] * cfunc_ZA( qeZA.w[j][i1_ZA][tl1] ) * (2.*tl1+1.) * fX[tl1]
-                
     
             # l2 part
             tl2min = max(abs(qeXY.s[i][1]), abs(qeZA.s[j][i2_ZA]))
-            tl2max = min( [qeXY.lmax, qeZA.lmax, lmax_fY] )
+
 
             cl2 = np.zeros( tl2max+1, dtype=np.complex128 )
     
@@ -96,7 +99,6 @@ def qe_cov_fill_helper_fullsky( qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_Z
             
             #glq  = scipy.special.roots_legendre()
             # transform l1 and l2 parts to position space
-            glq = wignerd.gauss_legendre_quadrature((tl1max + tl2max + lmax) / 2 + 1)
             gp1 = glq.cf_from_cl( qeXY.s[i][0], -(-1)**(conj_ZA)*qeZA.s[j][i1_ZA], cl1 )
             gp2 = glq.cf_from_cl( qeXY.s[i][1], -(-1)**(conj_ZA)*qeZA.s[j][i2_ZA], cl2 )
 

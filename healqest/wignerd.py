@@ -23,9 +23,12 @@ class gauss_legendre_quadrature:
         lmax = len(cl)-1
 
         if np.iscomplexobj(cl):
-            #FIXME: convert to 1 cf_from_cl call for potential 2x speed boost.
-            return (cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, np.ascontiguousarray(cl.real)) +
-                    cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, np.ascontiguousarray(cl.imag)) * 1.j)
+            cl2d = np.concatenate([cl.real, cl.imag])
+            output = cwignerd.wignerd_cf_from_cl(s1, s2, 2, self.npoints, lmax, self.zvec, cl2d).reshape(2, -1)
+            return output[0] + 1j * output[1]
+            # FIXME: convert to 1 cf_from_cl call for potential 2x speed boost.
+            # return (cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, np.ascontiguousarray(cl.real)) +
+            #         cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, np.ascontiguousarray(cl.imag)) * 1.j)
         else:
             return (cwignerd.wignerd_cf_from_cl( s1, s2, 1, self.npoints, lmax, self.zvec, cl ))
 
@@ -36,8 +39,11 @@ class gauss_legendre_quadrature:
                                with degree < self.npoints - lmax sampled at x=self.zvec[j]. """
 
         if np.iscomplexobj(cf):
-            #FIXME: convert to 1 cl_from_cf call for potential 2x speed boost.
-            return (cwignerd.wignerd_cl_from_cf(s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, np.ascontiguousarray(cf.real)) +
-                    cwignerd.wignerd_cl_from_cf(s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, np.ascontiguousarray(cf.imag)) * 1.j)
+            cf2d = np.concatenate([cf.real, cf.imag])
+            output = cwignerd.wignerd_cl_from_cf(s1, s2, 2, self.npoints, lmax, self.zvec, self.wvec, cf2d).reshape(2, -1)
+            return output[0] + 1j*output[1]
+            # FIXME: convert to 1 cl_from_cf call for potential 2x speed boost.
+            # return (cwignerd.wignerd_cl_from_cf(s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, np.ascontiguousarray(cf.real)) +
+            #         cwignerd.wignerd_cl_from_cf(s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, np.ascontiguousarray(cf.imag)) * 1.j)
         else:
             return (cwignerd.wignerd_cl_from_cf( s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, cf ))

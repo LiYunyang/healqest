@@ -24,8 +24,8 @@ class gauss_legendre_quadrature:
 
         if np.iscomplexobj(cl):
             #FIXME: convert to 1 cf_from_cl call for potential 2x speed boost.
-            return (cwignerd.wignerd_cf_from_cl( s1, s2, 1, self.npoints, lmax, self.zvec, cl.real ) +
-                    cwignerd.wignerd_cf_from_cl( s1, s2, 1, self.npoints, lmax, self.zvec, cl.imag ) * 1.j) 
+            return (cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, np.ascontiguousarray(cl.real)) +
+                    cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, np.ascontiguousarray(cl.imag)) * 1.j)
         else:
             return (cwignerd.wignerd_cf_from_cl( s1, s2, 1, self.npoints, lmax, self.zvec, cl ))
 
@@ -37,7 +37,7 @@ class gauss_legendre_quadrature:
 
         if np.iscomplexobj(cf):
             #FIXME: convert to 1 cl_from_cf call for potential 2x speed boost.
-            return (cwignerd.wignerd_cl_from_cf( s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, cf.real ) +
-                    cwignerd.wignerd_cl_from_cf( s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, cf.imag ) * 1.j)
+            return (cwignerd.wignerd_cl_from_cf(s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, np.ascontiguousarray(cf.real)) +
+                    cwignerd.wignerd_cl_from_cf(s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, np.ascontiguousarray(cf.imag)) * 1.j)
         else:
             return (cwignerd.wignerd_cl_from_cf( s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, cf ))

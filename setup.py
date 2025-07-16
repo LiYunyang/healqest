@@ -1,9 +1,11 @@
 import os
+import numpy as np
 import distutils
 import subprocess
 from distutils.extension import Extension
 from setuptools.command.build_ext import build_ext
-from setuptools import setup, find_packages
+from setuptools import setup, find_packages, Extension
+from Cython.Build import cythonize
 
 
 def configuration(parent_package='',top_path=None):
@@ -36,6 +38,22 @@ class BuildF2Py(build_ext):
         )
 
 
+# Define the Cython extension
+wignerd_ext = Extension(
+    "healqest.cwignerd",
+    sources=[
+        "healqest/src/wignerd.c",
+        "healqest/cython/wignerd.pyx",
+    ],
+    include_dirs=[
+        os.path.join("healqest", "src"),  # For wignerd.h
+        np.get_include()  # For numpy
+    ],
+    extra_compile_args=["-O3", "-fopenmp"],
+    extra_link_args=["-fopenmp"],
+)
+
+
 if __name__ == "__main__":
     # the old setup, only compile the wigner code.
     # from numpy.distutils.core import setup
@@ -45,14 +63,17 @@ if __name__ == "__main__":
     # full-functioning setup, compile the wigner code and install the package.
     # tested for py>=3.12 or numpy>=1.23
     # using setuptools + meson based f2py.
+
     setup(
         name="healqest",
         version="0.1.0",
         packages=find_packages(),
         include_package_data=True,
-        package_data={"healqest": ["camb/*", "*.so"]},
-        cmdclass={"build_ext": BuildF2Py},
-        setup_requires=[
-            # "ducc0"
-        ],
+        ext_modules=cythonize(wignerd_ext, force=True,
+                              compiler_directives={'language_level': "3",
+                                                   'boundscheck': False,
+                                                   'wraparound': False,
+                                                   'initializedcheck': True}),  # compile wigerd.pyx through cython
+        # cmdclass={"build_ext": BuildF2Py}, # compile wigerd.pyf through f2py
+        package_data={"healqest": ["camb/*", "*.so", "src/*.h"]},
     )

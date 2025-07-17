@@ -7,3 +7,4 @@ pipeline/slurm*.out
 dist/
 build/
 local/
+healqest/cython/*.c

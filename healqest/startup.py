@@ -125,6 +125,7 @@ class Config:
 
     # === inputs ===
     sim_range: list[int]  # index range (inclusive) of the input alms files
+    sim_range_N1: list[int] = None  # index range (inclusive) of the input alms files for N1-type
     file_alm: Union[str, list]  # path or list of path to input alms files
     file_alm_N1: Union[str, list]  # path or list of path to input alms files for N1
     kappa_in: str  # fname of input kappa maps
@@ -253,6 +254,9 @@ class Config:
 
         # mvtypes has to be a list
         self.mvtypes = list(self.mvtypes)
+
+        if self.sim_range_N1 is None:
+            self.sim_range_N1 = self.sim_range
 
     @staticmethod
     def path(path, *args, **kwargs):

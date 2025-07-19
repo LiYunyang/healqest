@@ -94,7 +94,8 @@ def mask_hash(m, dtype=bool):
 
 def cli(cl):
     ret = np.zeros_like(cl)
-    ret[np.where(cl != 0.0)] = 1.0 / cl[np.where(cl != 0.0)]
+    good = np.logical_and(cl != 0, ~np.isnan(cl))
+    np.reciprocal(cl, out=ret, where=good)
     return ret
 
 
@@ -118,6 +119,10 @@ def invert_teb(teb, te=None):
         norm = cli(teb[0]*teb[1]-te**2)
         teb_out = np.array([teb[1]*norm, teb[0]*norm, bb])
         te_out = -te*norm
+        # special care for TE, as some "norm" might be 0 where the numerators are NaN
+        bad = np.logical_or(norm==0, np.isnan(norm))
+        teb_out[:2, bad] = 0
+        te_out[bad] = 0
         return teb_out, te_out
 
 

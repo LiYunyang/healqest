@@ -192,12 +192,12 @@ class PreOperatorDiag:
             nl = nl_res[ss][:lmax + 1]
 
             bl2 = getattr(tf, f"tf1d_{s}")[:lmax+1]**2
-            sl = cl+ nl * cinv_utils.cli(bl2)
+            sl = cl+ nl / bl2
             self.cls[s] = sl
             nlev = n_inv_filt.nlev_cl_t if s == 't' else n_inv_filt.nlev_cl_p
-            _filt = cinv_utils.cli(sl) + 1/nlev * bl2
+            _filt = 1/sl + 1/nlev * bl2
 
-            _fl = cinv_utils.cli(sl + nlev * cinv_utils.cli(bl2))
+            _fl = cinv_utils.cli(sl + nlev / bl2)  # direct bl2 division is better than NESTED cli!
             _fl[:2] = 0
             filt.append(_filt)
             fl.append(_fl)
@@ -262,17 +262,17 @@ class PreOperatorDiagJoint(PreOperatorDiag):
             cl = s_cls[ss][:lmax + 1]
             nl = nl_res[ss][:lmax + 1]
             bl2 = getattr(tf, f"tf1d_{s}")[:lmax + 1] ** 2
-            s_mat[i] = cl + nl * cinv_utils.cli(bl2)
+            s_mat[i] = cl + nl / bl2
 
             nlev = n_inv_filt.nlev_cl_t if s == 't' else n_inv_filt.nlev_cl_p
             n_mat[i] = 1 / nlev * bl2
 
-            _fl = cinv_utils.cli(s_mat[i] + nlev * cinv_utils.cli(bl2))
+            _fl = cinv_utils.cli(s_mat[i] + nlev / bl2)
             _fl[:2] = 0
             fl.append(_fl)
 
         blte2 = (getattr(tf, f"tf1d_t") * getattr(tf, f"tf1d_e"))[:lmax + 1]
-        _te = s_cls['te'][:lmax + 1] + nl_res['te'][:lmax + 1] * cinv_utils.cli(blte2)
+        _te = s_cls['te'][:lmax + 1] + nl_res['te'][:lmax + 1] / blte2
         sinv, sinv_te = cinv_utils.invert_teb(np.array(s_mat), te=_te)
         self.filt, self.filt_te = cinv_utils.invert_teb(sinv + n_mat, te=sinv_te)
         self.fl = np.array(fl)
@@ -301,7 +301,7 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
             cltt = s_cls[ss][:self.lmax + 1]
             cltt_2d = hp_utils.cl2almformat(cltt)
             tf1d = getattr(self.tf, f"tf1d_{s}")
-            nltt = nl_res[ss][:self.lmax + 1]*cinv_utils.cli(tf1d)**2
+            nltt = nl_res[ss][:self.lmax + 1]/tf1d**2
             nltt_2d = hp_utils.cl2almformat(nltt)
             slinv.append(cinv_utils.cli(cltt_2d + nltt_2d))
         self.slinv = np.array(slinv)
@@ -332,10 +332,10 @@ class SkyInverseFilterJoint(SkyInverseFilter):
             cl = s_cls[ss][:self.lmax + 1]
             nl = nl_res[ss][:self.lmax + 1]
             bl2 = getattr(tf, f"tf1d_{s}")[:self.lmax + 1] ** 2
-            slinv[i] = hp_utils.cl2almformat(cl + nl * cinv_utils.cli(bl2))
+            slinv[i] = hp_utils.cl2almformat(cl + nl / bl2)
 
         blte2 = (getattr(tf, f"tf1d_t") * getattr(tf, f"tf1d_e"))[:self.lmax + 1]
-        _te = s_cls['te'][:self.lmax + 1] + nl_res['te'][:self.lmax + 1] * cinv_utils.cli(blte2)
+        _te = s_cls['te'][:self.lmax + 1] + nl_res['te'][:self.lmax + 1] / blte2
         _te = hp_utils.cl2almformat(_te)
         self.slinv, self.slinv_te = cinv_utils.invert_teb(slinv, te=_te)
 

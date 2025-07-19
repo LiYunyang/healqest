@@ -505,6 +505,7 @@ class Config:
             Single letter strings. Accepted values are 'a', 'b'
         N1: bool=False
         bundle: int=None
+        suffix: str='fits'
         """
 
         N1_tag = "_N1" if N1 else ""
@@ -550,7 +551,7 @@ class Config:
         out = self.path(self.recdir, subdir, fname)
         return out
 
-    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat'):
+    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False):
         """paths to power spectra files."""
         subdir = 'cls'
         if SAN0:
@@ -560,6 +561,8 @@ class Config:
             subdir = 'cls/san0'
         elif N1:
             subdir = 'cls/lensrec_N1'
+        if coadd:
+            subdir = subdir.replace('cls', 'cls_coadd')
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2)
         tag1 = f"{s1}{c1}_{s2}{c2}"
         if ktype2 is not None:

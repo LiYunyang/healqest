@@ -406,7 +406,7 @@ class Config:
             bl = np.loadtxt(beam_file)[:self.cinv_lmax+1, 2]  # TODO: default to 150 GHz for the test file
         if self.tf1d is not None:
             bl *= self.tf1d
-        return dict(t=bl, e=bl, b=bl)
+        return dict(t=bl.copy(), e=bl.copy(), b=bl.copy())
 
     @cached_property
     def tfbl_2d(self) -> Union[dict, None]:

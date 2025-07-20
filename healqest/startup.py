@@ -24,7 +24,7 @@ import healpy as hp
 import yaml
 from git import Repo, InvalidGitRepositoryError
 
-from healqest import utils, healqest_utils
+from healqest import utils, healqest_utils as hq
 from healqest.ducc_sht import Geometry
 
 try:
@@ -283,7 +283,7 @@ class Config:
         if args:
             out = os.path.join(out, *args)
         if kwargs:
-            out = healqest_utils.EvalFormatter().format(out, **{k: v for k, v in kwargs.items() if v is not None})
+            out = hq.EvalFormatter().format(out, **{k: v for k, v in kwargs.items() if v is not None})
             # out = out.format(**{k: v for k, v in kwargs.items() if v is not None})
         if os.path.exists(out):
             pass
@@ -333,11 +333,11 @@ class Config:
     def mvtype2qe(mvtype):
         # SQE type MVs
         if mvtype in ['MV', 'qMV', 'PP', 'qPP', 'TTEETE', 'qTTEETE']:
-            return healqest_utils.get_qes(mvtype)
+            return hq.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
-            return healqest_utils.get_qes(mvtype)
+            return hq.get_qes(mvtype)
         elif mvtype in ['TBEB', 'qTBEB', 'TEET','EBBE']:
-            return healqest_utils.get_qes(mvtype)
+            return hq.get_qes(mvtype)
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
 
@@ -415,6 +415,8 @@ class Config:
                 alm_mask = np.ones_like(emm, dtype=float)
                 alm_mask[ell<l] = 0
                 alm_mask[emm<m] = 0
+                _, _, k = hq.dec2tf2d(0, *self.dec_range)
+                alm_mask[emm>k*ell] = 0
                 return dict(t=alm_mask.copy(), p=alm_mask.copy())
             else:
                 raise NotImplementedError
@@ -427,7 +429,8 @@ class Config:
         assert s in ['t', 'p']
         if self.tf2d:
             logger.info("computing 1d TFxbl from 2d TFxbl")
-            out = np.sqrt(hp.alm2cl(self.tfbl_2d(s)))
+            _, _, k = hq.dec2tf2d(0, *self.dec_range)
+            out = np.sqrt(hp.alm2cl(self.tfbl_2d(s))/k)
         else:
             out = self.bl[s].copy()
             if self.tf1d is not None:
@@ -752,10 +755,10 @@ class Maps(MapsBase):
             f_slm = self.config.path(self.file_cmb_tmp, seed=seed, cmbid=cmbid, bundle=bundle, field=self.field)
         logger.debug(f"loading signal sim from {f_slm}")
         try:
-            alms = utils.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
+            alms = hq.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
         except (ValueError, IndexError):
             logger.warning(f"reading map as alm failed, trying reading as maps.")
-            maps = healqest_utils.read_map(f_slm, field=np.array(hdu)-1, dtype=np.float64, use_hp=False)
+            maps = hq.read_map(f_slm, field=np.array(hdu)-1, dtype=np.float64, use_hp=False)
             alms = g.map2alm(maps, lmax=self.lmax, pol=True, check=False)
 
         if self.config.tf1d is not None:
@@ -781,10 +784,10 @@ class Maps(MapsBase):
                 del nlm
             else:
                 if 't' in pol:
-                    alms[0] += utils.reduce_lmax(self.add_noise_t(seed=seed, cmbid=cmbid, bundle=bundle,
+                    alms[0] += hq.reduce_lmax(self.add_noise_t(seed=seed, cmbid=cmbid, bundle=bundle,
                                                                   N1=self.N1), lmax=self.lmax)
                 if 'p' in pol:
-                    alms[-2:] += utils.reduce_lmax(self.add_noise_p(seed=seed, cmbid=cmbid, bundle=bundle,
+                    alms[-2:] += hq.reduce_lmax(self.add_noise_p(seed=seed, cmbid=cmbid, bundle=bundle,
                                                                     N1=self.N1), lmax=self.lmax)
         else:
             pass

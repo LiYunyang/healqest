@@ -1891,3 +1891,35 @@ def get_diag_almbar(s, alms, config, cls, nlres):
     alm = reduce_lmax(alms['teb'.index(s.lower())], config.lmax)
     alm = hp.almxfl(alm, fl)
     return alm, fl
+
+
+def dec2tf2d(lx, dec1, dec2):
+    """Compute the tf2d (alm) boundary parameters given the SPT field.
+
+    For a given lx cut in a field between dec1 and dec2, the accessible alm space
+    is defined by a trapezoid with following exclusions: l < lx; m < m1, and m > k*l.
+    This function computes m1 and k (also returns lx) for the trapezoid.
+
+    Parameters
+    ----------
+    lx: int
+        The cut-off multipole of the time-domian filter
+    dec1: float
+        The "bottom" declination range (higher absolute value)
+    dec2: float
+        The "top" declination range (higher absolute value)
+
+    Returns
+    -------
+    lx: int
+        l below lx should be 0
+    m1: int
+        m below m should be 0
+    k: float
+        m above k* l should be 0. This value only depend on `dec2` and is useful in computing the effective transfer
+        function given some m-cut: tf1d = np.sqrt(hp.alm2cl(tf2d)/k)
+    """
+    assert 0>dec2>dec1, "dec1 and dec2 should be negative for SPT fields!"
+    m1 = int(np.floor(lx * np.sin(np.pi / 2 - np.deg2rad(-dec1))))
+    k = np.sin(np.pi / 2 - np.deg2rad(-dec2))
+    return lx, m1, k

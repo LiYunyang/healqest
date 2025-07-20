@@ -102,7 +102,7 @@ class TFObj:
             return ['t']
         elif self.npol == 2:
             return ['e', 'b']
-        if self.npol == 3:
+        elif self.npol == 3:
             return ['t', 'e', 'b']
 
     def apply_tf(self, alms):

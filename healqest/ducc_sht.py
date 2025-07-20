@@ -185,7 +185,7 @@ class Geometry:
         return maps
 
     def map2alm(self, maps, lmax=None, mmax=None, iter=0, pol=True, use_weights=False, use_pixel_weights=False,
-                nthreads=None,  rtol=1e-5, check=True, alms=None, **kwargs):
+                nthreads=None,  rtol=1e-5, check=True, alms=None, margin=0, **kwargs):
         """
         Computes the alm of a Healpix map. The input maps must all be in ring ordering.
 
@@ -220,7 +220,11 @@ class Geometry:
             The output alms buffer.
         """
         assert hp.get_nside(maps) == self.nside
-
+        if margin:
+            lmax0 = lmax
+            lmax = lmax0 + margin
+        else:
+            lmax0 = None
         maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
         nmaps = maps.shape[0]
         dtype = maps.dtype
@@ -246,7 +250,11 @@ class Geometry:
                 func(map=maps[:1], spin=0, alm=alms[:1], **kw, **kwargs)
         if not iter:
             alms *= self.pixelarea
-        return np.squeeze(alms)
+
+        out = np.squeeze(alms)
+        if lmax0 is not None:
+            out = reduce_lmax(out, lmax=lmax0)
+        return out
 
     def alm2map(self, alms, lmax=None, mmax=None, pol=True, nthreads=None, maps=None, **kwargs):
         """
@@ -447,3 +455,22 @@ def get_dec_range(mask, dec=None):
     dec1 = int(np.floor(np.min(dec[mask > 0])))
     dec2 = int(np.ceil(np.max(dec[mask > 0])))
     return dec1, dec2
+
+
+def reduce_lmax(alm, lmax=4000):
+    """
+    Reduce the lmax of input alm
+    """
+    lmaxin = hp.Alm.getlmax(alm.shape[-1])
+    logger.debug(f"Reducing lmax: lmax_in={lmaxin} -> lmax_out={lmax}")
+    almout = np.zeros((*alm.shape[:-1], hp.Alm.getsize(lmax)), dtype=alm.dtype)
+    oldi = 0
+    newi = 0
+    dl = lmaxin - lmax
+    for i in range(0, lmax + 1):
+        oldf = oldi + lmaxin + 1 - i
+        newf = newi + lmax + 1 - i
+        almout[..., newi:newf] = alm[..., oldi:oldf - dl]
+        oldi = oldf
+        newi = newf
+    return almout

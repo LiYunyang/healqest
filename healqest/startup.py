@@ -95,7 +95,7 @@ class Config:
     cinv_lmax: int  # maximum l for cinv
     cinv_lmin: int  # minimum l for cinv
     file_bl: str  # path to beam file.
-    file_tf2d: str=None  # path to tf2d file
+    file_tf2d: Union[str, list]=None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
     file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.
@@ -395,28 +395,53 @@ class Config:
         return dict(tt=sltt, ee=slee, bb=slbb, te=slte)
 
     @cached_property
-    def tfbl_1d(self) -> dict:
-        """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`"""
+    def bl(self):
         if self.file_bl is None:
             logger.error("beam file not given! assuming unity bl for now.")
             bl = np.ones(self.cinv_lmax+1)
         else:
             beam_file = self.path(self.file_bl)
             logger.warning("temporarily loading the 150 GHz beam file")
-            bl = np.loadtxt(beam_file)[:self.cinv_lmax+1, 2]  # TODO: default to 150 GHz for the test file
-        if self.tf1d is not None:
-            bl *= self.tf1d
-        return dict(t=bl.copy(), e=bl.copy(), b=bl.copy())
+            bl = np.loadtxt(beam_file)[:self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
+        return dict(t=bl.copy(), p=bl.copy())
 
     @cached_property
-    def tfbl_2d(self) -> Union[dict, None]:
+    def tf2d(self) -> Union[dict, None]:
         """Return a 2d TFxbl functions for T/E/B"""
         if self.file_tf2d:
-            raise NotImplementedError
-            return np.load(self.file_tf2d)  # TODO: actually implement this when needed
+            if isinstance(self.file_tf2d, (list, tuple)):
+                l, m = self.file_tf2d
+                ell, emm = hp.Alm.getlm(lmax=self.cinv_lmax)
+                alm_mask = np.ones_like(emm, dtype=float)
+                alm_mask[ell<l] = 0
+                alm_mask[emm<m] = 0
+                return dict(t=alm_mask.copy(), p=alm_mask.copy())
+            else:
+                raise NotImplementedError
         else:
             logger.warning("No 2d TF given.")
             return None
+
+    def tfbl_1d(self, s) -> np.ndarray:
+        """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`"""
+        assert s in ['t', 'p']
+        if self.tf2d:
+            logger.info("computing 1d TFxbl from 2d TFxbl")
+            out = np.sqrt(hp.alm2cl(self.tfbl_2d(s)))
+        else:
+            out = self.bl[s].copy()
+            if self.tf1d is not None:
+                logger.info("computing 1d TFxbl from 1d bl and 1d tf")
+                out *= self.tf1d
+        return out
+
+    def tfbl_2d(self, s) -> Union[np.ndarray, None]:
+        """Return a 2d TFxbl functions for T/E/B"""
+        assert s in ['t', 'p']
+        if self.tf2d is None:
+            return None
+        else:
+            return hp.almxfl(self.tf2d[s], self.bl[s])
 
     @cached_property
     def tf1d(self) -> np.ndarray | None:
@@ -712,7 +737,7 @@ class Maps(MapsBase):
             file_signal_tmp=_file_signal,
             file_noise_tmp=_file_noise,
             config=config,
-            tf2d=config.tfbl_2d,
+            # tf2d=config.tfbl_2d,
             N1=N1, lmax=config.cinv_lmax,
         )
 

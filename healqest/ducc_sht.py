@@ -1,4 +1,5 @@
 """This module provides wrapper of the ducc.sht."""
+from functools import cached_property
 import os
 import warnings
 import numpy as np
@@ -13,6 +14,20 @@ if version.parse(ducc0.__version__)<version.parse('0.36.0'):
 
 import logging
 logger = logging.getLogger(__name__)
+
+# FIXME: ideally this should not depend on yasolt.
+from ducc0.sht import map2leg, leg2map, synthesis_general, adjoint_synthesis_general
+# from yasolt.pixelization import Pixelization
+
+rtype = {np.dtype(np.complex128):np.dtype(np.float64), np.dtype(np.complex64):np.dtype(np.float32)}
+ctype = {rtype[ctyp]:ctyp for ctyp in rtype}
+
+
+def get_nthreads(nthreads=None):
+    if nthreads is not None and nthreads>0:
+        return nthreads
+    else:
+        return int(os.getenv("OMP_NUM_THREADS", os.cpu_count()))
 
 
 def _load_pixel_weights(nside):
@@ -91,6 +106,7 @@ class Geometry:
 
         n1, n2 = 0, hp.nside2npix(nside)
         if dec_range is not None:
+            self.dec_range = dec_range
             t1 = np.pi / 2 - np.deg2rad(max(dec_range))
             t2 = np.pi / 2 - np.deg2rad(min(dec_range))
             n1 = max(n1, hp.ang2pix(nside, t1, 0) - 1)
@@ -115,11 +131,10 @@ class Geometry:
         self.phi0 = np.full(_theta.shape, np.inf, dtype=np.float64)
         np.minimum.at(self.phi0, theta_idx, phi)
 
-        # hardware acceleration for int type but not unsigned int convert to uint64 later
+        # hardware acceleration for int type but not unsigned int; convert to uint64 later
         self.ofs = np.full(_theta.shape, np.iinfo(np.int64).max, dtype=np.int64)
         np.minimum.at(self.ofs, theta_idx, ipix)
         self.ofs = np.asarray(self.ofs, np.uint64)
-
         # self.weight = np.full(len(_theta), 4 * np.pi / hp.nside2npix(nside), dtype=np.float64)
         self.pixelarea = hp.nside2pixarea(nside)
 
@@ -129,6 +144,18 @@ class Geometry:
 
         self._ring_weights = None
         self._pixel_weights = None
+
+    def restrict(self):
+        """
+        Create a Geometry instance from nside and optional declination range.
+        """
+        obj = self.__class__(self.nside, self.dec_range)
+        obj.ofs -= self.ofs[0]
+        return obj
+
+    @property
+    def nph(self):
+        return self.nphi
 
     @property
     def ring_weights(self):
@@ -142,9 +169,12 @@ class Geometry:
             self._pixel_weights = unfold_weights(self.nside, ring=False)
         return self._pixel_weights
 
+    def npix(self):
+        """Number of pixels"""
+        return int(np.sum(self.nphi))
+
     def get_kwargs(self, lmax, mmax, nthreads, **kwargs):
-        if nthreads is None:
-            nthreads = int(os.getenv("OMP_NUM_THREADS", os.cpu_count()))
+        nthreads = get_nthreads(nthreads)
         lmax = self._lmax if lmax is None else lmax
         mmax = lmax if mmax is None else mmax
         out = dict(lmax=lmax, mmax=mmax, nphi=self.nphi, phi0=self.phi0, nthreads=nthreads, ringstart=self.ofs,
@@ -227,13 +257,12 @@ class Geometry:
             lmax0 = None
         maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
         nmaps = maps.shape[0]
-        dtype = maps.dtype
-        assert dtype in [np.float32, np.float64]
-
-        ctype = np.complex64 if dtype == np.float32 else np.complex128
+        # dtype = maps.dtype
+        # assert dtype in [np.float32, np.float64]
+        # ctype = np.complex64 if dtype == np.float32 else np.complex128
         kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
         if alms is None:
-            alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype)
+            alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype])
         else:
             if alms.ndim == 1:
                 alms = alms[np.newaxis, :]
@@ -286,11 +315,11 @@ class Geometry:
         alms = np.atleast_2d(alms)
         nmaps = alms.shape[0]
 
-        ctype = alms.dtype
-        assert ctype in [np.complex64, np.complex128]
-        dtype = np.float64 if ctype == np.complex128 else np.float32
+        # ctype = alms.dtype
+        # assert ctype in [np.complex64, np.complex128]
+        # dtype = np.float64 if ctype == np.complex128 else np.float32
         if maps is None:
-            maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=dtype)
+            maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=rtype[alms.dtype])
         else:
             if maps.ndim == 1:
                 maps = maps[np.newaxis, :]
@@ -320,13 +349,12 @@ class Geometry:
             maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
             nmaps = maps.shape[0]
             assert nmaps == 2, "spin function only accepts 2 maps"
-            dtype = maps.dtype
-            assert dtype in [np.float32, np.float64]
-
-            ctype = np.complex64 if dtype == np.float32 else np.complex128
+            # dtype = maps.dtype
+            # assert dtype in [np.float32, np.float64]
+            # ctype = np.complex64 if dtype == np.float32 else np.complex128
             kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
             func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
-            alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype)
+            alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype])
             func(map=maps, spin=np.abs(spin), alm=alms, **kw, **kwargs)
             if not iter:
                 alms *= self.pixelarea
@@ -343,11 +371,11 @@ class Geometry:
             alms = np.atleast_2d(alms)
             nmaps = alms.shape[0]
             assert nmaps == 2, "spin function only accepts 2 maps"
-            ctype = alms.dtype
-            assert ctype in [np.complex64, np.complex128]
-            dtype = np.float64 if ctype == np.complex128 else np.float32
+            # ctype = alms.dtype
+            # assert ctype in [np.complex64, np.complex128]
+            # dtype = np.float64 if ctype == np.complex128 else np.float32
             if maps is None:
-                maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=dtype)
+                maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=rtype[alms.dtype])
             else:
                 assert maps.shape[0] == 2
             func = ducc0.sht.synthesis
@@ -369,6 +397,126 @@ class Geometry:
         if check:
             maps_out[masks] = hp.UNSEEN
         return maps_out
+
+
+class Pixelization(object):
+    def __init__(self, loc: np.ndarray = None, geom=None, epsilon=1e-7):
+        """Attempt at a unified interface for pixelizations and filters
+
+        Parameters
+        ----------
+        loc: array of locations (npix x 2) in (tht=colatitude, phi=longitude) in radians
+        geom: isolatitude pixelization Geom instance
+        epsilon: (optional, only relevant in the 'loc' case) Accuracy of the *_general* SHTs
+
+        Only one of the two can be set
+        """
+        assert loc or geom
+        assert geom is None or loc is None, "only one of loc or geom can be set"
+
+        if loc is not None:
+            thtmin = np.min(loc[:, 0])
+            thtmax = np.max(loc[:, 0])
+            npix = loc.shape[0]
+        else:
+            thtmin = np.min(geom.theta)
+            thtmax = np.max(geom.theta)
+            npix = geom.npix()
+
+        self.loc = loc
+        self.geom = geom
+        self.thtrange = (thtmin, thtmax)
+        self.epsilon = epsilon
+        self._npix = npix
+
+    def npix(self):
+        return self._npix
+
+    def synthesis(self, alm: np.ndarray, spin: int, lmax: int, mmax: int, nthreads: int, m: np.ndarray = None,
+                  **kwargs):
+        """Produces a map or a pair of maps from alm array
+
+        Parameters
+        ----------
+        alm: shape (ncomp, alm_size) where ncomp is 1 or 2 (gradient and curl components)
+        spin: int
+            spin of the field
+        lmax: int
+            maximum l of the alm layout
+        mmax: maximum m of the alm layout
+        nthreads: number of threads to use
+        m: map array of shape (1 + (spin > 0), npix) (initialized if not provided)
+
+        Returns
+        -------
+        m
+        """
+        if m is None:
+            m = np.empty((1 if spin == 0 else 2, self.npix()), dtype=rtype[alm.dtype])
+        if self.loc is not None:
+            return self._synthesis_loc(alm, spin, lmax, mmax, nthreads, m, **kwargs)
+        return self._synthesis_geom(alm, spin, lmax, mmax, nthreads, m, **kwargs)
+
+    def adjoint_synthesis(self, alm: np.ndarray, spin: int, lmax: int, mmax: int, nthreads: int, m: np.ndarray,
+                          **kwargs):
+        """Adjoint (not inverse) operation of alm to map (synthesis)
+
+        Parameters
+        ----------
+        alm: shape (ncomp, alm_size) where ncomp is 1 or 2 (gradient and curl components)
+        spin: spin of the field
+        lmax: maximum l of the alm layout
+        mmax: maximum m of the alm layout
+        nthreads: number of threads to use
+        m: map array of shape (1 + (spin > 0), npix)
+
+        Returns
+        -------
+        alm
+        """
+        if self.loc is not None:
+            return self._adjoint_synthesis_loc(alm, spin, lmax, mmax, nthreads, m, **kwargs)
+        return self._adjoint_synthesis_geom(alm, spin, lmax, mmax, nthreads, m, **kwargs)
+
+    def _synthesis_geom(self, alm: np.ndarray, spin: int, lmax: int, mmax: int, nthreads: int, m: np.ndarray,
+                        **kwargs):
+        # relevant kwargs here: mode.
+        assert self.geom is not None, 'no isolatitude geometry set'
+        return self.geom.synthesis(alm, spin, lmax, mmax, nthreads, map=m, **kwargs)
+
+    def _adjoint_synthesis_geom(self, alm: np.ndarray, spin: int, lmax: int, mmax: int, nthreads: int,
+                                m: np.ndarray, **kwargs):
+        # relevant kwargs here: mode.
+        assert self.geom is not None, 'no isolatitude geometry set'
+        return self.geom.adjoint_synthesis(np.atleast_2d(m), spin, lmax, mmax, nthreads, alm=np.atleast_2d(alm),
+                                           apply_weights=False, **kwargs)
+
+    def _synthesis_loc(self, alm: np.ndarray, spin: int, lmax: int, mmax: int, nthreads: int, m: np.ndarray,
+                       **kwargs):
+        assert self.loc is not None, 'no locations set'
+        return synthesis_general(map=m, lmax=lmax, mmax=mmax, alm=alm, loc=self.loc, spin=spin, nthreads=nthreads,
+                                 epsilon=self.epsilon, **kwargs)
+
+    def _adjoint_synthesis_loc(self, alm: np.ndarray, spin: int, lmax: int, mmax: int, nthreads: int, m: np.ndarray,
+                               **kwargs):
+        assert self.loc is not None, 'no locations set'
+        return adjoint_synthesis_general(map=np.atleast_2d(m), lmax=lmax, mmax=mmax, alm=np.atleast_2d(alm),
+                                         loc=self.loc, spin=spin, nthreads=nthreads, epsilon=self.epsilon, **kwargs)
+
+
+def st2mmax(spin, tht, lmax):
+    """
+    Converts spin, tht and lmax to a maximum effective m.
+
+    According to libsharp paper polar optimization formula Eqs. 7-8.
+    For a given mmax, one needs then in principle 2 * mmax + 1 longitude points for exact FFT's
+    """
+
+    T = max(0.01 * lmax, 100)
+    b = - 2 * spin * np.cos(tht)
+    c = -(T + lmax * np.sin(tht)) ** 2 + spin ** 2
+    mmax = 0.5 * (- b + np.sqrt(b * b - 4 * c))
+    return mmax
 
 
 def map2lens(maps, plm, g=None, **kwargs):
@@ -460,6 +608,8 @@ def get_dec_range(mask, dec=None):
 def reduce_lmax(alm, lmax=4000):
     """
     Reduce the lmax of input alm
+
+    Copied from healqest_utils.py to avoid circular dependency within healqest.
     """
     lmaxin = hp.Alm.getlmax(alm.shape[-1])
     logger.debug(f"Reducing lmax: lmax_in={lmaxin} -> lmax_out={lmax}")
@@ -474,3 +624,322 @@ def reduce_lmax(alm, lmax=4000):
         oldi = oldf
         newi = newf
     return almout
+
+
+class BtNiB_light:
+    def __init__(self, pixels, job: str, lmmax: tuple[int, int],
+                 nthreads=0, r_dtype=np.float64,
+                 tf_params={'tf_geo': None, 'tf_pixs_in': None, 'tf_pixs_out': None, 'locs_in': None, 'lx_cut': 0,
+                            'm_cut': 0, 'tf_psi': None},
+                 b_mmin=0, loc_c=None):
+        """Inverse noise matrix operator, combining beam and inverse noise variance maps for a number of frequency channels
+
+            Args:
+                pixels: generalized geometry object (see Pixelization.py) that performs the SHT's and their adjoint
+                mode: 'GRAD_ONLY' or 'STANDARD' (ducc SHT modes. Set this to "GRAD_ONLY" if it only takes the gradient mode as inputs)
+                lmmax: alm array layout
+                nthreads: number of threads for SHTs
+                r_dtype: precision of the computation
+                b_mmin, loc_c: (optional) The transfer functions rotate back from pole to loc_c and sets to zero m < mmin. This slows things down by a significant amount if it actually must be rotated)
+
+            Note:
+                For now, the pixelization is the same across channels, but this could be adapted.
+
+                This performs (a channel, i pixel, lm harmonics)
+
+                    :math:`\sum_{a, i, lm} b_l'Y^{\dagger}_{l'm'}(\hn_i) N^{-1}_i /s^2_a Y_{lm}(\hat n_i) b^a_l a_{lm}`
+
+                    (plus rotation - alm masking in each b_l operation if b_mmin and loc_c are set)
+
+        """
+        assert job in ['T', 'EB', 'TEB'], job
+        mode = 'STANDARD'
+
+        # SO FAR each channel has the same job (T, EB, TEB)
+        # TODO: have a to have a list of spins for each channels, and then just adapt the tf to loop over the
+        self.nchannels = 1
+        self.nalms = len(job)
+        self.nmaps = self.job2spins(job)[1]
+        self.job = job
+        self.mode = mode
+
+        self.pixels = pixels
+
+        self.nthreads = get_nthreads(nthreads)
+
+        self.lmmax = lmmax
+
+        self.dtype = r_dtype
+        self._alms = None
+        self._maps = None
+        self._tfgeo_maps = None
+
+        # This is for a clean theta-independdent m-cut after rotation (to be dropped)
+        self.b_mmin = b_mmin
+        self.loc_c = loc_c
+
+        # Transfer function parameters #FIXME: this is a mess now
+        self.tf_geo = tf_params.get('tf_geo', None)
+        self.tf_pixs_in = tf_params.get('tf_pixs_in', None)
+        self.tf_pixs_out = tf_params.get('tf_pixs_out', self.tf_pixs_in)
+        self.lx_cut = tf_params.get('lx_cut', 0)  # to use a tht-dependent m-cut
+        self.m_cut = tf_params.get('m_cut', 0)  # to apply a fixed-m cut
+        self.m_apodeg = tf_params.get('m_apodeg', 0.)
+        self.tf_locs_in = tf_params.get('locs_in', None)
+
+        # FIXME: this will only work if  pixs_in are the same than pixs_out
+        self.tf_psi = tf_params.get('tf_psi', None)
+        self._has_tf_psi = (self.tf_psi is not None and np.any(self.tf_psi))
+        self.pixels_tf = Pixelization(loc=self.tf_locs_in,
+                                      epsilon=self.pixels.epsilon) if self.tf_locs_in is not None else self.pixels
+
+        if self.tf_geo is not None:  # gets mmin - mmax boundaries
+            assert self.tf_pixs_in is not None
+            assert tf_params.get('lx_cut', None) is not None
+            assert self.tf_pixs_out.size==self.pixels.npix(), (self.tf_pixs_out.size, self.pixels.npix())
+            assert self.m_apodeg==0, 'need to reimplement that, it was not working well anyways'
+            ms_min = np.int_(self.lx_cut*np.sin(np.minimum(self.tf_geo.theta + self.m_apodeg*np.pi/180., np.pi)))
+            ms_max = np.int_(self.lx_cut*np.sin(np.maximum(self.tf_geo.theta - self.m_apodeg*np.pi/180., 0.)))
+            mcuts_min = np.maximum(np.minimum(ms_min, ms_max), self.m_cut)
+            mcuts_max = np.maximum(np.maximum(ms_min, ms_max), self.m_cut)
+            mcuts_min = np.maximum(mcuts_min, 0)
+            self.mi = mcuts_min
+            self.ma = mcuts_max
+
+        if self.pixels_tf.npix()!=self.pixels.npix():  # Sanity checks
+            assert self.pixels.npix()==self.tf_pixs_out.size, (self.pixels_tf.npix(), self.tf_pixs_out.size)
+            assert self.pixels_tf.npix()==self.tf_pixs_in.size, (self.pixels_tf.npix(), self.tf_pixs_in.size)
+            print('Transfer: ')
+            print('  Number of in  pixels: %s'%self.tf_pixs_in.size)
+            print('  Number of out pixels: %s'%self.tf_pixs_out.size)
+
+    def _cut_ms(self, legs):
+        # TODO:
+        ms = np.arange(legs.shape[2], dtype=int)
+        for ir, (mc, np_i) in enumerate(zip(self.ma, 1./self.tf_geo.nph)):
+            legs[:, ir, :] *= np_i*(ms<mc)
+
+    def _synthesize_channel(self, pixels: Pixelization, channel, alms, maps, subjob=None):
+        subjob = subjob or self.job
+        assert self.mode=='STANDARD', 'Only STANDARD mode implemented'
+        spins, ncomp = self.job2spins(subjob)
+        if maps is None:
+            nmaps = np.sum([1 + (spin>0) for spin in spins])
+            maps = np.empty((nmaps, pixels.npix()), dtype=self.dtype)
+        assert alms.shape==(ncomp, hp.Alm.getsize(*self.lmmax)), (alms.shape, ncomp, hp.Alm.getsize(*self.lmmax))
+        assert maps.shape==(ncomp, pixels.npix())
+        i = 0
+        for spin in spins:
+            ncomp = 1 + (spin>0)
+            pixels.synthesis(alms[i:i + ncomp], spin, self.lmmax[0], self.lmmax[1], self.nthreads,
+                             m=maps[i:i + ncomp], mode=self.mode)
+            i += ncomp
+        return maps
+
+    def _adjoint_synthesize_channel(self, pixels, channel, alms, maps, subjob=None):
+        subjob = subjob or self.job
+        assert self.mode=='STANDARD', 'Only STANDARD mode implemented'
+        spins, ncomp = self.job2spins(subjob)
+        assert alms.shape==(ncomp, hp.Alm.getsize(*self.lmmax))
+        assert maps.shape==(ncomp, pixels.npix())
+        i = 0
+        for spin in spins:
+            ncomp = 1 + (spin>0)
+            pixels.adjoint_synthesis(alms[i:i + ncomp], spin, self.lmmax[0], self.lmmax[1], self.nthreads,
+                                     m=maps[i:i + ncomp], mode=self.mode)
+            i += ncomp
+        return alms
+
+    @staticmethod
+    def job2spins(job):
+        assert job in ['T', 'EB', 'TEB'], job
+        # spins = [0]*('T' in subjob) + [2]*('EB' in subjob)
+        # ncomp = np.sum([1 + (spin>0) for spin in spins])
+        if job=='T':
+            spins, ncomp = [0], 1
+        elif job=='EB':
+            spins, ncomp = [2], 2
+        elif job=='TEB':
+            spins, ncomp = [0, 2], 3
+        else:
+            raise ValueError(f"only supported jobs are 'T', 'EB' and 'TEB', got {job}")
+        return spins, ncomp
+
+    def _rotate(self, maps, sgn, subjob=None):
+        # TODO: use usual complex view etc ?
+        # TODO: better, include psi in loc-based pixelizations object?
+        # YL: this function is effectivly unused currently. (tf_psi=0)
+        subjob = subjob or self.job
+        spins, ncomp = self.job2spins(subjob)
+        i = 0
+        for spin in spins:
+            ncomp = 1 + (spin>0)
+            if spin:
+                assert self.tf_psi is not None
+                if self._has_tf_psi:
+                    maps_c = (maps[i] + 1j*maps[i + 1])*np.exp((1j*sgn*spin)*self.tf_psi)
+                    maps[i] = maps_c.real
+                    maps[i + 1] = maps_c.imag
+            i += ncomp
+
+    def _apply_tf_inplace(self, channel, alms, maps, subjob=None):
+        assert maps.ndim==2, maps.shape
+
+        if self.lx_cut>0 or self.m_cut>0:
+            geo = self.tf_geo
+            if not (self.tf_pixs_in is self.tf_pixs_out):
+                self._tfgeo_maps[:maps.shape[0], :] = 0.
+            tmps = self._synthesize_channel(self.pixels_tf, channel, alms, None, subjob=subjob)
+            self._rotate(tmps, +1, subjob=subjob)
+            self._tfgeo_maps[:maps.shape[0], self.tf_pixs_in] = tmps
+            legs = map2leg(map=self._tfgeo_maps[:maps.shape[0]], nphi=geo.nph, ringstart=geo.ofs,
+                           mmax=np.max(self.ma), phi0=geo.phi0, nthreads=self.nthreads)
+            self._cut_ms(legs)
+
+            # removes the low-m part
+            maps[:] = self._tfgeo_maps[:maps.shape[0], self.tf_pixs_out] - leg2map(leg=legs, nphi=geo.nph,
+                                                                                   ringstart=geo.ofs,
+                                                                                   phi0=geo.phi0,
+                                                                                   nthreads=self.nthreads)[:,self.tf_pixs_out]
+            self._rotate(maps, -1, subjob=subjob)
+        else:
+            self._synthesize_channel(self.pixels, channel, alms, maps, subjob=subjob)
+
+    def _apply_tf_adjoint_inplace(self, channel, alms, maps, subjob=None):
+        assert maps.ndim==2, maps.shape
+        if self.lx_cut>0 or self.m_cut>0:
+            self.allocate_maps()
+            geo = self.tf_geo
+            if not (self.tf_pixs_in is self.tf_pixs_out):
+                self._tfgeo_maps[:maps.shape[0], :] = 0.
+            self._rotate(maps, +1, subjob=subjob)
+            self._tfgeo_maps[:maps.shape[0], self.tf_pixs_out] = maps
+            legs = map2leg(map=self._tfgeo_maps[:maps.shape[0]], nphi=geo.nph, ringstart=geo.ofs,
+                           mmax=np.max(self.ma), phi0=geo.phi0, nthreads=self.nthreads)
+            self._cut_ms(legs)
+            m = self._tfgeo_maps[:maps.shape[0], self.tf_pixs_in] - leg2map(leg=legs, nphi=geo.nph,
+                                                                            ringstart=geo.ofs, phi0=geo.phi0,
+                                                                            nthreads=self.nthreads)[:,
+                                                                    self.tf_pixs_in]
+            self._rotate(m, -1, subjob=subjob)
+            self._adjoint_synthesize_channel(self.pixels_tf, channel, alms, m, subjob=subjob)
+        else:
+            self._adjoint_synthesize_channel(self.pixels, channel, alms, maps, subjob=subjob)
+
+    def allocate_maps(self):
+        # NB: we can use the same maps for each channel
+        if self._maps is None:
+            self._maps = np.empty((np.max(self.nmaps), self.pixels.npix()), dtype=self.dtype)
+        if self._tfgeo_maps is None and max(self.lx_cut, self.m_cut) > 0:
+            self._tfgeo_maps = np.zeros((np.max(self.nmaps), self.tf_geo.npix()), dtype=self.dtype)
+
+    def deallocate(self):
+        self._alms = None
+        self._maps = None
+        self._tfgeo_maps = None
+
+    def apply(self, alms):
+        subjob = self.job
+        nalms = len(subjob)
+        assert alms.shape==(nalms, hp.Alm.getsize(*self.lmmax)), (alms.shape, nalms, hp.Alm.getsize(*self.lmmax))
+        self.allocate_maps()
+        _maps = self._maps[:nalms]
+        self._apply_tf_inplace(0, alms, _maps, subjob=subjob)
+        self._apply_tf_adjoint_inplace(0, alms, _maps, subjob=subjob)
+
+
+class GeometryTF:
+    def __init__(self, geom, ipix, lx_cut=0, m_cut=0, m_apodeg=0):
+        assert geom.ofs[0] == np.min(geom.ofs)
+        self.g = geom
+        self.lx_cut = lx_cut
+        self.m_cut = m_cut
+        self.m_apodeg = m_apodeg
+        self.ipix = ipix
+        self.tf_pix = ipix-self.g.ofs[0]  # internal index to map from reduced pix to full pixels.
+
+        assert self.m_apodeg==0, 'need to reimplement that, it was not working well anyways'
+        ms_min = np.int_(self.lx_cut*np.sin(np.minimum(self.g.theta + self.m_apodeg*np.pi/180., np.pi)))
+        ms_max = np.int_(self.lx_cut*np.sin(np.maximum(self.g.theta - self.m_apodeg*np.pi/180., 0.)))
+        mcuts_min = np.maximum(np.minimum(ms_min, ms_max), self.m_cut)
+        mcuts_max = np.maximum(np.maximum(ms_min, ms_max), self.m_cut)
+        mcuts_min = np.maximum(mcuts_min, 0)
+        self.mi = mcuts_min
+        self.ma = mcuts_max
+
+    @cached_property
+    def ofs(self):
+        return self.g.ofs-self.g.ofs[0]
+
+    @cached_property
+    def npix(self):
+        return self.g.npix()
+
+    def _cut_ms(self, legs):
+        ms = np.arange(legs.shape[2], dtype=int)
+        for ir, (mc, np_i) in enumerate(zip(self.ma, 1./self.g.nphi)):
+            legs[:, ir, :] *= np_i*(ms<mc)
+
+
+    def _apply_tf_inplace(self, alms, maps, nthreads):
+        if maps is not None:
+            assert maps.ndim==2, maps.shape
+        assert alms.ndim==2, alms.shape
+        self.g.alm2map(alms, maps=maps, nthreads=nthreads, )
+
+        # if self.lx_cut>0 or self.m_cut>0:
+        #     _maps = np.zeros((maps.shape[0], self.npix), dtype=maps.dtype)
+        #     _maps[:, self.tf_pix] = maps[:, self.ipix]
+        #     legs = map2leg(map=_maps, nphi=self.g.nphi, ringstart=self.ofs, mmax=np.max(self.ma), phi0=self.g.phi0,
+        #                    nthreads=nthreads)
+        #     self._cut_ms(legs)
+            # removes the low-m part
+            # cut_map = leg2map(leg=legs, nphi=self.g.nph, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
+            # maps[:, self.ipix] -= cut_map[:, self.tf_pix]
+        self._apply_map(maps, nthreads=nthreads)
+        # return maps
+
+    def _apply_tf_adjoint_inplace(self, alms, maps, lmax, nthreads):
+        assert maps.ndim==2, maps.shape
+        if alms is not None:
+            assert alms.ndim==2, alms.shape
+        # if self.lx_cut>0 or self.m_cut>0:
+        #     _maps = np.zeros((maps.shape[0], self.npix), dtype=maps.dtype)
+        #     _maps[:, self.tf_pix] = maps[:, self.ipix]
+        #     legs = map2leg(map=_maps, nphi=self.g.nph, ringstart=self.ofs, mmax=np.max(self.ma), phi0=self.g.phi0,
+        #                    nthreads=nthreads)
+        #     self._cut_ms(legs)
+        #     cut_map = leg2map(leg=legs, nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
+        #     maps[:, self.ipix] -= cut_map[:, self.tf_pix]
+        maps = self._apply_map(maps, nthreads=nthreads)
+        alms = self.g.map2alm(maps, alms=alms, lmax=lmax, nthreads=nthreads, check=False)
+        return alms
+
+    def _apply_map(self, maps, nthreads=None):
+        """
+        Parameters
+        ----------
+        maps: array-like, shape (ncomp, 12*nside**2)
+        """
+        nthreads = get_nthreads(nthreads)
+        if self.lx_cut>0 or self.m_cut>0:
+            _maps = np.zeros((maps.shape[0], self.npix), dtype=maps.dtype)
+            _maps[:, self.tf_pix] = maps[:, self.ipix]
+            legs = map2leg(map=_maps, nphi=self.g.nphi, ringstart=self.ofs, mmax=np.max(self.ma), phi0=self.g.phi0,
+                           nthreads=nthreads)
+            self._cut_ms(legs)
+            cut_map = leg2map(leg=legs, nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
+            print(cut_map.shape)
+            maps[:, self.ipix] -= cut_map[:, self.tf_pix]
+        return maps
+
+    def apply(self, alms, nthreads=None):
+        alms = np.atleast_2d(alms)
+        lmax = hp.Alm.getlmax(alms.shape[-1])
+        nmaps = alms.shape[0]
+        _maps = np.zeros((nmaps, hp.nside2npix(self.g.nside)), dtype=rtype[alms.dtype])
+        nthreads = get_nthreads(nthreads)
+        _maps = self._apply_tf_inplace(alms, _maps, nthreads=nthreads)
+        alms = self._apply_tf_adjoint_inplace(alms, _maps, lmax=lmax, nthreads=nthreads)
+        return alms
+

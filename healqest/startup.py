@@ -619,7 +619,8 @@ class Config:
 
     def p_resp(self, tag, bundle=None):
         """paths to response functions."""
-        bundle_tag = f'_{self.bundle2str(bundle)}' if bundle is not None else ''
+        bundle_str = self.bundle2str(bundle)
+        bundle_tag = f'_{bundle_str}' if bundle_str else ''
         return self.path(self.outdir, f"respavg_{tag}{bundle_tag}.npz")
 
     @property

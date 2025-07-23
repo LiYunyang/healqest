@@ -8,7 +8,7 @@ import logging
 import numpy as np
 from numpy.typing import NDArray
 import healpy as hp
-
+from healqest import ducc_sht
 from . import hp_utils, cinv_utils
 logger = logging.getLogger(__name__)
 
@@ -50,8 +50,9 @@ class TFObj:
     tf2d_t: NDArray = None  # (almsize, )
     tf2d_e: NDArray = None  # (almsize, )
     tf2d_b: NDArray = None  # (almsize, )
+    lx_cut = None
 
-    def __init__(self, npol, lmax, tf1d, tf2d=None):
+    def __init__(self, npol, lmax, tf1d, tf2d=None, lx_cut=None):
         """
         Parameters
         ----------
@@ -72,6 +73,12 @@ class TFObj:
             assert hp.Alm.getlmax(_tf2d.shape[-1]) == lmax
         else:
             _tf2d = [None, None]
+        if lx_cut is not None:
+            self.lx_cut = lx_cut
+            if tf2d is not None:
+                logger.warning(f"using lx_cut={lx_cut} in lieu of the provided tf2d")
+                _tf2d = [None, None]
+                tf2d = None
 
         if npol == 1:
             # t-only case
@@ -408,6 +415,12 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             self.g = g
             assert self.g.nside == self.nside
 
+        # setup the TF object for the theta-dependent m-cut
+        if tf.lx_cut:
+            self.g_tf = ducc_sht.GeometryTF(self.g, self.nonzero, lx_cut=tf.lx_cut)
+        else:
+            self.g_tf = None
+
     @staticmethod
     def load_ninvs(fnames):
         if isinstance(fnames, list):
@@ -445,6 +458,8 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
 
     def apply_map(self, maps):
         """map-based Ninv operation: N^-1"""
+        if self.g_tf:
+            maps = self.g_tf.apply_map(np.atleast_2d(maps))
         if maps.ndim == 1:
             maps[self.nonzero] *= self.n_inv_t/self.pixarea
         else:
@@ -453,6 +468,9 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             if maps.shape[0] in (2, 3):
                 maps[-2, self.nonzero] *= self.n_inv_q/self.pixarea
                 maps[-1, self.nonzero] *= self.n_inv_u/self.pixarea
+        if self.g_tf:
+            # slice assignment is important to make sure that it does modification inplace!
+            maps[:] = self.g_tf.apply_map(maps)
 
     def apply_alm(self, alms):
         """harmonic-space Ninv operation: apply A^T N^-1 A on alms"""

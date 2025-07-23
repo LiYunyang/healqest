@@ -450,15 +450,10 @@ class GeometryTF:
         Parameters
         ----------
         maps: array-like, shape (ncomp, 12*nside**2)
+        nthreads: int=None
         """
         assert maps.ndim==2, maps.shape
         nmaps, npix = maps.shape
-        if npix == hp.nside2npix(self.g.nide):
-            reduced = False
-        # elif npix == self.npix:
-        #     reduced = True
-        else:
-            raise ValueError(f"maps must have full shape, got: {maps.shape}")
         nthreads = get_nthreads(nthreads)
         kw = dict(nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
         if self.lx_cut>0 or self.m_cut>0:

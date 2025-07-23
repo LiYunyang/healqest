@@ -95,7 +95,7 @@ class Config:
     cinv_lmax: int  # maximum l for cinv
     cinv_lmin: int  # minimum l for cinv
     file_bl: str  # path to beam file.
-    file_tf2d: Union[str, list]=None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
+    file_tf2d: Union[str, list] = None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
     file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.
@@ -408,6 +408,12 @@ class Config:
     @cached_property
     def tf2d(self) -> Union[dict, None]:
         """Return a 2d TFxbl functions for T/E/B"""
+        def _regularize_tf2d(tf):
+            """Regularize the tf2d to be in [0, 1]"""
+            tf = np.maximum(np.minimum(tf, 1), 0)
+            tf[np.isnan(tf)] = 0
+            return tf
+
         if self.file_tf2d:
             if isinstance(self.file_tf2d, (list, tuple)):
                 l, m = self.file_tf2d
@@ -419,7 +425,13 @@ class Config:
                 alm_mask[emm>k*ell] = 0
                 return dict(t=alm_mask.copy(), p=alm_mask.copy())
             else:
-                raise NotImplementedError
+                loaded = np.load(self.path(self.file_tf2d, field=self.field))
+                if 'tf2d_t' in loaded.files:
+                    return dict(t=_regularize_tf2d(loaded['tf2d_t']),
+                                p=_regularize_tf2d(loaded['tf2d_p']))
+                else:
+                    return dict(t=_regularize_tf2d(loaded['tf2d']),
+                                p=_regularize_tf2d(loaded['tf2d']))
         else:
             logger.warning("No 2d TF given.")
             return None

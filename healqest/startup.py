@@ -412,6 +412,7 @@ class Config:
             """Regularize the tf2d to be in [0, 1]"""
             tf = np.maximum(np.minimum(tf, 1), 0)
             tf[np.isnan(tf)] = 0
+            tf = hq.reduce_lmax(tf, self.cinv_lmax)
             return tf
 
         if self.file_tf2d:

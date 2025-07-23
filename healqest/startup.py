@@ -96,6 +96,7 @@ class Config:
     cinv_lmin: int  # minimum l for cinv
     file_bl: str  # path to beam file.
     file_tf2d: Union[str, list] = None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
+    lx_cut: int=None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still be used for effective 1d beam)
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
     file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.

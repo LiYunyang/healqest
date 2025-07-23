@@ -170,10 +170,10 @@ class cinv_t(cinv):
 
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True,
-                 g=None):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, lx_cut=None, eps_min=1.0e-5,
+                 ellscale=True, g=None):
         assert len(ninv) == 1
-        tf = opfilt_hp.TFObj(npol=1, lmax=lmax, tf1d=tf1d, tf2d=tf2d)
+        tf = opfilt_hp.TFObj(npol=1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut)
         # only take the first entry as the temperation ninv
         super(cinv_t, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
                                      ellscale=ellscale, tf=tf, g=g)
@@ -236,12 +236,12 @@ class cinv_p(cinv):
 
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, eps_min=1.0e-5, ellscale=True,
-                 g=None):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, lx_cut=None, eps_min=1.0e-5,
+                 ellscale=True, g=None):
 
         assert isinstance(ninv, list)
         assert len(ninv) in [2]
-        tf = opfilt_hp.TFObj(npol=2, lmax=lmax, tf1d=tf1d, tf2d=tf2d)
+        tf = opfilt_hp.TFObj(npol=2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut)
         super(cinv_p, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
                                      ellscale=ellscale, tf=tf, g=g)
 
@@ -394,11 +394,12 @@ class cinv_tp(cinv):
         Whether to scale by multipole ell, by default True.
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d, eps_min=1.0e-5, ellscale=False, g=None):
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d, lx_cut=None,
+                 eps_min=1.0e-5, ellscale=False, g=None):
 
         assert isinstance(ninv, list)
         assert len(ninv) in [3]  # TT/PP or TT/QQ/UU
-        tf = opfilt_hp.TFObj(npol=3, lmax=lmax, tf1d=tf1d, tf2d=tf2d)
+        tf = opfilt_hp.TFObj(npol=3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut)
 
         super(cinv_tp, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
                                       ellscale=ellscale, g=g, tf=tf)

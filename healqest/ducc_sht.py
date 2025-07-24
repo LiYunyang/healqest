@@ -402,6 +402,10 @@ class GeometryTF:
         assert geom.ofs[0] == np.min(geom.ofs)
         self.g = geom
         self.lx_cut = lx_cut
+        if m_cut is None:
+            m_cut = 0
+        if m_apodeg is None:
+            m_apodeg = 0
         self.m_cut = m_cut
         self.m_apodeg = m_apodeg
         self.ipix = ipix

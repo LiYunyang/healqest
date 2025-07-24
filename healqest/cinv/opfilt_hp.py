@@ -50,9 +50,12 @@ class TFObj:
     tf2d_t: NDArray = None  # (almsize, )
     tf2d_e: NDArray = None  # (almsize, )
     tf2d_b: NDArray = None  # (almsize, )
+    bl_t: NDArray = None # (lmax+1, )
+    bl_e: NDArray = None  # (lmax+1, )
+    bl_b: NDArray = None  # (lmax+1, )
     lx_cut = None
 
-    def __init__(self, npol, lmax, tf1d, tf2d=None, lx_cut=None):
+    def __init__(self, npol, lmax, tf1d, tf2d=None, bl=None, lx_cut=None):
         """
         Parameters
         ----------
@@ -73,7 +76,15 @@ class TFObj:
             assert hp.Alm.getlmax(_tf2d.shape[-1]) == lmax
         else:
             _tf2d = [None, None]
+
+        if bl is not None:
+            _bl = np.atleast_2d(bl)[:, :lmax+1]
+            assert _bl.shape[0] in [1, 2]
+        else:
+            _bl = [None, None]
+
         if lx_cut is not None:
+            assert bl is not None, "lx_cut requires bl to be set"
             self.lx_cut = lx_cut
             if tf2d is not None:
                 logger.warning(f"using lx_cut={lx_cut} in lieu of the provided tf2d")
@@ -84,6 +95,7 @@ class TFObj:
             # t-only case
             self.tf1d_t = _tf1d[0]
             self.tf2d_t = _tf2d[0]
+            self.bl_t = _bl[0]
             logger.debug(f"raw tf1d shape: {_tf1d.shape}, taking first row for T")
             if tf2d is not None:
                 logger.debug(f"raw tf2d shape: {_tf2d.shape}, taking first row for T")
@@ -91,12 +103,14 @@ class TFObj:
             # pol-only case
             self.tf1d_e, self.tf1d_b = _tf1d[0], _tf1d[-1]
             self.tf2d_e, self.tf2d_b = _tf2d[0], _tf2d[-1]
+            self.bl_e, self.bl_b = _bl[0], _bl[-1]
             logger.debug(f"raw tf1d shape: {_tf1d.shape}, taking first/last row for E/B")
             if tf2d is not None:
                 logger.debug(f"raw tf2d shape: {_tf2d.shape}, taking first/last row for E/B")
         elif npol == 3:
             self.tf1d_t, self.tf1d_e, self.tf1d_b = _tf1d[0], _tf1d[-1], _tf1d[-1]
             self.tf2d_t, self.tf2d_e, self.tf2d_b = _tf2d[0], _tf2d[-1], _tf2d[-1]
+            self.bl_t, self.bl_e, self.bl_b = _bl[0], _bl[-1], _bl[-1]
             logger.debug(f"raw tf1d shape: {_tf1d.shape}, taking first row for T, last row for EB")
             if tf2d is not None:
                 logger.debug(f"raw tf2d shape: {_tf2d.shape}, taking first row for T, last row for EB")
@@ -112,19 +126,55 @@ class TFObj:
         elif self.npol == 3:
             return ['t', 'e', 'b']
 
-    def apply_tf(self, alms):
-        """Apply the 2d/1d (if 2d is not set) TF to alm(s) inplace"""
-        assert isinstance(alms, np.ndarray)
-        # atleast_2d creates a view (for inplace modification), only if
-        # the input is not already numpy array!
-        alms = np.atleast_2d(alms)
+    def apply_tf(self, alms, maps, g, adjoint=False, g_tf=None):
+        """
+        Apply the 2d/1d (if 2d is not set) TF to alms (forward operation) or maps (adjoint operation)
+
+        alms: array_like, optional
+            Needed for forward operation, but can be omitted for adjoint operation. If provided in the latter case,
+            it will be used as a buffer.
+        maps: array_like
+            Needed for adjoint operation, but can be omitted for forward operation. If provided in the latter case,
+            it will be used as a buffer.
+        g: geometry object
+        """
+        if adjoint:
+            assert isinstance(maps, np.ndarray)
+        else:
+            assert isinstance(alms, np.ndarray)
+        # atleast_2d creates a view (for inplace modification), only if the input is not already numpy array!
+
+        # === start of adjoint operation, but not needed forward operation ===
+        if adjoint:
+            if self.lx_cut:
+                # slice assignment is important to make sure that it does modification inplace!
+                maps[:] = g_tf.apply_map(np.atleast_2d(maps))
+            alms = g.map2alm(maps, lmax=self.lmax, iter=0, alms=alms, check=False)
+        else:
+            alms = np.atleast_2d(alms)
+
+        # === alm space operation, applying tf2d/tf1d or just bl. ===
         for i, s in enumerate(self.pols):
-            tf1d = getattr(self, f"tf1d_{s}")
             tf2d = getattr(self, f"tf2d_{s}")
             if tf2d is None:
+                if self.lx_cut:
+                    # perform beam operation if lx_cut will be applied
+                    tf1d = getattr(self, f"bl_{s}")
+                else:
+                    # otherwise, perform with the effective 1d TF (that includes bl!)
+                    tf1d = getattr(self, f"tf1d_{s}")
                 hp.almxfl(alms[i], tf1d, inplace=True)
             else:
                 alms[i] *= tf2d
+
+        # === end of adjoint operation, but do convert to maps for forward operation ===
+        if adjoint:
+            return alms
+        else:
+            maps = g.alm2map(alms, maps=maps)
+            if self.lx_cut:
+                maps[:] = g_tf.apply_map(np.atleast_2d(maps))
+            return maps
 
     def __imul__(self, fl):
         """scale transfer functions by a common array"""
@@ -446,20 +496,12 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
 
     def calc_prep(self, maps):
         maps_copy = np.copy(maps)
-
         self.apply_map(maps_copy)
-
-        if self.g is None:
-            alms = map2alm(maps_copy, lmax=self.lmax, iter=0)
-        else:
-            alms = self.g.map2alm(maps_copy, lmax=self.lmax, iter=0, check=False)
-        self.tf.apply_tf(alms)
+        alms = self.tf.apply_tf(maps=maps_copy, alms=None, g=self.g, adjoint=True, g_tf=self.g_tf)
         return alms
 
     def apply_map(self, maps):
         """map-based Ninv operation: N^-1"""
-        if self.g_tf:
-            maps = self.g_tf.apply_map(np.atleast_2d(maps))
         if maps.ndim == 1:
             maps[self.nonzero] *= self.n_inv_t/self.pixarea
         else:
@@ -468,23 +510,10 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             if maps.shape[0] in (2, 3):
                 maps[-2, self.nonzero] *= self.n_inv_q/self.pixarea
                 maps[-1, self.nonzero] *= self.n_inv_u/self.pixarea
-        if self.g_tf:
-            # slice assignment is important to make sure that it does modification inplace!
-            maps[:] = self.g_tf.apply_map(maps)
 
     def apply_alm(self, alms):
         """harmonic-space Ninv operation: apply A^T N^-1 A on alms"""
         assert alms.shape[-1] == self.almsize
-        self.tf.apply_tf(alms)
-        if self.g is None:
-            maps = alm2map(alms, self.nside)
-        else:
-            maps = self.g.alm2map(alms)
-
+        maps = self.tf.apply_tf(alms=alms, maps=None, g=self.g, adjoint=False, g_tf=self.g_tf)
         self.apply_map(maps)
-
-        if self.g is None:
-            alms[:] = map2alm(maps, lmax=self.lmax, iter=0)
-        else:
-            self.g.map2alm(maps, lmax=self.lmax, iter=0, alms=alms, check=False)
-        self.tf.apply_tf(alms)
+        alms[:] = self.tf.apply_tf(maps=maps, alms=alms, g=self.g, adjoint=True, g_tf=self.g_tf)

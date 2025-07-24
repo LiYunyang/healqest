@@ -150,10 +150,9 @@ class TFObj:
                 # slice assignment is important to make sure that it does modification inplace!
                 maps[:] = g_tf.apply_map(np.atleast_2d(maps))
             alms = g.map2alm(maps, lmax=self.lmax, iter=0, alms=alms, check=False)
-        else:
-            alms = np.atleast_2d(alms)
 
         # === alm space operation, applying tf2d/tf1d or just bl. ===
+        alms = np.atleast_2d(alms)
         for i, s in enumerate(self.pols):
             tf2d = getattr(self, f"tf2d_{s}")
             if tf2d is None:

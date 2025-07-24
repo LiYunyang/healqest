@@ -93,7 +93,8 @@ class Config:
     eps_t: float  # convergence threshold for cinv T component
     eps_p: float  # convergence threshold for cinv Pol component
     cinv_lmax: int  # maximum l for cinv
-    cinv_lmin: int  # minimum l for cinv
+    cinv_lmin: int = None  # minimum l for cinv
+    cinv_mmin: int = None  # minimum m for cinv
     file_bl: str  # path to beam file.
     file_tf2d: Union[str, list] = None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
     lx_cut: int=None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still be used for effective 1d beam)
@@ -404,6 +405,8 @@ class Config:
             beam_file = self.path(self.file_bl)
             logger.warning("temporarily loading the 150 GHz beam file")
             bl = np.loadtxt(beam_file)[:self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
+        if self.cinv_lmin:
+            bl[:self.cinv_lmin] = 0
         return dict(t=bl.copy(), p=bl.copy())
 
     @cached_property
@@ -414,6 +417,12 @@ class Config:
             tf = np.maximum(np.minimum(tf, 1), 0)
             tf[np.isnan(tf)] = 0
             tf = hq.reduce_lmax(tf, self.cinv_lmax)
+            if self.cinv_lmin or self.cinv_mmin:
+                _ell, _emm = hp.Alm.getlm(lmax=self.cinv_lmax)
+                if self.cinv_lmin:
+                    tf[_ell < self.cinv_lmin] = 0
+                if self.cinv_mmin:
+                    tf[_emm<self.cinv_mmin] = 0
             return tf
 
         if self.file_tf2d:
@@ -425,6 +434,7 @@ class Config:
                 alm_mask[emm<m] = 0
                 _, _, k = hq.dec2tf2d(0, *self.dec_range)
                 alm_mask[emm>k*ell] = 0
+                alm_mask = _regularize_tf2d(alm_mask)
                 return dict(t=alm_mask.copy(), p=alm_mask.copy())
             else:
                 loaded = np.load(self.path(self.file_tf2d, field=self.field))

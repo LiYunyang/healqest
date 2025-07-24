@@ -50,7 +50,7 @@ class TFObj:
     tf2d_t: NDArray = None  # (almsize, )
     tf2d_e: NDArray = None  # (almsize, )
     tf2d_b: NDArray = None  # (almsize, )
-    bl_t: NDArray = None # (lmax+1, )
+    bl_t: NDArray = None  # (lmax+1, )
     bl_e: NDArray = None  # (lmax+1, )
     bl_b: NDArray = None  # (lmax+1, )
     lx_cut = None
@@ -168,21 +168,26 @@ class TFObj:
 
         # === end of adjoint operation, but do convert to maps for forward operation ===
         if adjoint:
-            return alms
+            return np.squeeze(alms)
         else:
             maps = g.alm2map(alms, maps=maps)
             if self.lx_cut:
                 maps[:] = g_tf.apply_map(np.atleast_2d(maps))
-            return maps
+            return np.squeeze(maps)
 
     def __imul__(self, fl):
         """scale transfer functions by a common array"""
         for s in self.pols:
+            # setattr modifies each copy of the tf1d/tf2d/bl SEPARATELY.
+            # so no worries that each attribute begins as a view of the same array.
             tf1d = getattr(self, f"tf1d_{s}")
             tf2d = getattr(self, f"tf2d_{s}")
+            bl = getattr(self, f"bl_{s}")
             setattr(self, f"tf1d_{s}", tf1d*fl)
             if tf2d is not None:
                 setattr(self, f"tf2d_{s}", hp.almxfl(tf2d, fl))
+            if bl is not None:
+                setattr(self, f"bl_{s}", bl*fl)
         return self
 
 

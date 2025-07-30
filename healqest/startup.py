@@ -25,7 +25,6 @@ import yaml
 from git import Repo, InvalidGitRepositoryError
 
 from healqest import utils, healqest_utils as hq
-from healqest.ducc_sht import Geometry
 
 try:
     from mpi4py import MPI
@@ -488,6 +487,7 @@ class Config:
 
     @cached_property
     def g(self):
+        from healqest.ducc_sht import Geometry
         return Geometry(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
 
     # === setup masks ===
@@ -859,8 +859,6 @@ def parser():
     group = p.add_mutually_exclusive_group()
     group.add_argument('-b', '--bundle', type=none_int, help='Bundle id')
     group.add_argument('-n1', action='store_true', help='Do N1-type operations')
-
-    p.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     p.add_argument('-skip', action='store_true', help='skip finished jobs')
     p.add_argument('-v', '--verbose', default=3, type=int, help='Output verbosity')
     return p

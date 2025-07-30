@@ -309,13 +309,14 @@ class Config:
         if j is None and len(set(ktype)) == 2:
             # default `seed2` is `seed1 + 1`
             j = i+1
-        if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
+        if ktype.lower() in ['xx', 'xy', 'yx', 'x0', '0x']:
+            # there are special cases for 'xY'/'Xy'/'yX'/'Yx'
             cmbset1, cmbset2 = 'aa'
             if ktype == 'xx':
                 seed1, seed2 = i, i
-            elif ktype == 'xy':
+            elif ktype.lower() == 'xy':
                 seed1, seed2 = i, j
-            elif ktype == 'yx':
+            elif ktype.lower() == 'yx':
                 seed1, seed2 = j, i
             elif ktype == 'x0':
                 seed1, seed2 = i, 0

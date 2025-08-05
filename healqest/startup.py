@@ -500,11 +500,13 @@ class Config:
         return Geometry(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
 
     # === setup masks ===
-    def _load_mask(self, item):
+    def _load_mask(self, item, field=0):
         mask = None
         for _ in self.as_list(item):
-            _mask = hp.read_map(self.path(_, field=self.field))
-            _mask[hp.mask_bad(_mask)] = 0
+            try:
+                _mask = hq.read_map(self.path(_, field=self.field), field=field)
+            except IndexError:
+                _mask = hq.read_map(self.path(_, field=self.field), field=0)
             if mask is None:
                 mask = _mask
             else:
@@ -514,16 +516,23 @@ class Config:
     @cached_property
     def mask_qe(self):
         if self.fmask_qe:
-            return self._load_mask(self.fmask_qe)
+            return dict(t=self._load_mask(self.fmask_qe, field=0),
+                        p=self._load_mask(self.fmask_qe, field=1))
         else:
-            return np.ones(hp.nside2npix(self.nside))
+            return dict(t=np.ones(hp.nside2npix(self.nside)),
+                        p=np.ones(hp.nside2npix(self.nside)))
 
     @cached_property
     def mask_ps(self):
         if self.fmask_ps:
-            return self._load_mask(self.fmask_ps)
+            # if T/P use different mask, file `fmask_ps` should have 3 columns, T/P/TP combined.
+            return self._load_mask(self.fmask_ps, field=2)
         else:
-            return self.mask_qe
+            if np.all(self.mask_qe['t']==self.mask_qe['p']):
+                logger.warning("ps mask not given, using the QE mask.")
+            else:
+                logger.error("ps mask not given, try QE P-mask, but it is not consistent with T-mask!.")
+                return self.mask_qe['p']
 
     @cached_property
     def mask_resp(self):
@@ -535,7 +544,7 @@ class Config:
     @cached_property
     def mask_boundary(self):
         """boundary mask used to save plm as partial maps"""
-        return self.mask_qe !=0
+        return self._load_mask(self.fmask_qe, field=2) !=0
 
     @staticmethod
     def bundle2str(bundle):

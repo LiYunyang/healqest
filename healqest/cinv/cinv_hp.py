@@ -479,21 +479,21 @@ class library_sepTP(object):
 
         return tlm, elm, blm
 
-    def get_sim_tlm(self, seed, cmbid, bundle):
+    def get_sim_tlm(self, seed, cmbset, bundle):
         """
         Returns an inverse-filtered temperature simulation.
 
         Args: idx    : simulation index
               Returns: inverse-filtered temperature healpy alm array
         """
-        tfname = os.path.join(self.lib_dir, f"sim_{seed:04d}_{cmbid}_tlm.fits" if seed >= 0 else "dat_tlm.fits")
+        tfname = os.path.join(self.lib_dir, f"sim_{seed:04d}_{cmbset}_tlm.fits" if seed >= 0 else "dat_tlm.fits")
         if not os.path.exists(tfname):
             logger.info("tlm file doesnt exit so creating one")
             if self.soltn_lib is not None:
-                soltn = self.soltn_lib.get_sim_tmliklm(seed, cmbid)
+                soltn = self.soltn_lib.get_sim_tmliklm(seed, cmbset)
             else:
                 soltn = None
-            map_in = self.sim_lib.get_tmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
+            map_in = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
             tlm = self._apply_ivf_t(map_in, soltn=soltn)
         else:
             logger.info(f"Loading file: {tfname}")
@@ -585,13 +585,13 @@ class library_sepTP(object):
         #
         # return tlm, elm, blm
 
-    def get_sim_eblm(self, seed, cmbid, bundle):
+    def get_sim_eblm(self, seed, cmbset, bundle):
         """Returns an inverse-filtered E-polarization simulation.
 
         Parameters
         ----------
         seed: int
-        cmbid: int
+        cmbset: str
 
         Returns
         -------
@@ -605,7 +605,7 @@ class library_sepTP(object):
             # soltn = np.array([self.soltn_lib.get_sim_emliklm(idx),
             #                   self.soltn_lib.get_sim_bmliklm(idx),])
 
-        map_in = self.sim_lib.get_pmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
+        map_in = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
         elm, blm = self._apply_ivf_p(map_in, soltn=soltn)
 
         if self.lfilt is not None:
@@ -749,24 +749,21 @@ class library_jTP(object):
         self.add_noise = add_noise
         self.g = None
 
-    def _get_alms(self, a, seed, cmbid, bundle):
+    def _get_alms(self, a, seed, cmbset, bundle):
         assert a in ["t", "e", "b", "teb"]
 
-        if True:
-            T = self.sim_lib.get_tmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
-            Q, U = self.sim_lib.get_pmap(seed, cmbid, bundle=bundle, add_noise=self.add_noise, g=self.g)
-            if self.soltn_lib is None:
-                soltn = None
-            else:
-                raise NotImplementedError
-                tlm = self.soltn_lib.get_sim_tmliklm(idx)
-                elm = self.soltn_lib.get_sim_emliklm(idx)
-                blm = self.soltn_lib.get_sim_bmliklm(idx)
-                soltn = (tlm, elm, blm)
-            tlm, elm, blm = self._apply_ivf([T, Q, U], soltn=soltn)
 
+        T = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
+        Q, U = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
+        if self.soltn_lib is None:
+            soltn = None
         else:
-            tlm, elm, blm = hp.read_alm(tfname, hdu=[1, 2, 3])
+            raise NotImplementedError
+            tlm = self.soltn_lib.get_sim_tmliklm(idx)
+            elm = self.soltn_lib.get_sim_emliklm(idx)
+            blm = self.soltn_lib.get_sim_bmliklm(idx)
+            soltn = (tlm, elm, blm)
+        tlm, elm, blm = self._apply_ivf([T, Q, U], soltn=soltn)
 
         if self.lfilt is not None:
             hp.almxfl(tlm, self.lfilt, inplace=True)
@@ -775,8 +772,8 @@ class library_jTP(object):
 
         return {"teb": (tlm, elm, blm), "t": tlm, "e": elm, "b": blm}[a]
 
-    def get_sim_teblm(self, seed, cmbid, bundle):
-        return self._get_alms("teb", seed, cmbid, bundle=bundle)
+    def get_sim_teblm(self, seed, cmbset, bundle):
+        return self._get_alms("teb", seed, cmbset, bundle=bundle)
 
     # def get_sim_eblm(self, idx):
     #     elm = self._get_alms("e", idx)

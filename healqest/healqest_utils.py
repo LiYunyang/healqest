@@ -1782,9 +1782,9 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
                     return np.squeeze(out)
 
 
-def generate_seed(seed, cmbid, bundle=None, extra_tag=None):
+def generate_seed(seed, cmbset, bundle=None, extra_tag=None):
     """Generate random seed."""
-    return int(hashlib.sha256(f"{cmbid}/{seed}/{bundle}/{extra_tag}".encode()).hexdigest()[:8], base=16)
+    return int(hashlib.sha256(f"{cmbset}/{seed}/{bundle}/{extra_tag}".encode()).hexdigest()[:8], base=16)
 
 
 def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):

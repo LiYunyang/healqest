@@ -302,21 +302,29 @@ class Config:
             raise NotImplementedError(f"turning {type(x)} into list is not implemented")
 
     @staticmethod
-    def ktype2ij(ktype, i, j=None) -> (int, int, str, str):
+    def ktype2ij(ktype, i, j=None, cmbset='a') -> (int, int, str, str):
         """
         Convert the 2-letter ktype to seed and cmbset of the two maps
         """
         if j is None and len(set(ktype)) == 2:
             # default `seed2` is `seed1 + 1`
             j = i+1
-        if ktype.lower() in ['xx', 'xy', 'yx', 'x0', '0x']:
+        if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
             # there are special cases for 'xY'/'Xy'/'yX'/'Yx'
-            cmbset1, cmbset2 = 'aa'
+            if len(cmbset) == 1:
+                cmbset1, cmbset2 = cmbset, cmbset
+            else:
+                assert len(cmbset) == 2
+                assert ktype in ['xy', 'yx']
+                if ktype == 'xy':
+                    cmbset1, cmbset2 = cmbset
+                elif ktype == 'yx':
+                    cmbset2, cmbset1 = cmbset
             if ktype == 'xx':
                 seed1, seed2 = i, i
-            elif ktype.lower() == 'xy':
+            elif ktype == 'xy':
                 seed1, seed2 = i, j
-            elif ktype.lower() == 'yx':
+            elif ktype == 'yx':
                 seed1, seed2 = j, i
             elif ktype == 'x0':
                 seed1, seed2 = i, 0
@@ -569,7 +577,7 @@ class Config:
         return self.path(self.cinvdir, subdir, fname)
 
     def p_plm(self, tag=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None,
-              bundle=None):
+              bundle=None, cmbset=None):
         """
         Return paths to plm(stacked) files.
 
@@ -600,11 +608,16 @@ class Config:
                 fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
         else:
             subdir = f"{subdir}/stack"
-            fname = f'plmstack_{tag}_{stack_type}.{suffix}'
+            if stack_type in ['xx', 'xy', 'yx', 'x0', '0x']:
+                # specify the actual cmbset if using the "xy" notation.
+                fname = f'plmstack_{tag}_{stack_type}_{cmbset}.{suffix}'
+            else:
+                fname = f'plmstack_{tag}_{stack_type}.{suffix}'
+
         out = self.path(self.recdir, subdir, fname)
         return out
 
-    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False):
+    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False, cmbset='a'):
         """paths to power spectra files."""
         subdir = 'cls'
         if SAN0:
@@ -616,11 +629,11 @@ class Config:
             subdir = 'cls/lensrec_N1'
         if coadd:
             subdir = subdir.replace('cls', 'cls_coadd')
-        s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2)
+        s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2, cmbset=cmbset)
         tag1 = f"{s1}{c1}_{s2}{c2}"
         if ktype2 is not None:
             # assert set(ktype1) == set(ktype2)
-            s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2)
+            s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2, cmbset=cmbset)
             tag2 = f"{s1}{c1}_{s2}{c2}"
             fname = f'clkk_k{tag}_{tag1}_{tag2}.{ext}'
         else:
@@ -640,7 +653,7 @@ class Config:
         return self.path(self.recdir, 'index.npz')
 
     @staticmethod
-    def f_tmp(tag, seed1=None, seed2=None, ktype=None, N1=False, mf_group=0, bundle=None):
+    def f_tmp(tag, seed1=None, seed2=None, cmbset1=None, cmbset2=None, ktype=None, N1=False, mf_group=0, bundle=None):
         """
         Return file name of a temprary file for kappa maps.
 
@@ -649,6 +662,7 @@ class Config:
         tag: str
             qe or a mvtype, e.g. "TT"/"qMV"/"GMV"/"PP"
         seed1, seed2: int
+        cmbset1, cmbset2: str
         ktype: str
             2-letter string
         N1: bool=False
@@ -659,7 +673,7 @@ class Config:
 
         bundle_tag = f'_{Config.bundle2str(bundle)}' if bundle is not None else ''
         N1_tag = '_N1' if N1 else ''
-        return os.path.join(f"kmap_{tag}{bundle_tag}_{seed1}_{seed2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp")
+        return os.path.join(f"kmap_{tag}{bundle_tag}_{seed1}{cmbset1}_{seed2}{cmbset2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp")
 
 
 class MapsBase(abc.ABC):
@@ -668,15 +682,15 @@ class MapsBase(abc.ABC):
         pass
 
     @abc.abstractmethod
-    def get_tmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
-        """Get T map for the given seed and cmbid.
+    def get_tmap(self, seed, cmbset, bundle, add_noise=True, apply_tf=False, g=None):
+        """Get T map for the given seed and cmbset.
 
         Parameters
         ----------
         seed: int
             Seed for the map. "0" is reserved for data maps.
-        cmbid: int
-            cmbid for the map. This is used to distinguish different CMB sets.
+        cmbset: str
+            cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
         bundle: int
             integer number from 0--`config.nbundle`-1.
         add_noise: bool=False
@@ -689,20 +703,20 @@ class MapsBase(abc.ABC):
         Returns
         -------
         np.ndarray
-            T map for the given seed and cmbid, shape (npix, ).
+            T map for the given seed and cmbset, shape (npix, ).
         """
         pass
 
     @abc.abstractmethod
-    def get_pmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
-        """Get Q/U map for the given seed and cmbid.
+    def get_pmap(self, seed, cmbset, bundle, add_noise=True, apply_tf=False, g=None):
+        """Get Q/U map for the given seed and cmbset.
 
         Parameters
         ----------
         seed: int
             Seed for the map. "0" is reserved for data maps.
-        cmbid: int
-            cmbid for the map. This is used to distinguish different CMB sets.
+        cmbset: str
+            cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
         bundle: int
             integer number from 0--`config.nbundle`-1.
         add_noise: bool=False
@@ -715,132 +729,8 @@ class MapsBase(abc.ABC):
         Returns
         -------
         np.ndarray
-            Q/U map for the given seed and cmbid, shape (2, npix).
+            Q/U map for the given seed and cmbset, shape (2, npix).
         """
-        pass
-
-
-class Maps(MapsBase):
-    def __init__(self, nside, file_data_tmp, file_signal_tmp, lmax=None, file_noise_tmp=None, tf2d=None,
-                 config=None, N1=False):
-        """
-        Maps class for loading maps as simulation/cinv input
-
-        Parameters
-        ----------
-        nside: int
-            Nside for the maps
-        file_signal_tmp: str
-            Format string that expects {seed}, {cmbid}, and ({bundle}) substitutions. This points to signal alm files.
-        file_noise_tmp: str=None
-            String or format string that expects {seed}, {cmbid}, and {bundle} substitutions. This points to noise
-            alm files.
-        tf2d: np.array=None
-            2d TF in alm space
-        config: Config=None
-        N1: bool=False
-            Specify if these maps are for N1-type or std sims. This is only relevant for noise seed generations if
-            `file_noise` is not given.
-        """
-        self.nside = nside
-        self.file_data_tmp = file_data_tmp
-        self.file_cmb_tmp = file_signal_tmp
-        self.file_noise_tmp = file_noise_tmp
-        self.tf2d = tf2d
-        self.config = config
-        self.field = config.field
-        self.N1 = N1
-        self.lmax = lmax
-
-    @classmethod
-    def from_config(cls, config: Config, N1=False):
-        if not N1:
-            _file_signal, _file_noise = config.file_slm, config.file_nlm
-            _file_signal0 = config.file_slm0 if config.file_slm0 else _file_signal
-        else:
-            _file_signal, _file_noise = config.file_slm_N1, config.file_nlm_N1
-            _file_signal0 = None
-        return cls(
-            nside=config.nside,
-            file_data_tmp=_file_signal0,
-            file_signal_tmp=_file_signal,
-            file_noise_tmp=_file_noise,
-            config=config,
-            # tf2d=config.tfbl_2d,
-            N1=N1, lmax=config.cinv_lmax,
-        )
-
-    def _get_maps(self, pol, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
-        """Load sim T or E/B signal and noise map separately and add"""
-        assert pol in ['t', 'p', 'tp']
-        hdu = dict(t=[1], p=[2, 3], tp=[1,2,3])[pol]
-        if seed == 0:
-            add_noise = False
-            f_slm = self.config.path(self.file_data_tmp, cmbid=cmbid, bundle=bundle, field=self.field)
-        else:
-            f_slm = self.config.path(self.file_cmb_tmp, seed=seed, cmbid=cmbid, bundle=bundle, field=self.field)
-        logger.debug(f"loading signal sim from {f_slm}")
-        try:
-            alms = hq.reduce_lmax(np.atleast_2d(hp.read_alm(f_slm, hdu=hdu)), lmax=self.lmax)
-        except (ValueError, IndexError):
-            logger.warning(f"reading map as alm failed, trying reading as maps.")
-            maps = hq.read_map(f_slm, field=np.array(hdu)-1, dtype=np.float64, use_hp=False)
-            alms = g.map2alm(maps, lmax=self.lmax, pol=True, check=False)
-
-        if self.config.tf1d is not None:
-            logger.warning(f"cutting lmin at {self.config.tf_lc}")
-            for i in range(alms.shape[0]):
-                hp.almxfl(alms[i], self.config.tf1d, inplace=True)
-
-        if apply_tf:
-            logger.info("Applying tf")
-            assert self.tf2d is not None
-            alms *= self.tf2d
-        else:
-            pass
-
-        if add_noise:
-
-            if self.file_noise_tmp is not None:
-                f_nlm = self.config.path(self.file_noise_tmp, seed=seed, cmbid=cmbid, bundle=bundle,
-                                         field=self.field)
-                logger.info(f"Adding noise: {f_nlm}")
-                nlm = hp.read_alm(f_nlm, hdu=hdu)
-                alms += nlm
-                del nlm
-            else:
-                if 't' in pol:
-                    alms[0] += hq.reduce_lmax(self.add_noise_t(seed=seed, cmbid=cmbid, bundle=bundle,
-                                                                  N1=self.N1), lmax=self.lmax)
-                if 'p' in pol:
-                    alms[-2:] += hq.reduce_lmax(self.add_noise_p(seed=seed, cmbid=cmbid, bundle=bundle,
-                                                                    N1=self.N1), lmax=self.lmax)
-        else:
-            pass
-
-        if g is None:
-            logger.warning("using healpy alm2map")
-            if pol == 'p':
-                return hp.alm2map_spin(alms, nside=self.nside, spin=2, lmax=hp.Alm.getlmax(alms.shape[-1]))
-            else:
-                return hp.alm2map(alms, nside=self.nside, lmax=hp.Alm.getlmax(alms.shape[-1]))
-        else:
-            return g.alm2map(alms)
-
-    def get_pmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
-        return self._get_maps('p', seed=seed, cmbid=cmbid, bundle=bundle, add_noise=add_noise,
-                              apply_tf=apply_tf, g=g)
-
-    def get_tmap(self, seed, cmbid, bundle, add_noise=True, apply_tf=False, g=None):
-        return self._get_maps('t', seed=seed, cmbid=cmbid, bundle=bundle, add_noise=add_noise,
-                              apply_tf=apply_tf, g=g)
-
-    @staticmethod
-    def add_noise_t(seed, cmbid, bundle, N1) -> np.ndarray:
-        pass
-
-    @staticmethod
-    def add_noise_p(seed, cmbid, bundle, N1) -> np.ndarray:
         pass
 
 

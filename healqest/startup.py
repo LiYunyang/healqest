@@ -109,6 +109,7 @@ class Config:
     nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
     cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
+    fmask_cinv: Union[str, list[str]] = None  # path(s) to mask used for cinv
 
     # === lensrec ===
     rectype: str  # [sqe,gmv,mh,xilc,gmvph]
@@ -512,6 +513,14 @@ class Config:
             else:
                 mask *= _mask
         return mask
+
+    @cached_property
+    def mask_cinv(self):
+        if self.fmask_cinv:
+            return dict(t=self._load_mask(self.fmask_cinv, field=0),
+                        p=self._load_mask(self.fmask_cinv, field=1))
+        else:
+            raise ValueError('cinv mask must be provided!')
 
     @cached_property
     def mask_qe(self):

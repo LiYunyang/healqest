@@ -1923,3 +1923,20 @@ def dec2tf2d(lx, dec1, dec2):
     m1 = int(np.floor(lx * np.sin(np.pi / 2 - np.deg2rad(-dec1))))
     k = np.sin(np.pi / 2 - np.deg2rad(-dec2))
     return lx, m1, k
+
+
+def write_cl(fname, cl, header=None):
+    """ Write cl into text file."""
+    cl = np.atleast_2d(cl)
+    lmax = cl.shape[1] - 1
+    out = [np.arange(lmax + 1)]
+    fmt = ['%6d']
+    for i in range(cl.shape[0]):
+        fmt.append('%12.5E')
+        out.append(cl[i])
+
+    if header is None and cl.shape[0]==6:
+        header = ' ell'
+        for _ in ['TT', 'EE', 'BB', 'TE', 'EB', 'TB']:
+            header += ' '*11 + _
+    np.savetxt(fname, np.array(out).T, fmt=fmt, header=header)

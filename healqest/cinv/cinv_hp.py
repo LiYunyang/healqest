@@ -752,7 +752,6 @@ class library_jTP(object):
     def _get_alms(self, a, seed, cmbset, bundle):
         assert a in ["t", "e", "b", "teb"]
 
-
         T = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
         Q, U = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
         if self.soltn_lib is None:

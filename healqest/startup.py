@@ -86,7 +86,6 @@ class Config:
     dec_range: Union[list, dict] = None
     save_as_map: bool = False  # save plm as map, otherwise as alm.
     nbundle: int = None  # number of bundles, if any.
-    tf_lc: int=2  # the ell-cut in transfer functions. This will be used in sims and added to tf1d/tf2d for cinv.
 
     # === cinv ===
     eps_t: float  # convergence threshold for cinv T component
@@ -95,6 +94,7 @@ class Config:
     cinv_lmin: int = None  # minimum l for cinv
     cinv_mmin: int = None  # minimum m for cinv
     file_bl: str  # path to beam file.
+    file_tf1d: Union[str, int] = None  # path to tf1d file. If a tf2d file is given, it will compute tf1d from it. If a integer is given, this is interpreted as a l_cut.
     file_tf2d: Union[str, list] = None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
     lx_cut: int=None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still be used for effective 1d beam)
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
@@ -421,19 +421,6 @@ class Config:
     @cached_property
     def tf2d(self) -> Union[dict, None]:
         """Return a 2d TFxbl functions for T/E/B"""
-        def _regularize_tf2d(tf):
-            """Regularize the tf2d to be in [0, 1]"""
-            tf = np.maximum(np.minimum(tf, 1), 0)
-            tf[np.isnan(tf)] = 0
-            tf = hq.reduce_lmax(tf, self.cinv_lmax)
-            if self.cinv_lmin or self.cinv_mmin:
-                _ell, _emm = hp.Alm.getlm(lmax=self.cinv_lmax)
-                if self.cinv_lmin:
-                    tf[_ell < self.cinv_lmin] = 0
-                if self.cinv_mmin:
-                    tf[_emm<self.cinv_mmin] = 0
-            return tf
-
         if self.file_tf2d:
             if isinstance(self.file_tf2d, (list, tuple)):
                 l, m = self.file_tf2d
@@ -443,16 +430,16 @@ class Config:
                 alm_mask[emm<m] = 0
                 _, _, k = hq.dec2tf2d(0, *self.dec_range)
                 alm_mask[emm>k*ell] = 0
-                alm_mask = _regularize_tf2d(alm_mask)
+                alm_mask = self._regularize_tf2d(alm_mask)
                 return dict(t=alm_mask.copy(), p=alm_mask.copy())
             else:
                 loaded = np.load(self.path(self.file_tf2d, field=self.field))
                 if 'tf2d_t' in loaded.files:
-                    return dict(t=_regularize_tf2d(loaded['tf2d_t']),
-                                p=_regularize_tf2d(loaded['tf2d_p']))
+                    return dict(t=self._regularize_tf2d(loaded['tf2d_t']),
+                                p=self._regularize_tf2d(loaded['tf2d_p']))
                 else:
-                    return dict(t=_regularize_tf2d(loaded['tf2d']),
-                                p=_regularize_tf2d(loaded['tf2d']))
+                    return dict(t=self._regularize_tf2d(loaded['tf2d']),
+                                p=self._regularize_tf2d(loaded['tf2d']))
         else:
             logger.warning("No 2d TF given.")
             return None
@@ -462,13 +449,12 @@ class Config:
         assert s in ['t', 'p']
         if self.tf2d:
             logger.info("computing 1d TFxbl from 2d TFxbl")
-            _, _, k = hq.dec2tf2d(0, *self.dec_range)
-            out = np.sqrt(hp.alm2cl(self.tfbl_2d(s))/k)
+            out = self._tf2d2tf1d(self.tfbl_2d(s), self.dec_range)
         else:
             out = self.bl[s].copy()
             if self.tf1d is not None:
                 logger.info("computing 1d TFxbl from 1d bl and 1d tf")
-                out *= self.tf1d
+                out *= self.tf1d[s]
         return out
 
     def tfbl_2d(self, s) -> Union[np.ndarray, None]:
@@ -477,7 +463,25 @@ class Config:
         if self.tf2d is None:
             return None
         else:
-            return hp.almxfl(self.tf2d[s], self.bl[s])
+            return np.array(hp.almxfl(self.tf2d[s], self.bl[s]))
+
+    @staticmethod
+    def _tf2d2tf1d(tf2d, dec_range):
+        _, _, k = hq.dec2tf2d(0, *dec_range)
+        return np.sqrt(hp.alm2cl(tf2d.astype(complex))/k)
+
+    def _regularize_tf2d(self, tf):
+        """Regularize the tf2d to be in [0, 1]"""
+        tf = np.maximum(np.minimum(tf, 1), 0)
+        tf[np.isnan(tf)] = 0
+        tf = hq.reduce_lmax(tf, self.cinv_lmax)
+        if self.cinv_lmin or self.cinv_mmin:
+            _ell, _emm = hp.Alm.getlm(lmax=self.cinv_lmax)
+            if self.cinv_lmin:
+                tf[_ell<self.cinv_lmin] = 0
+            if self.cinv_mmin:
+                tf[_emm<self.cinv_mmin] = 0
+        return tf
 
     @cached_property
     def tf1d(self) -> np.ndarray | None:
@@ -488,10 +492,31 @@ class Config:
         ----
         This is separate from `tfbl_1d` because when used for simulation, we might only want to apply this.
         """
-        if self.tf_lc:
-            out = np.ones(self.cinv_lmax+1)
-            out[:self.tf_lc] = 0
-            return out
+        if self.file_tf1d is None:
+            return None
+
+        if self.file_tf1d:
+            if isinstance(self.file_tf1d, int):
+                out = np.ones(self.cinv_lmax+1)
+                out[:self.file_tf1d] = 0
+                return dict(t=out.copy(), p=out.copy())
+            elif isinstance(self.file_tf1d, str):
+                fname, ext = os.path.splitext(self.file_tf1d)
+                if ext == '.npz':
+                    loaded = np.load(self.path(self.file_tf1d, field=self.field))
+                    logger.warning("tf1d file is tf2d, converting to tf1d...")
+                    if 'tf2d_t' in loaded.files:
+                        tf_t = self._regularize_tf2d(loaded['tf2d_t'])
+                        tf_p = self._regularize_tf2d(loaded['tf2d_p'])
+                    else:
+                        tf_t = tf_p = self._regularize_tf2d(loaded['tf2d'])
+                    tf_t = self._tf2d2tf1d(tf_t, self.dec_range)
+                    tf_p = self._tf2d2tf1d(tf_p, self.dec_range)
+                    return dict(t=tf_t, p=tf_p)
+                elif ext == '.npy':
+                    raise NotImplementedError("npy tf1d is not supported yet, please use npz format.")
+            else:
+                raise ValueError("file_tf1d must be either int or str")
         else:
             return None
 

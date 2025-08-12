@@ -1722,64 +1722,67 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
         else:
             return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
 
-    if os.path.splitext(fname)[1] == '.npy':
-        """load npy partial maps with index stored in parent directories"""
-        idx_dir = fname
-        c = 3
-        while c > 0:
-            idx_dir = os.path.dirname(idx_dir)
-            try:
-                loaded = np.load(os.path.join(idx_dir, 'index.npz'))
-                break
-            except FileNotFoundError:
-                c -= 1
-        else:
-            raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
-        index = loaded['index']
-        m = np.load(fname, mmap_mode='r')
-        if field is None:
-            field = np.arange(m.shape[0])
-        out = _allocate(nside=loaded['nside'])
-
-        for idx, j in enumerate(field):
-            out[idx, index] = m[j]
-        return np.squeeze(out)
-    else:
-        """load fits partial maps"""
-        from astropy.io import fits
-        with fits.open(fname, memmap=True) as hdul:
-            names = hdul[hdu].columns.names.copy()
-            try:
-                # for partial maps, we skip the index column
-                names.remove('PIXEL')
-            except ValueError:
-                pass
-            fields_num = []
-            fields_name = []
-            if field is None:
-                field = names
-            for c in field:
-                if isinstance(c, str):
-                    if c in names:
-                        fields_num.append(names.index(c))
-                        fields_name.append(c)
-                    else:
-                        raise ValueError(f"Column {c} not found in the FITS file: {names}")
-                elif isinstance(c, (int, np.integer)):
-                    fields_num.append(c)
-                    fields_name.append(names[c])
-                else:
-                    raise TypeError(f"field {c} ({type(c)})?")
-            if use_hp:
-                return hp.read_map(fname, field=tuple(fields_num), dtype=dtype, hdu=hdu, h=h, partial=partial)
+    try:
+        if os.path.splitext(fname)[1] == '.npy':
+            """load npy partial maps with index stored in parent directories"""
+            idx_dir = fname
+            c = 3
+            while c > 0:
+                idx_dir = os.path.dirname(idx_dir)
+                try:
+                    loaded = np.load(os.path.join(idx_dir, 'index.npz'))
+                    break
+                except FileNotFoundError:
+                    c -= 1
             else:
-                out = _allocate(nside=int(dict(hdul[hdu].header)['NSIDE']))
-                for j, name in enumerate(fields_name):
-                    out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]
-                if h:
-                    return np.squeeze(out), hdul[hdu].header
+                raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
+            index = loaded['index']
+            m = np.load(fname, mmap_mode='r')
+            if field is None:
+                field = np.arange(m.shape[0])
+            out = _allocate(nside=loaded['nside'])
+
+            for idx, j in enumerate(field):
+                out[idx, index] = m[j]
+            return np.squeeze(out)
+        else:
+            """load fits partial maps"""
+            from astropy.io import fits
+            with fits.open(fname, memmap=True) as hdul:
+                names = hdul[hdu].columns.names.copy()
+                try:
+                    # for partial maps, we skip the index column
+                    names.remove('PIXEL')
+                except ValueError:
+                    pass
+                fields_num = []
+                fields_name = []
+                if field is None:
+                    field = names
+                for c in field:
+                    if isinstance(c, str):
+                        if c in names:
+                            fields_num.append(names.index(c))
+                            fields_name.append(c)
+                        else:
+                            raise ValueError(f"Column {c} not found in the FITS file: {names}")
+                    elif isinstance(c, (int, np.integer)):
+                        fields_num.append(c)
+                        fields_name.append(names[c])
+                    else:
+                        raise TypeError(f"field {c} ({type(c)})?")
+                if use_hp:
+                    return hp.read_map(fname, field=tuple(fields_num), dtype=dtype, hdu=hdu, h=h, partial=partial)
                 else:
-                    return np.squeeze(out)
+                    out = _allocate(nside=int(dict(hdul[hdu].header)['NSIDE']))
+                    for j, name in enumerate(fields_name):
+                        out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]
+                    if h:
+                        return np.squeeze(out), hdul[hdu].header
+                    else:
+                        return np.squeeze(out)
+    except Exception as e:
+        raise e from IOError(f"Error reading file: {fname}")
 
 
 def generate_seed(seed, cmbset, bundle=None, extra_tag=None):
@@ -1940,3 +1943,12 @@ def write_cl(fname, cl, header=None):
         for _ in ['TT', 'EE', 'BB', 'TE', 'EB', 'TB']:
             header += ' '*11 + _
     np.savetxt(fname, np.array(out).T, fmt=fmt, header=header)
+
+
+def verify_fits(fname, nhdu=1):
+    for i in range(nhdu):
+        try:
+            fits.open(fname, checksum=True, verify='exception')[i+1].data
+        except Exception as e:
+            raise e from FileExistsError(f"{fname} is not a valid FITS file or has a corrupted header/data.")
+    return True

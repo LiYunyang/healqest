@@ -398,7 +398,7 @@ class Geometry:
 
 class GeometryTF:
     """Extends the Geometry class to apply a (theta-dependent) filter."""
-    def __init__(self, geom, ipix, lx_cut=0, m_cut=0, m_apodeg=0):
+    def __init__(self, geom, ipix=None, lx_cut=0, m_cut=0, m_apodeg=0):
         assert geom.ofs[0] == np.min(geom.ofs)
         self.g = geom
         self.lx_cut = lx_cut
@@ -408,8 +408,10 @@ class GeometryTF:
             m_apodeg = 0
         self.m_cut = m_cut
         self.m_apodeg = m_apodeg
-        self.ipix = ipix
-        self.tf_pix = ipix-self.g.ofs[0]  # internal index to map from reduced pix to full pixels.
+        self.ipix = None
+        self.tf_pix = None
+        if ipix is not None:
+            self.set_ipix(ipix)
 
         assert self.m_apodeg==0, 'need to reimplement that, it was not working well anyways'
         ms_min = np.int_(self.lx_cut*np.sin(np.minimum(self.g.theta + self.m_apodeg*np.pi/180., np.pi)))
@@ -419,6 +421,12 @@ class GeometryTF:
         mcuts_min = np.maximum(mcuts_min, 0)
         self.mi = mcuts_min
         self.ma = mcuts_max
+
+    def set_ipix(self, ipix):
+        """delayed setting of the pixels"""
+        self.ipix = ipix
+        self.tf_pix = ipix - self.g.ofs[0]  # internal index to map from reduced pix to full pixels.
+        assert all(self.tf_pix >= 0)
 
     @cached_property
     def ofs(self):
@@ -461,6 +469,9 @@ class GeometryTF:
         nthreads = get_nthreads(nthreads)
         kw = dict(nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
         if self.lx_cut>0 or self.m_cut>0:
+            # if nmaps <= 3 and maps.dtype == np.float64:
+            #     _maps = self.buffer3d[:nmaps]
+            # else:
             _maps = np.zeros((nmaps, self.npix), dtype=maps.dtype)
             _maps[:, self.tf_pix] = maps[:, self.ipix]
             legs = ducc0.sht.map2leg(map=_maps, mmax=np.max(self.ma), **kw)
@@ -491,6 +502,28 @@ class GeometryTF:
     def filter_maps(self, maps, nthreads=None):
         """Apply lx cut to maps of shape (1,2,3) for T/QU/TQU. [inplace]"""
         return self.apply_map(np.atleast_2d(maps), nthreads=nthreads)
+
+    def filter_maps_partial(self, maps, nthreads=None):
+        """"fast filtering of a 1d partial maps (only pixels defined by self.ipix)"""
+        nthreads = get_nthreads(nthreads)
+        assert maps.ndim == 1
+        kw = dict(nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
+        if self.lx_cut>0 or self.m_cut>0:
+            _maps = self.buffer
+            _maps[0, self.tf_pix] = maps
+            legs = ducc0.sht.map2leg(map=_maps, mmax=np.max(self.ma), **kw)
+            self._cut_ms(legs)
+            cut_map = ducc0.sht.leg2map(leg=legs, **kw).squeeze(axis=0)
+            maps -= cut_map[self.tf_pix]
+        return maps
+
+    @cached_property
+    def buffer(self):
+        return np.zeros((1, self.npix), dtype=np.float64)
+
+    @cached_property
+    def buffer3d(self):
+        return np.zeros((3, self.npix), dtype=np.float64)
 
 
 def map2lens(maps, plm, g=None, **kwargs):

@@ -3,6 +3,7 @@ from functools import cached_property
 import os
 import warnings
 import numpy as np
+import numba
 import healpy as hp
 import ducc0
 from packaging import version
@@ -396,6 +397,20 @@ class Geometry:
         return maps_out
 
 
+@numba.njit(fastmath=True, parallel=False)
+def fast_subtract(maps, cut_map, ipix, tf_pix):
+    for i in numba.prange(maps.shape[0]):
+        for j in range(ipix.size):
+            maps[i, ipix[j]] -= cut_map[i, tf_pix[j]]
+
+
+@numba.njit(fastmath=True, parallel=False)
+def fast_assign(src, dst, ipix, tf_pix):
+    for i in numba.prange(src.shape[0]):  # Parallel over rows
+        for j in range(ipix.size):        # Sequential over columns
+            dst[i, tf_pix[j]] = src[i, ipix[j]]
+
+
 class GeometryTF:
     """Extends the Geometry class to apply a (theta-dependent) filter."""
     def __init__(self, geom, ipix=None, lx_cut=0, m_cut=0, m_apodeg=0):
@@ -457,27 +472,32 @@ class GeometryTF:
         alms = self.g.map2alm(maps, alms=alms, lmax=lmax, nthreads=nthreads, check=False)
         return alms
 
-    def apply_map(self, maps, nthreads=None):
+    def apply_map(self, maps, nthreads=None, fast=True):
         """
         Parameters
         ----------
         maps: array-like, shape (ncomp, 12*nside**2)
         nthreads: int=None
+        fast: bool=True
+            use the fast algorithm for array value assignment.
         """
         assert maps.ndim==2, maps.shape
         nmaps, npix = maps.shape
         nthreads = get_nthreads(nthreads)
         kw = dict(nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
         if self.lx_cut>0 or self.m_cut>0:
-            # if nmaps <= 3 and maps.dtype == np.float64:
-            #     _maps = self.buffer3d[:nmaps]
-            # else:
             _maps = np.zeros((nmaps, self.npix), dtype=maps.dtype)
-            _maps[:, self.tf_pix] = maps[:, self.ipix]
+            if fast:
+                fast_assign(maps, _maps, self.ipix, self.tf_pix)
+            else:
+                _maps[:, self.tf_pix] = maps[:, self.ipix]
             legs = ducc0.sht.map2leg(map=_maps, mmax=np.max(self.ma), **kw)
             self._cut_ms(legs)
             cut_map = ducc0.sht.leg2map(leg=legs, **kw)
-            maps[:, self.ipix] -= cut_map[:, self.tf_pix]
+            if fast:
+                fast_subtract(maps, cut_map, self.ipix, self.tf_pix)
+            else:
+                maps[:, self.ipix] -= cut_map[:, self.tf_pix]
         return maps
 
     def apply(self, alms, nthreads=None):

@@ -886,7 +886,7 @@ class Qest(qest):
 
         return self.glm[qe], self.clm[qe]
 
-    def get_aresp(self, flX, flY, qe1=None, qe2=None, u=None):
+    def get_aresp(self, flX, flY, qe1=None, qe2=None, u=None, fast=False, curl=False):
         """
         Compute analytical response function for 1D filtering
 
@@ -898,7 +898,10 @@ class Qest(qest):
           First estimator
         qe2: string
           Second estimator; if None, assumes it is the same as qe1
-
+        fast: bool=False
+            If True, uses the fast response function calculation.
+        curl: bool=False
+            If True, `qe1` and `qe2` are suffixed with `curl` to compute curl-mode response.
         Returns
         ----------
         aresp:
@@ -911,12 +914,11 @@ class Qest(qest):
         qeXY = weights.weights_plus(qe1, self.cls, self.lmax, u=u)
 
         if qe2 is None or qe2 == qe1:
-            qeZA = None
+            qeZA = qeXY
         else:
             qeZA = weights.weights_plus(qe2, self.cls, self.lmax, u=u)
 
-        aresp = resp.fill_resp(qeXY, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, qeZA=qeZA)
-
+        aresp = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
         return aresp
 
     def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='TTprf'):

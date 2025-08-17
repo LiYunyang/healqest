@@ -660,7 +660,8 @@ class Config:
         out = self.path(self.recdir, subdir, fname)
         return out
 
-    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False, cmbset='a'):
+    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False, cmbset='a',
+              curl=False):
         """paths to power spectra files."""
         subdir = 'cls'
         if SAN0:
@@ -674,13 +675,14 @@ class Config:
             subdir = subdir.replace('cls', 'cls_coadd')
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2, cmbset=cmbset)
         tag1 = f"{s1}{c1}_{s2}{c2}"
+        gc_tag = 'k' if not curl else 'c'
         if ktype2 is not None:
             # assert set(ktype1) == set(ktype2)
             s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2, cmbset=cmbset)
             tag2 = f"{s1}{c1}_{s2}{c2}"
-            fname = f'clkk_k{tag}_{tag1}_{tag2}.{ext}'
+            fname = f'clkk_{gc_tag}{tag}_{tag1}_{tag2}.{ext}'
         else:
-            fname = f'clkk_k{tag}_{tag1}_cross.{ext}'
+            fname = f'clkk_{gc_tag}{tag}_{tag1}_cross.{ext}'
         out = self.path(self.outdir, subdir, fname)
         return out
 
@@ -696,7 +698,8 @@ class Config:
         return self.path(self.recdir, 'index.npz')
 
     @staticmethod
-    def f_tmp(tag, seed1=None, seed2=None, cmbset1=None, cmbset2=None, ktype=None, N1=False, mf_group=0, bundle=None):
+    def f_tmp(tag, seed1=None, seed2=None, cmbset1=None, cmbset2=None, ktype=None, N1=False, mf_group=0,
+              bundle=None, curl=False):
         """
         Return file name of a temprary file for kappa maps.
 
@@ -712,11 +715,13 @@ class Config:
             Indicator for N1-type maps.
         mf_group: int=0
         bundle: int=None
+        curl: bool=False
         """
 
         bundle_tag = f'_{Config.bundle2str(bundle)}' if bundle is not None else ''
         N1_tag = '_N1' if N1 else ''
-        return os.path.join(f"kmap_{tag}{bundle_tag}_{seed1}{cmbset1}_{seed2}{cmbset2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp")
+        prefix = 'kmap_grad' if not curl else 'kmap_curl'
+        return f"{prefix}_{tag}{bundle_tag}_{seed1}{cmbset1}_{seed2}{cmbset2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp"
 
 
 class MapsBase(abc.ABC):

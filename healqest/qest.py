@@ -911,12 +911,12 @@ class Qest(qest):
         if qe1 is None:
             assert 0, "qe1 must be defined"
 
-        qeXY = weights.weights_plus(qe1, self.cls, self.lmax, u=u)
+        qeXY = weights.weights_plus(qe1 if not curl else f'{qe1}curl', self.cls, self.lmax, u=u)
 
         if qe2 is None or qe2 == qe1:
             qeZA = qeXY
         else:
-            qeZA = weights.weights_plus(qe2, self.cls, self.lmax, u=u)
+            qeZA = weights.weights_plus(qe2 if not curl else f'{qe2}curl', self.cls, self.lmax, u=u)
 
         aresp = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
         return aresp

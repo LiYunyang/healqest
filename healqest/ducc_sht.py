@@ -255,9 +255,6 @@ class Geometry:
             lmax0 = None
         maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
         nmaps = maps.shape[0]
-        # dtype = maps.dtype
-        # assert dtype in [np.float32, np.float64]
-        # ctype = np.complex64 if dtype == np.float32 else np.complex128
         kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
         if alms is None:
             alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype])
@@ -313,9 +310,6 @@ class Geometry:
         alms = np.atleast_2d(alms)
         nmaps = alms.shape[0]
 
-        # ctype = alms.dtype
-        # assert ctype in [np.complex64, np.complex128]
-        # dtype = np.float64 if ctype == np.complex128 else np.float32
         if maps is None:
             maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=rtype[alms.dtype])
         else:
@@ -347,9 +341,7 @@ class Geometry:
             maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
             nmaps = maps.shape[0]
             assert nmaps == 2, "spin function only accepts 2 maps"
-            # dtype = maps.dtype
-            # assert dtype in [np.float32, np.float64]
-            # ctype = np.complex64 if dtype == np.float32 else np.complex128
+
             kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
             func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
             alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype])
@@ -369,9 +361,6 @@ class Geometry:
             alms = np.atleast_2d(alms)
             nmaps = alms.shape[0]
             assert nmaps == 2, "spin function only accepts 2 maps"
-            # ctype = alms.dtype
-            # assert ctype in [np.complex64, np.complex128]
-            # dtype = np.float64 if ctype == np.complex128 else np.float32
             if maps is None:
                 maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=rtype[alms.dtype])
             else:

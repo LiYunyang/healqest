@@ -723,6 +723,19 @@ class Config:
         prefix = 'kmap_grad' if not curl else 'kmap_curl'
         return f"{prefix}_{tag}{bundle_tag}_{seed1}{cmbset1}_{seed2}{cmbset2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp"
 
+    def unpack(self, dir='cls'):
+        import tarfile
+        for suffix in ['tar.gz', 'tar']:
+            fname = self.path(self.outdir, f"{dir}.{suffix}")
+            if os.path.exists(fname):
+                logger.info(f"unpack the tarball: {fname}")
+                with tarfile.open(fname, "r") as tar:
+                    tar.extractall(path=self.path(self.outdir))
+                os.remove(fname)
+                logger.info(f"Removing the tarball: {fname}")
+        else:
+            logger.info(f"tarball not found!")
+
 
 class MapsBase(abc.ABC):
     """Base class for maps, used for testing and as a base for Maps class."""

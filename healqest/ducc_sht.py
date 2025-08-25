@@ -640,3 +640,15 @@ def reduce_lmax(alm, lmax=4000):
         oldi = oldf
         newi = newf
     return almout
+
+
+def alm2mat(alm, lmax=None):
+    if lmax is None:
+        lmax = hp.Alm.getlmax(len(alm))
+    out = np.zeros((lmax + 1, lmax + 1), dtype=alm.dtype)
+    idx = 0
+    for m in range(lmax + 1):
+        n = lmax + 1 - m
+        out[m, m: m + n] = alm[idx: idx + n]
+        idx += n
+    return out

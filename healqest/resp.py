@@ -9,8 +9,7 @@ logger = logging.getLogger(__name__)
 def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY, fast=False):
     """ compute the response of this estimator to the stats anisotropy encapsulated by a second estimator qeZA,
         
-        R(L) = 1/2 \int{d^2 l_X} \int{d_2 l_Y}
-                         W^{XY} W^{ZA} fX(l_X) fY(l_Y).
+        R(L) = 1/2 \int{d^2 l_X} \int{d_2 l_Y} W^{XY} W^{ZA} fX(l_X) fY(l_Y).
     with l_X+l_Y=L and fX(l_X) fY(l_y) represent filters which are
     diagonal in Fourier space applied to the X and Y fields.
     dividing the output of self.eval() by this response gives a properly
@@ -116,7 +115,8 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA
             # multiply and return to cl space
             clL = glq.cl_from_cf(lmax, qeXY.s[i][2], -(-1)**(conj_ZA)*qeZA.s[j][2], gp1*gp2)
             parity = np.abs(np.sum(list(qeXY.s[i].values()))+(-1)**(conj_ZA)*np.sum(list(qeZA.s[j].values())))
-            assert parity %2 ==0  # the parity is always even given the lensing symmetry
+            if fast:
+                assert parity %2 ==0, parity  # the parity is always even given the lensing symmetry
             for L in range(0, lmax + 1):
                 y = clL[L]*qeXY.w[i][2][L]*cfunc_ZA(qeZA.w[j][2][L])/(32.*np.pi)
                 ret[L] += y

@@ -803,7 +803,7 @@ class Qest(qest):
             else:
                 return q, -u
 
-    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=True):
+    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=False):
         """
         Compute quadratic estimator
 
@@ -825,10 +825,8 @@ class Qest(qest):
             If True, the QE results will be loaded from cache if available.
         Returns
         ----------
-        glm: complex
-          Gradient component of the plm
-        clm:
-          Curl component of the plm
+        glm, clm: tuple of complex array
+            Gradient/curl component of the plm
         """
 
         if cache and qe in self.glm:
@@ -846,7 +844,7 @@ class Qest(qest):
         retclm = 0
         if g is not None:
             assert g.nside == self.nside
-
+        assert q.ntrm%2 == 0, f"Number of terms must be even: {q.ntrm}"
         for i in range(0, q.ntrm//2):
             # skipping second half of reducant terms
             wX, wY, wP, sX, sY, sP = q.w[i][0], q.w[i][1], q.w[i][2], q.s[i][0], q.s[i][1], q.s[i][2]
@@ -921,7 +919,7 @@ class Qest(qest):
         aresp = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
         return aresp
 
-    def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='TTprf'):
+    def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='TTprf', curl=False):
         """
         Get the source hardened glm and the response function.
         Need arguments flX, flY in order to compute the analytical response
@@ -944,11 +942,11 @@ class Qest(qest):
         assert qe == 'TT', f"We only harden for qe 'TT', got: {qe}"
 
         ss = self.get_aresp(flX, flY, qe1=qe_hrd, u=u)
-        es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=qe, u=u)
-        ee = self.get_aresp(flX, flY, qe1=qe)
+        es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=qe, u=u, fast=False)
+        ee = self.get_aresp(flX, flY, qe1=qe, curl=curl)
 
-        plm1, _ = self.eval(qe, almbar1, almbar2)
-        plm2, _ = self.eval(qe_hrd, almbar1, almbar2, u)
+        plm1 = self.eval(qe, almbar1, almbar2)[1 if curl else 0]
+        plm2 = self.eval(qe_hrd, almbar1, almbar2, u)[0]
 
         weight = -1 * es / ss
         plm = plm1 + hp.almxfl(plm2, weight)

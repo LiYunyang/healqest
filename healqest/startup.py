@@ -124,6 +124,7 @@ class Config:
     Lmax: int  # maximum reconstruction L
     file_cmb: str  # Path to cmb spectrum used for lensrec
     fmask_qe: Union[str, list[str]] = None  # path(s) to mask used for lensrec
+    profile: str = None  # profile type for hardened estimator for TT.
 
     # === inputs ===
     sim_range: list[int]  # index range (inclusive) of the input alms files
@@ -349,6 +350,12 @@ class Config:
             return hq.get_qes(mvtype)
         elif mvtype in ['TBEB', 'qTBEB', 'TEET','EBBE']:
             return hq.get_qes(mvtype)
+        elif mvtype in ['TTprf']:
+            return hq.get_qes(mvtype)
+        elif mvtype == ['MVprf', 'TTEETEprf']:
+            qes = hq.get_qes(mvtype.strip('prf'))
+            qes[qes.index('TT')] = 'TTprf'
+            return qes
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
 
@@ -519,6 +526,14 @@ class Config:
                 raise ValueError("file_tf1d must be either int or str")
         else:
             return None
+
+    @cached_property
+    def profile_u(self):
+        assert self.profile in ['src', 'tsz']
+        if self.profile == 'src':
+            return np.ones(self.lmax)
+        else:
+            raise NotImplementedError
 
     @cached_property
     def g(self):

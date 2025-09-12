@@ -1176,8 +1176,8 @@ class weights_plus:
         self.ntrm = None
         self.l = np.arange(self.lmax + 1, dtype=np.float64)
 
-        if est in ['TT', 'EE', 'BB', 'TE', 'TB', 'EB', 'T2', 'T1']:
-            self.init_weights(est, sl=sl)
+        if est in ['TT', 'EE', 'BB', 'TE', 'TB', 'EB', 'T2', 'T1', 'TTprf']:
+            self.init_weights(est, sl=sl, u=u)
         elif est in ['TTcurl', 'EEcurl', 'BBcurl', 'TEcurl', 'TBcurl', 'EBcurl', 'T2curl', 'T1curl']:
             self.init_weights(est[:2], sl=sl, curl=True)
         elif est in ['ET', 'BT', 'BE']:
@@ -1240,7 +1240,7 @@ class weights_plus:
             w = np.conj(w)*(-1)**s
         return w, s
 
-    def init_weights(self, est, sl, swap=False, curl=False):
+    def init_weights(self, est, sl, swap=False, curl=False, u=None):
         """
         Initialize weights for the base estimators: TT/EE/BB/TE/TB/EB
 
@@ -1253,6 +1253,7 @@ class weights_plus:
         curl: bool=False
             modify the weights such that "grad" gives the curl estimator and vice versa (off by -1).
         """
+
         if est == 'TT':
             self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['tt'], 1))
             self.add_term(self.w_X01(sl['tt'], 1), self.w_X0('T', conj=False))  # swap 1-2
@@ -1281,6 +1282,8 @@ class weights_plus:
             if 'bb' in sl:
                 self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
                 self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
+        elif est in ['TTprf']:
+            self.add_term(ws1=(u[:self.lmax + 1], 0), ws2=(u[:self.lmax + 1], 0))
         else:
             raise NotImplementedError(f"{est} is not implemented yet")
 
@@ -1290,12 +1293,17 @@ class weights_plus:
                 s = self.s[k]
                 self.w[k][0], self.w[k][1] = w[1], w[0]
                 self.s[k][0], self.s[k][1] = s[1], s[0]
-
-        f3 = np.sqrt(self.l * (self.l+1)) * 0.5
-        # YL doesn't understand the 0.5 factor. But this is consistent with old implementation (also doesn't matter)
-        if curl:
-            f3 = -f3*1j
-        s3 = 1
+        if est in ['TTprf']:
+            # profile hardened estimators for lensing
+            f3 = 1/u[:self.lmax + 1]*0.5  # the 0.5 factor accounts for the second half redundant terms.
+            s3 = 0
+        else:
+            # non-hardened estimators
+            f3 = np.sqrt(self.l*(self.l + 1))*0.5
+            # YL doesn't understand the 0.5 factor. But this is consistent with old implementation (also doesn't matter)
+            if curl:
+                f3 = -f3*1j
+            s3 = 1
 
         for k, w in self.w.items():
             self.w[k][2] = f3
@@ -1321,6 +1329,7 @@ class weights_plus:
         self.w.update(new_w)
         self.s.update(new_s)
         self.ntrm = len(self.w)
+
 
 
 '''

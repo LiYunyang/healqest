@@ -352,8 +352,8 @@ class Config:
             return hq.get_qes(mvtype)
         elif mvtype in ['TTprf']:
             return hq.get_qes(mvtype)
-        elif mvtype == ['MVprf', 'TTEETEprf']:
-            qes = hq.get_qes(mvtype.strip('prf'))
+        elif mvtype in ['MVprf', 'TTEETEprf']:
+            qes = hq.get_qes(mvtype.rstrip('prf'))
             qes[qes.index('TT')] = 'TTprf'
             return qes
         else:
@@ -531,7 +531,7 @@ class Config:
     def profile_u(self):
         assert self.profile in ['src', 'tsz']
         if self.profile == 'src':
-            return np.ones(self.lmax)
+            return np.ones(self.lmax+1)
         else:
             raise NotImplementedError
 

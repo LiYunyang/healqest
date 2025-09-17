@@ -749,7 +749,8 @@ def get_qes(qeset):
         A list of estimators neesed.
     """
 
-    single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT", "TTbhTTprf", "GMVbhTTprf", "GMVTTEETEbhTTprf"}
+    single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT", "TTbhTTprf", "GMVbhTTprf", "GMVTTEETEbhTTprf",
+              'TTprf'}
 
     composite = {
         "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
@@ -777,7 +778,6 @@ def get_qes(qeset):
         "MVTTbhTTprf": ["TTbhTTprf", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
     }
 
-
     if qeset in composite:
         return composite[qeset]
 
@@ -786,7 +786,7 @@ def get_qes(qeset):
         return [qeset]
 
     else:
-        sys.exit("Undefined qeset")
+        raise ValueError(f"Unknown QE set: {qeset}")
 
 
 def get_dvec(

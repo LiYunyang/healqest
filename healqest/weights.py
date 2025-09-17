@@ -1125,51 +1125,29 @@ class weights():
 
 
 class weights_plus:
-    def __init__(self, est, cls, lmax, u=None, totalcls=None, crossilc=False, withT3=False):
+    def __init__(self, est, cls, lmax, u=None):
         """
-        Parameters
-
-        est: estimator name 'TT'/'TE'/'EE', etc.
-        cls: dictionary with keys 'tt','te','ee','bb'
-               spectra (could be lensed cmb spec, XgradX spec etc.) for weights
-        lmax: lmax of Cls for weights
-        u: f(ell) that describe the power spectrum of a foreground or beam function
-               for profile hardening (can be array of 1s)
-        totalcls: signal+noise spectra for GMV weights
-        crossilc: True if temperature map T1 != T2 and we're doing GMV
+        Parameters:
+        -----------
+        est: str
+            estimator name 'TT'/'TE'/'EE', etc.
+        cls: dict
+            CMB spectra for weights, with keys 'tt','te','ee','bb'.
+        lmax: int
+            lmax of Cls for weights
+        u: array
+            f(ell) that describe the power spectrum of a foreground or beam function for profile hardening (can be
+            array of 1s)
         """
 
-        if est in ['TTprf', 'TT_GMV_PRF', 'EE_GMV_PRF', 'TE_GMV_PRF', 'ET_GMV_PRF', 'ET_GMV_PRF', 'TTmask',
-                   'TTnoise']:
+        if est in ['TTprf',]:
             assert u is not None, "Must provide u(ell)"
-        if crossilc and totalcls is not None:
-            assert totalcls.shape[1] == 11, ("If temperature map T1 != T2, must provide corresponding spectra for "
-                                             "each T map")
 
         self.lmax = lmax
 
         logger.debug('Computing weights -- cmblensplus style')
 
         sl = {ii: cls[ii] for ii in cls.keys()}
-
-        if totalcls is not None:
-            if not crossilc:
-                cltt = totalcls[:, 0]
-                clee = totalcls[:, 1]
-                clbb = totalcls[:, 2]
-                clte = totalcls[:, 3]
-            else:
-                # totalcls: T3T3, EE, BB, T3E, T1T1, T2T2, T1T2, T1T3, T2T3, T1E, T2E
-                cltt3 = totalcls[:, 0]
-                cltt1 = totalcls[:, 4]
-                cltt2 = totalcls[:, 5]
-                clttx = totalcls[:, 6]
-                clee = totalcls[:, 1]
-                clbb = totalcls[:, 2]
-                clte = totalcls[:, 3]
-                # TODO
-                if withT3:
-                    cltt1 = cltt3
 
         self.w = dict()
         self.s = dict()

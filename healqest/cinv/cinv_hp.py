@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class cinv(object):
+    lmax: int
     def __init__(self, lib_dir, lmax, nside, cl, nl_res, eps_min, ellscale, tf, g=None):
         """
         Parameters
@@ -426,9 +427,12 @@ class cinv_tp(cinv):
         return teblm
 
     def get_fl(self, pol, lmax):
-        assert pol.lower() in 'teb'
-        i = 'teb'.index(pol.lower())
-        out = self.pre_op.fl[i, :self.lmax+1]*self.rescal_cl[:self.lmax+1]**2
+        if pol == 'te':
+            out = self.pre_op.fl_te[:self.lmax + 1]*self.rescal_cl[:self.lmax + 1]**2
+        else:
+            assert pol.lower() in 'teb'
+            i = 'teb'.index(pol.lower())
+            out = self.pre_op.fl[i, :self.lmax+1]*self.rescal_cl[:self.lmax+1]**2
         if lmax is None:
             return out
         else:
@@ -686,31 +690,27 @@ class library_cinv_sepTP(library_sepTP):
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cinvt=None, cinvp=None, cl_weights=None, soltn_lib=None, lfilt=None,
-                 add_noise=False):
+    def __init__(self, lib_dir, sim_lib, cinvt:cinv_t = None, cinvp:cinv_p = None, cl_weights=None, soltn_lib=None,
+                 lfilt=None, add_noise=False):
         super(library_cinv_sepTP, self).__init__(lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt,
                                                  add_noise=add_noise)
         self.cinv_t = cinvt
         self.cinv_p = cinvp
         self.g = cinvt.g
-
-    # def get_fmask(self):
-    #     return hp.read_map(os.path.join(self.lib_dir, "fmask.fits.gz"))
-    #
-    # def get_tal(self, a, lmax=None):
-    #     assert a.lower() in ["t", "e", "b"], a
-    #     if a.lower() == "t":
-    #         return self.cinv_t.get_tal(a, lmax=lmax)
-    #     else:
-    #         return self.cinv_p.get_tal(a, lmax=lmax)
+        self.lmax = cinv_t.lmax if cinv_t is not None else cinv_p.lmax
 
     def get_fl(self, pol, lmax=None):
+        if pol == 'te':
+            out = np.zeros(self.lmax+1)  # sep filtering/SQE doesn't need TE.
+            if lmax is not None:
+                return out[:lmax+1]
+            return out
         if pol == 't':
             return self.cinv_t.get_fl(pol='t', lmax=lmax)
         elif pol in 'eb':
             return self.cinv_p.get_fl(pol=pol, lmax=lmax)
         else:
-            raise ValueError("pol must be 't'/'e'/'b'")
+            raise ValueError("pol must be 't'/'e'/'b'/'te'")
 
     def _apply_ivf_t(self, tmap, soltn=None):
         return self.cinv_t.apply_ivf(tmap, soltn=soltn)

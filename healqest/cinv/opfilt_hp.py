@@ -341,6 +341,13 @@ class PreOperatorDiagJoint(PreOperatorDiag):
         self.filt, self.filt_te = cinv_utils.invert_teb(sinv + n_mat, te=sinv_te)
         self.fl = np.array(fl)
 
+        # for TE part (only used for GMV resp)
+        cl = s_cls['te'][:lmax + 1]
+        nl = nl_res['te'][:lmax + 1]
+        bl2 = tf.tf1d_t[:lmax + 1]*tf.tf1d_e[:lmax + 1]
+        self.fl_te = cinv_utils.cli(cl + nl / bl2)
+        self.fl_te[:2] = 0
+
     def calc(self, alms):
         alms = np.atleast_2d(alms)
         assert alms.shape[0] == self.filt.shape[0]

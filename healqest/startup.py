@@ -233,6 +233,7 @@ class Config:
             self.cinvdir = self.cinvdir.format(field=self.field)
 
         # append a second level of directory to distinguish rectypes
+        assert self.rectype in ['naive', 'sqe', 'gmv']
         self.outdir =f"{self.outdir}/{self.rectype}"
         self.recdir = f"{self.recdir}/{self.rectype}"
         self.cinvdir = f"{self.cinvdir}/{self.rectype}"

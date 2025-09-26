@@ -527,8 +527,10 @@ class Config:
         else:
             return None
 
-    @cached_property
+    @property
     def profile_u(self):
+        if self.profile is None:
+            return None
         assert self.profile in ['src', 'tsz']
         if self.profile == 'src':
             return np.ones(self.lmax+1)

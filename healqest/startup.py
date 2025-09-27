@@ -551,6 +551,9 @@ class Config:
     # === setup masks ===
     def _load_mask(self, item, field=0):
         mask = None
+        if item is None:
+            logger.warning("path(s) to mask not given, using full-sky mask.")
+            return np.ones(hp.nside2npix(self.nside))
         for _ in self.as_list(item):
             try:
                 _mask = hq.read_map(self.path(_, field=self.field), field=field)
@@ -564,20 +567,13 @@ class Config:
 
     @cached_property
     def mask_cinv(self):
-        if self.fmask_cinv:
-            return dict(t=self._load_mask(self.fmask_cinv, field=0),
-                        p=self._load_mask(self.fmask_cinv, field=1))
-        else:
-            raise ValueError('cinv mask must be provided!')
+        return dict(t=self._load_mask(self.fmask_cinv, field=0),
+                    p=self._load_mask(self.fmask_cinv, field=1))
 
     @cached_property
     def mask_qe(self):
-        if self.fmask_qe:
-            return dict(t=self._load_mask(self.fmask_qe, field=0),
-                        p=self._load_mask(self.fmask_qe, field=1))
-        else:
-            return dict(t=np.ones(hp.nside2npix(self.nside)),
-                        p=np.ones(hp.nside2npix(self.nside)))
+        return dict(t=self._load_mask(self.fmask_qe, field=0),
+                    p=self._load_mask(self.fmask_qe, field=1))
 
     @cached_property
     def mask_ps(self):

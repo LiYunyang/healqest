@@ -345,17 +345,22 @@ class Config:
     @staticmethod
     def mvtype2qe(mvtype):
         # SQE type MVs
+        from healqest.qest import Qest
         if mvtype in ['MV', 'qMV', 'PP', 'qPP', 'TTEETE', 'qTTEETE']:
             return hq.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
             return hq.get_qes(mvtype)
         elif mvtype in ['TBEB', 'qTBEB', 'TEET','EBBE']:
             return hq.get_qes(mvtype)
-        elif mvtype in ['TTprf']:
-            return hq.get_qes(mvtype)
-        elif mvtype in ['MVprf', 'TTEETEprf']:
-            qes = hq.get_qes(mvtype.rstrip('prf'))
+        elif mvtype in Qest.__prf_estimators__:  # single prf estimators
+            return mvtype
+        elif mvtype in ['MVprf', 'TTEETEprf']:  # compund prf estimators for SQE
+            qes = hq.get_qes(mvtype.removesuffix('prf'))
             qes[qes.index('TT')] = 'TTprf'
+            return qes
+        elif mvtype in ['GMVprf', 'GTTEETEprf', 'GTBEBprf']:  # compund prf estimators for GMV
+            _qes = hq.get_qes(mvtype.removesuffix('prf').removeprefix('G'))
+            qes = [_+'prf' for _ in _qes]
             return qes
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')

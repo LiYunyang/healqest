@@ -1812,7 +1812,7 @@ def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
     maps: array
         shape (1, npix) or (3, npix) map
     fl: array
-        shape (1, lmax+1) or (3, lmax+1) for QE weights flT, flE, flB
+        shape (1, lmax+1) or (4, lmax+1) for QE weights flT, flE, flB, flTE
     """
     if maps is None:
         if return_eps:
@@ -1824,11 +1824,12 @@ def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
         return np.atleast_2d(maps), fl
     else:
         assert len(maps) in (1, 3)
-        assert len(fl) in (1, 3)
+        assert len(fl) in (1, 4)
         hp.write_map(fname, maps, overwrite=True, dtype=np.float64, partial=True)
         with fits.open(fname, mode='update') as hdul:
+            colnames = ['flT', 'flE', 'flB', 'flTE']
             hdul.append(fits.BinTableHDU.from_columns([
-                fits.Column(name=f"fl{'teb'[i]}", array=_fl, format='D') for i, _fl in enumerate(fl)]))
+                fits.Column(name=colnames[i], array=_fl, format='D') for i, _fl in enumerate(fl)]))
             if eps is not None:
                 hdul.append(fits.BinTableHDU.from_columns([fits.Column(name="eps", array=eps, format='D')]))
             hdul.flush()

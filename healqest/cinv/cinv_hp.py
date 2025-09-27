@@ -697,7 +697,7 @@ class library_cinv_sepTP(library_sepTP):
         self.cinv_t = cinvt
         self.cinv_p = cinvp
         self.g = cinvt.g
-        self.lmax = cinv_t.lmax if cinv_t is not None else cinv_p.lmax
+        self.lmax = self.cinv_t.lmax if self.cinv_t is not None else self.cinv_p.lmax
 
     def get_fl(self, pol, lmax=None):
         if pol == 'te':

@@ -1118,6 +1118,8 @@ class Qest(qest):
             aresp_g = self.get_aresp_gmv(fls, qe, fast=fast, gmv=gmv)
             aresp_c = self.get_aresp_gmv(fls, qe, fast=fast, gmv=gmv, curl=True)
         else:
-            glm, aresp_g = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls, u=u, curl=False)
-            clm, aresp_c = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls, u=u, curl=True)
+            glm, aresp_g = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls,
+                                           u=u, curl=False, gmv=gmv, fast=fast)
+            clm, aresp_c = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls,
+                                           u=u, curl=True, gmv=gmv, fast=fast)
         return [glm, clm], [aresp_g, aresp_c]

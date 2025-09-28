@@ -353,7 +353,7 @@ class Config:
         elif mvtype in ['TBEB', 'qTBEB', 'TEET','EBBE']:
             return hq.get_qes(mvtype)
         elif mvtype in Qest.__prf_estimators__:  # single prf estimators
-            return mvtype
+            return [mvtype]
         elif mvtype in ['MVprf', 'TTEETEprf']:  # compund prf estimators for SQE
             qes = hq.get_qes(mvtype.removesuffix('prf'))
             qes[qes.index('TT')] = 'TTprf'

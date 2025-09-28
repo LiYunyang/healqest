@@ -76,7 +76,7 @@ class TFObj:
             assert _tf2d.shape[0] in [1, 2]
             assert hp.Alm.getlmax(_tf2d.shape[-1]) == lmax
         else:
-            _tf2d = [None, None]
+            _tf2d = np.array([None, None])
 
         if bl is not None:
             _bl = np.atleast_2d(bl)[:, :lmax+1]
@@ -91,7 +91,7 @@ class TFObj:
             self.m_cut = m_cut
             if tf2d is not None:
                 logger.warning(f"using lx_cut={lx_cut} in lieu of the provided tf2d")
-                _tf2d = [None, None]
+                _tf2d = np.array([None, None])
                 tf2d = None
 
         if npol == 1:

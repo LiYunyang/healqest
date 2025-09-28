@@ -723,7 +723,7 @@ class Qest(qest):
     """
     __prf_estimators__ = ['TTprf', 'EEprf', 'TEprf', 'ETprf', 'TBprf', 'BTprf', 'EBprf', 'BEprf']
 
-    def __init__(self, lmax, Lmax, Cls, nside=None):
+    def __init__(self, lmax, Lmax, Cls, nside=None, flT=None, flP=None, gmv=False):
         """
         Parameters
         ----------
@@ -736,9 +736,23 @@ class Qest(qest):
         nside: int=None
             Healpix nside used for intermediate alm2map operations,
             the nside has to be large enough, >1/2 lmax, to avoid aliasing
+        flT, flP: np.ndarray=None
+            binary array of shape (lmax+1, ), indicating the POST cinv ell selection.
+        gmv: bool=False
+            If True, the response function and prf-hardening follows the GMV formalism
         """
         self.lmax = lmax
         self.Lmax = Lmax
+        self.size = hp.Alm.getsize(self.lmax)
+        # Post cinv ell cut
+        self.fl_cut = dict()
+        self.fl_cut['T'] = flT[:self.lmax+1] if flT is not None else np.ones(self.lmax + 1)
+        self.fl_cut['E'] = flP[:self.lmax+1] if flP is not None else np.ones(self.lmax + 1)
+        self.fl_cut['B'] = flP[:self.lmax+1] if flP is not None else np.ones(self.lmax + 1)
+        assert self.fl_cut['T'].shape[-1] == self.lmax + 1
+        assert self.fl_cut['E'].shape[-1] == self.lmax + 1
+        assert self.fl_cut['B'].shape[-1] == self.lmax + 1
+
         self.cls = Cls
         if nside is None:
             nside = utils.get_nside(lmax)
@@ -747,6 +761,7 @@ class Qest(qest):
         self.clm = {}
 
         assert self.lmax < 2.0 * self.nside, "lmax must be less that 2*nside"
+        self.gmv = gmv
 
     @classmethod
     def from_config_yuuki(cls, config, Cls):
@@ -828,7 +843,8 @@ class Qest(qest):
         glm, clm: tuple of complex array
             Gradient/curl component of the plm
         """
-
+        assert almbar1.shape[-1] == self.size, f"almbar size {almbar1.shape[-1]} don't match lmax {self.lmax})"
+        assert almbar2.shape[-1] == self.size, f"almbar size {almbar2.shape[-1]} don't match lmax {self.lmax})"
         if cache and qe in self.glm:
             logger.warning("We've already computed this!")
             return self.glm[qe], self.clm[qe]
@@ -952,9 +968,11 @@ class Qest(qest):
         R = ee + weight * es
         return plm, R
 
-    def fls2fls_dict(self, fls, gmv=False):
+    def fls2fls_dict(self, fls):
         from healqest.cinv.cinv_utils import cli
-        clte = cli(fls[3, :self.lmax + 1]) if gmv else np.zeros(self.lmax + 1)
+        clte = cli(fls[3, :self.lmax + 1]) if self.gmv else np.zeros(self.lmax + 1)
+        if self.gmv:
+            assert np.any(clte>0)
         inv = fls[0, :self.lmax + 1]*fls[1, :self.lmax + 1]
         inv = inv*cli(1 - inv*clte**2)
 
@@ -963,10 +981,10 @@ class Qest(qest):
         fl['TT'] = inv*cli(fls[1, :self.lmax + 1])
         fl['EE'] = inv*cli(fls[0, :self.lmax + 1])
         fl['TE'] = fl['ET'] = -inv*clte
+
         return fl
 
-    def get_aresp_gmv(self, fls, qe=None, u=None, fast=False, curl=False, gmv=False, TTprf_s=False,
-                      TTprf_x=False):
+    def get_aresp_gmv(self, fls, qe=None, u=None, fast=False, curl=False, TTprf_s=False, TTprf_x=False):
         """
         Compute analytical response function for GMV (jointly filtered maps)
 
@@ -982,9 +1000,6 @@ class Qest(qest):
             If True, uses the fast response function calculation.
         curl: bool=False
             If True, `qe` is suffixed with `curl` to compute curl-mode response.
-        gmv: bool=False
-            If True, compute the response for the GMV estimator, which uses all of mode coupling of XT/XE/XB and
-            YT/YE/YB.
         TTprf_s: bool=False
             Perform the source-hardening estimator (only the ss term)
         TTprf_x: bool=False
@@ -994,12 +1009,12 @@ class Qest(qest):
         if TTprf_x or TTprf_s:
             assert u is not None, "Need profile function to compute this estimator"
 
-        fl = self.fls2fls_dict(fls, gmv=gmv)
+        fl = self.fls2fls_dict(fls)
 
         s1, s2 = qe[0], qe[1]
         assert s1 in 'TEB' and s2 in 'TEB', f"qe must be one of TEB, got: {qe}"
 
-        if gmv:
+        if self.gmv:
             keys = list(fl.keys())
         else:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]
@@ -1011,32 +1026,32 @@ class Qest(qest):
             qeXY = weights.weights_plus(qe if not curl else f"{qe}curl", self.cls, self.lmax)
 
         R = np.zeros(self.Lmax+1, dtype=float)
-        for s1 in 'TEB':
-            _qe1 = qe[0]+s1
+        for _s1 in 'TEB':
+            _qe1 = s1+_s1
             if _qe1 not in keys:
                 continue
-            flX = fl[_qe1]
-            for s2 in 'TEB':
-                _qe2 = qe[1] + s2
+            flX = fl[_qe1]*self.fl_cut[s1]
+            for _s2 in 'TEB':
+                _qe2 = s2 + _s2
                 if _qe2 not in keys:
                     continue
-                flY = fl[_qe2]
+                flY = fl[_qe2]*self.fl_cut[s2]
                 if TTprf_x or TTprf_s:
-                    assert s1==s2=='T'
+                    assert _s1==_s2=='T'
                     qeZA = weights.weights_plus('prf', self.cls, self.lmax, u=u)
                 else:
-                    qeZA = weights.weights_plus(s1+s2 if not curl else f"{s1+s2}curl", self.cls, self.lmax)
+                    qeZA = weights.weights_plus(_s1+_s2 if not curl else f"{_s1+_s2}curl", self.cls, self.lmax)
                 _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax+1, dtype=complex), flX, flY, fast=fast)
                 R += _R
         return R
 
-    def get_harden_weights(self, qe, fls, u, curl=False, gmv=False, fast=False):
-        ss = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=False, gmv=gmv, TTprf_s=True)
-        es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, gmv=gmv, TTprf_x=True)
+    def get_harden_weights(self, qe, fls, u, curl=False, fast=False):
+        ss = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=False, TTprf_s=True)
+        es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_x=True)
         weight = -1*es/ss
         return weight, es
 
-    def harden_gmv(self, qe, almbar1, almbar2, fls, u, curl=False, gmv=False, fast=False):
+    def harden_gmv(self, qe, almbar1, almbar2, fls, u, curl=False, fast=False):
         """
         Get the source hardened glm and the response function.
         Need arguments flX, flY in order to compute the analytical response
@@ -1056,23 +1071,20 @@ class Qest(qest):
             If True, uses the fast response function calculation.
         curl: bool=False
             If True, `qe1` is suffixed with `curl` to compute curl-mode response.
-        gmv: bool=False
-            If True, compute the response for the GMV estimator, which uses all of mode coupling of XT/XE/XB and
-            YT/YE/YB.
 
         Returns
-        ----------
+        -------
         plm: complex array healpy alm
           Source hardened glm
         resp: np.ndarray
           Response function
         """
         assert qe.endswith('prf') is False, "'prf' should be stripped before doing hardening"
-        if not gmv:
+        if not self.gmv:
             assert qe == 'TT', f"We only harden for 'TT' for SQE, got: {qe}"
 
-        weight, es = self.get_harden_weights(qe, fls, u, curl=curl, gmv=gmv, fast=fast)
-        ee = self.get_aresp_gmv(fls, qe=qe, fast=fast, curl=curl, gmv=gmv)
+        weight, es = self.get_harden_weights(qe, fls, u, curl=curl, fast=fast)
+        ee = self.get_aresp_gmv(fls, qe=qe, fast=fast, curl=curl)
 
         plm_len = self.eval(qe, almbar1, almbar2)[1 if curl else 0]
         plm_src = self.eval('prf', almbar1, almbar2, u=u)[0]
@@ -1081,7 +1093,7 @@ class Qest(qest):
         R = ee + weight * es
         return plm, R
 
-    def rec_and_resp(self, qe, almbars1, almbars2, fls, gmv=False, u=None, g=None, fast=False):
+    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False):
         """
         compute lensing reconstruction for grad and curl modes, return also the analytical response functions.
 
@@ -1093,8 +1105,6 @@ class Qest(qest):
             First and second filtered alms, shape (3, nalm)
         fls: np.ndarray
             shape: (4, lmax+1), filter functions for TT/EE/BB/TE
-        gmv: bool=False
-            If True, the response function and prf-hardening follows the GMV formalism
         u: np.ndarray=None
             profile function for TTprf estimator
         g: Geometry=None
@@ -1115,11 +1125,11 @@ class Qest(qest):
 
         if not qe.endswith('prf'):
             glm, clm = self.eval(qe, almbars1[i1], almbars2[i2], g=g)
-            aresp_g = self.get_aresp_gmv(fls, qe, fast=fast, gmv=gmv)
-            aresp_c = self.get_aresp_gmv(fls, qe, fast=fast, gmv=gmv, curl=True)
+            aresp_g = self.get_aresp_gmv(fls, qe, fast=fast)
+            aresp_c = self.get_aresp_gmv(fls, qe, fast=fast, curl=True)
         else:
             glm, aresp_g = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls,
-                                           u=u, curl=False, gmv=gmv, fast=fast)
+                                           u=u, curl=False, fast=fast)
             clm, aresp_c = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls,
-                                           u=u, curl=True, gmv=gmv, fast=fast)
+                                           u=u, curl=True, fast=fast)
         return [glm, clm], [aresp_g, aresp_c]

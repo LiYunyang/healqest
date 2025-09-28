@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 class cinv(object):
     lmax: int
+
     def __init__(self, lib_dir, lmax, nside, cl, nl_res, eps_min, ellscale, tf, g=None):
         """
         Parameters

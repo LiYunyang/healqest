@@ -71,7 +71,7 @@ class TFObj:
         assert _tf1d.shape[-1] == lmax+1
         assert _tf1d.shape[0] in [1, 2]
 
-        if tf2d is not None:
+        if tf2d is not None and tf2d != [None, None]:
             _tf2d = np.atleast_2d(tf2d)
             assert _tf2d.shape[0] in [1, 2]
             assert hp.Alm.getlmax(_tf2d.shape[-1]) == lmax

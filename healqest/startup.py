@@ -583,9 +583,9 @@ class Config:
         else:
             if np.all(self.mask_qe['t']==self.mask_qe['p']):
                 logger.warning("ps mask not given, using the QE mask.")
+                return self.mask_qe['t']
             else:
                 logger.error("ps mask not given, try QE P-mask, but it is not consistent with T-mask!.")
-                return self.mask_qe['p']
 
     @cached_property
     def mask_resp(self):

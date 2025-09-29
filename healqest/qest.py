@@ -721,7 +721,7 @@ class Qest(qest):
     """
     QE estimator following the cmblensplus convention.
     """
-    __prf_estimators__ = ['TTprf', 'EEprf', 'TEprf', 'ETprf', 'TBprf', 'BTprf', 'EBprf', 'BEprf']
+    __prf_estimators__ = ['TTprf', 'EEprf', 'TEprf', 'ETprf']  # exclude the odd parity ones!
 
     def __init__(self, lmax, Lmax, Cls, nside=None, flT=None, flP=None, gmv=False):
         """
@@ -1018,26 +1018,29 @@ class Qest(qest):
             keys = list(fl.keys())
         else:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]
+
         if TTprf_x or TTprf_s:
-            keys = [_ for _ in keys if _ in [f'{s1}T', f'{s2}T']]  # only prf-harden the T component
+            loop1 = loop2 = 'T'
+        else:
+            loop1 = loop2 = 'TEB'
         if TTprf_s:
+            assert qe == 'TT'
             qeXY = weights.weights_plus('prf', self.cls, self.lmax, u=u)
         else:
             qeXY = weights.weights_plus(qe if not curl else f"{qe}curl", self.cls, self.lmax)
 
         R = np.zeros(self.Lmax+1, dtype=float)
-        for _s1 in 'TEB':
+        for _s1 in loop1:
             _qe1 = s1+_s1
             if _qe1 not in keys:
                 continue
             flX = fl[_qe1]*self.fl_cut[s1]
-            for _s2 in 'TEB':
+            for _s2 in loop2:
                 _qe2 = s2 + _s2
                 if _qe2 not in keys:
                     continue
                 flY = fl[_qe2]*self.fl_cut[s2]
                 if TTprf_x or TTprf_s:
-                    assert _s1==_s2=='T'
                     qeZA = weights.weights_plus('prf', self.cls, self.lmax, u=u)
                 else:
                     qeZA = weights.weights_plus(_s1+_s2 if not curl else f"{_s1+_s2}curl", self.cls, self.lmax)
@@ -1046,7 +1049,7 @@ class Qest(qest):
         return R
 
     def get_harden_weights(self, qe, fls, u, curl=False, fast=False):
-        ss = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=False, TTprf_s=True)
+        ss = self.get_aresp_gmv(fls, qe='TT', u=u, fast=fast, curl=False, TTprf_s=True)
         es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_x=True)
         weight = -1*es/ss
         return weight, es

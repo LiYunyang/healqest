@@ -358,9 +358,9 @@ class Config:
             qes = hq.get_qes(mvtype.removesuffix('prf'))
             qes[qes.index('TT')] = 'TTprf'
             return qes
-        elif mvtype in ['GMVprf', 'GTTEETEprf', 'GTBEBprf']:  # compund prf estimators for GMV
+        elif mvtype in ['GMVprf', 'GTTEETEprf']:  # compund prf estimators for GMV
             _qes = hq.get_qes(mvtype.removesuffix('prf').removeprefix('G'))
-            qes = [_+'prf' for _ in _qes]
+            qes = [_+'prf' if _+'prf' in Qest.__prf_estimators__ else _ for _ in _qes]
             return qes
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')

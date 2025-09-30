@@ -1019,12 +1019,12 @@ class Qest(qest):
         else:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]
 
-        if TTprf_x or TTprf_s:
+        if TTprf_s:
+            assert qe=='TT'
             loop1 = loop2 = 'T'
         else:
             loop1 = loop2 = 'TEB'
-        if TTprf_s:
-            assert qe == 'TT'
+        if TTprf_s or TTprf_x:
             qeXY = weights.weights_plus('prf', self.cls, self.lmax, u=u)
         else:
             qeXY = weights.weights_plus(qe if not curl else f"{qe}curl", self.cls, self.lmax)
@@ -1040,7 +1040,7 @@ class Qest(qest):
                 if _qe2 not in keys:
                     continue
                 flY = fl[_qe2]*self.fl_cut[s2]
-                if TTprf_x or TTprf_s:
+                if TTprf_s:
                     qeZA = weights.weights_plus('prf', self.cls, self.lmax, u=u)
                 else:
                     qeZA = weights.weights_plus(_s1+_s2 if not curl else f"{_s1+_s2}curl", self.cls, self.lmax)

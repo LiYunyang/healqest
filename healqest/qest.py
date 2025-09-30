@@ -1054,7 +1054,7 @@ class Qest(qest):
         weight = -1*es/ss
         return weight, es
 
-    def harden_gmv(self, qe, almbar1, almbar2, fls, u, curl=False, fast=False):
+    def harden_gmv(self, qe, almbar1, almbar2, fls, u, fast=False, also_curl=False):
         """
         Get the source hardened glm and the response function.
         Need arguments flX, flY in order to compute the analytical response
@@ -1072,8 +1072,8 @@ class Qest(qest):
             shape (lmax+1, ) profile function for TTprf estimator
         fast: bool=False
             If True, uses the fast response function calculation.
-        curl: bool=False
-            If True, `qe1` is suffixed with `curl` to compute curl-mode response.
+        also_curl: bool=False
+            If True, ALSO return the curl-mode, otherwise, the "curl" modes would just be filled with 0.
 
         Returns
         -------
@@ -1086,17 +1086,25 @@ class Qest(qest):
         if not self.gmv:
             assert qe == 'TT', f"We only harden for 'TT' for SQE, got: {qe}"
 
-        weight, es = self.get_harden_weights(qe, fls, u, curl=curl, fast=fast)
-        ee = self.get_aresp_gmv(fls, qe=qe, fast=fast, curl=curl)
+        weight_g, es_g = self.get_harden_weights(qe, fls, u, curl=False, fast=fast)
+        ee_g = self.get_aresp_gmv(fls, qe=qe, fast=fast, curl=False)
 
-        plm_len = self.eval(qe, almbar1, almbar2)[1 if curl else 0]
+        glm_len, clm_len = self.eval(qe, almbar1, almbar2)
         plm_src = self.eval('prf', almbar1, almbar2, u=u)[0]
+        glm = glm_len + hp.almxfl(plm_src, weight_g)
+        Rg = ee_g + weight_g*es_g
 
-        plm = plm_len + hp.almxfl(plm_src, weight)
-        R = ee + weight * es
-        return plm, R
+        if also_curl:
+            weight_c, es_c = self.get_harden_weights(qe, fls, u, curl=True, fast=fast)
+            ee_c = self.get_aresp_gmv(fls, qe=qe, fast=fast, curl=True)
+            clm = clm_len + hp.almxfl(plm_src, weight_c)
+            Rc = ee_c + weight_c * es_c
+        else:
+            clm = np.zeros_like(glm)
+            Rc = np.zeros_like(Rg)
+        return (glm, clm),  (Rg, Rc)
 
-    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False):
+    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False, also_curl=False):
         """
         compute lensing reconstruction for grad and curl modes, return also the analytical response functions.
 
@@ -1114,6 +1122,8 @@ class Qest(qest):
             Geometry instance defined within declination range.
         fast: bool=False
             If True, uses the fast response function calculation.
+        also_curl: bool=False
+            If True, ALSO return the curl-mode, otherwise, the "curl" modes would just be filled with 0.
 
         Returns
         -------
@@ -1131,8 +1141,6 @@ class Qest(qest):
             aresp_g = self.get_aresp_gmv(fls, qe, fast=fast)
             aresp_c = self.get_aresp_gmv(fls, qe, fast=fast, curl=True)
         else:
-            glm, aresp_g = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls,
-                                           u=u, curl=False, fast=fast)
-            clm, aresp_c = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2], fls,
-                                           u=u, curl=True, fast=fast)
+            (glm, clm), (aresp_g, aresp_c) = self.harden_gmv(qe.removesuffix("prf"), almbars1[i1], almbars2[i2],
+                                                             fls,  u=u, fast=fast, also_curl=also_curl)
         return [glm, clm], [aresp_g, aresp_c]

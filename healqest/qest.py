@@ -1086,7 +1086,7 @@ class Qest(qest):
         i2 = 'teb'.index(qe[1].lower())
 
         if qe.endswith('prf'):
-            _qe = qe.endswith('prf')
+            _qe = qe.removesuffix('prf')
         else:
             _qe = qe
 

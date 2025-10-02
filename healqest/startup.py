@@ -649,12 +649,14 @@ class Config:
             name of a QE or a MVtype.
         seed1, seed2: int
         cmbset1, cmbset2: str
-            Single letter strings. Accepted values are 'a', 'b', 'x', 'y'.
+            cmbset for individual plm. single letter strings. Accepted values are 'a', 'b', ...
         N1: bool=False
             Indicate if the target file is for N1 calculation (they live in a separate directory).
         stack_type: str
             Indicate the stacking type for mean-field calculations.
         bundle: int, tuple of ints =None
+        cmbset: str
+            cmbset for MF. For cases when the stack type is in ['xy', 'yx', 'x0', '0x', 'xx'].
         """
         subdir = 'lensrec_N1' if N1 else 'lensrec'
         if bundle is not None and not N1:  # MF and N1 don't do bundle

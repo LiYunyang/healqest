@@ -1015,7 +1015,7 @@ class Qest(qest):
         if self.gmv:
             keys = list(fl.keys())
         else:
-            keys = [f"{s1}{s1}", f"{s2}{s2}"]
+            keys = [f"{s1}{s1}", f"{s2}{s2}"]  # SQE only picks the 2 (can be the same) diagonal terms.
 
         if TTprf_type in ['ss', 'es']:
             loop1 = loop2 = 'T'

@@ -74,7 +74,7 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA
         half of the computation can be omitted by applying the correct parity factors based on the spins.
     """
     if fast:
-        logger.warning("using the fast mode of resp calculation. making sure `weights_plus` is used!")
+        logger.warning("Fast mode resp calc -- make sure `weights_plus` is used!")
     lmax = len(ret) - 1
 
     i1_ZA, i2_ZA = {False: (0, 1), True: (1, 0)}[switch_ZA]

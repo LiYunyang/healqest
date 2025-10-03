@@ -93,7 +93,7 @@ class Config:
     cinv_lmax: int  # maximum l for cinv
     cinv_lmin: int = None  # minimum l for cinv
     cinv_mmin: int = None  # minimum m for cinv
-    file_bl: str  # path to beam file.
+    file_bl: Union[str, float]  # path to beam file or gaussian beam size in arcmin FWHM
     file_tf1d: Union[str, int] = None  # path to tf1d file. If a tf2d file is given, it will compute tf1d from it. If a integer is given, this is interpreted as a l_cut.
     file_tf2d: Union[str, list] = None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
     lx_cut: int=None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still be used for effective 1d beam)
@@ -423,10 +423,14 @@ class Config:
         if self.file_bl is None:
             logger.error("beam file not given! assuming unity bl for now.")
             bl = np.ones(self.cinv_lmax+1)
-        else:
+        elif isinstance(self.file_bl, str):
             beam_file = self.path(self.file_bl)
             logger.warning("temporarily loading the 150 GHz beam file")
             bl = np.loadtxt(beam_file)[:self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
+        elif isinstance(self.file_bl, (float, np.floating, int, np.integer)):
+            bl = hp.gauss_beam(np.deg2rad(self.file_bl/60), lmax=self.cinv_lmax)
+        else:
+            raise ValueError(f"unsupported file_bl: {self.file_bl}")
         if self.cinv_lmin:
             bl[:self.cinv_lmin] = 0
         return dict(t=bl.copy(), p=bl.copy())

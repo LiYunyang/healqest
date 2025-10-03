@@ -1047,11 +1047,11 @@ class Qest(qest):
         return R
 
     def get_harden_weights(self, qe, fls, u, curl=False, fast=False):
-        ss = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=False, TTprf_type='ss')
+        ss = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=False, TTprf_type='ss')
         es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_type='es')
-        se = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_type='se')
+        se = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=curl, TTprf_type='se')
         weight = -1*es/ss
-        return weight, ss, es, se
+        return weight, se
 
     def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False):
         """
@@ -1098,10 +1098,13 @@ class Qest(qest):
         if qe.endswith('prf'):
             if not self.gmv:
                 assert _qe=='TT', f"We only harden for 'TT' for SQE, got: {qe}"
-            slm = self.eval('prf', almbars1[i1], almbars2[i2], u=u, g=g)[0]
-            w_g, ss_g, es_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast)
-            w_c, ss_c, es_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast)
-            hrd_out = dict(slm=slm, ss=[ss_g, ss_c], es=[es_g, es_c], se=[se_g, se_c])
-        else:
-            hrd_out = None
-        return [glm, clm], [aresp_g, aresp_c], hrd_out, _qe
+            slm = self.eval('prf', almbars1[0], almbars2[0], u=u, g=g)[0]
+            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast)
+            w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast)
+
+            glm += hp.almxfl(slm, w_g)
+            clm += hp.almxfl(slm, w_c)
+            aresp_g += w_g*se_g
+            aresp_c += w_c*se_c
+
+        return [glm, clm], [aresp_g, aresp_c]

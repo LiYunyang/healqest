@@ -1923,9 +1923,13 @@ def dec2tf2d(lx, dec1, dec2):
         m above k* l should be 0. This value only depend on `dec2` and is useful in computing the effective transfer
         function given some m-cut: tf1d = np.sqrt(hp.alm2cl(tf2d)/k)
     """
-    assert 0>dec2>dec1, "dec1 and dec2 should be negative for SPT fields!"
-    m1 = int(np.floor(lx * np.sin(np.pi / 2 - np.deg2rad(-dec1))))
-    k = np.sin(np.pi / 2 - np.deg2rad(-dec2))
+    # assert 0>dec2>dec1, "dec1 and dec2 should be negative for SPT fields!"
+    dec_min = min(abs(dec1), abs(dec2))
+    dec_max = min(abs(dec1), abs(dec2))
+    if np.sign(dec1) != np.sign(dec2):
+        dec_min = 0
+    m1 = int(np.floor(lx * np.sin(np.pi / 2 - np.deg2rad(dec_max))))
+    k = np.sin(np.pi / 2 - np.deg2rad(dec_min))
     return lx, m1, k
 
 

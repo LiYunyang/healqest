@@ -1059,7 +1059,7 @@ class Qest(qest):
         weight = -1*es/ss
         return weight, se
 
-    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False, type1='lens', type2='lens'):
+    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False, type1='lens', type2=None):
         """
         compute lensing reconstruction for grad and curl modes, return also the analytical response functions.
 
@@ -1099,11 +1099,14 @@ class Qest(qest):
         else:
             _qe = qe
 
-        glm, clm = self.eval(_qe, almbars1[i1], almbars2[i2], g=g)
+        glm, clm = self.eval(_qe, almbars1[i1], almbars2[i2], g=g, distortion=type1)
         # aresp_g = self.get_aresp_gmv(fls, _qe, fast=fast)
         # aresp_c = self.get_aresp_gmv(fls, _qe, fast=fast, curl=True)
         aresp_g = self.get_resp(fls, _qe, fast=fast, type1=type1, type2=type1)
-        aresp_c = self.get_resp(fls, _qe, fast=fast, curl=True, type1=type1, type2=type1)
+        if type1 == 'lens':
+            aresp_c = self.get_resp(fls, _qe, fast=fast, curl=True, type1=type1, type2=type1)
+        else:
+            aresp_c = np.zeros_like(aresp_g)
 
         # do the source harden stuff
         if qe.endswith('prf'):
@@ -1111,7 +1114,11 @@ class Qest(qest):
                 assert _qe=='TT', f"We only harden for 'TT' for SQE, got: {qe}"
             slm = self.eval('TT', almbars1[0], almbars2[0], u=u, g=g, distortion='prf')[0]
             w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast, type1=type1, type2=type2)
-            w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1, type2=type2)
+            if type1=='lens':
+                w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1, type2=type2)
+            else:
+                w_c = np.zeros_like(w_g)
+                se_c = np.zeros_like(se_g)
 
             glm += hp.almxfl(slm, w_g)
             clm += hp.almxfl(slm, w_c)

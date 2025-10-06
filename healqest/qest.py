@@ -757,35 +757,9 @@ class Qest(qest):
         if nside is None:
             nside = utils.get_nside(lmax)
         self.nside=nside
-        self.glm = {}
-        self.clm = {}
 
         assert self.lmax < 2.0 * self.nside, "lmax must be less that 2*nside"
         self.gmv = gmv
-
-    @classmethod
-    def from_config_yuuki(cls, config, Cls):
-        """
-        old construction code to work with Yuuki's configuration file
-        """
-
-        lmax = config['lensrec']['lmax'] = max(config['lensrec']['lmaxT'],config['lensrec']['lmaxP'])
-        Lmax = config['lensrec']['Lmax']
-
-        Cls = Cls[config['lensrec']['cltype']]
-        nside = config['lensrec'].get('nside', None)
-        return cls(lmax=lmax, nside=nside, Cls=Cls, Lmax=Lmax, )
-
-    @classmethod
-    def from_config_srini(cls, dict_lrange, Cls):
-        """
-        old construction code to work with Srini's configuration file
-        """
-        lmin = dict_lrange['lmin']
-        lmax = max(dict_lrange['lmaxT'], dict_lrange['lmaxP'])
-        Lmax = dict_lrange['Lmax']
-        nside = None
-        return cls(lmax=lmax, nside=nside, Cls=Cls, Lmax=Lmax, )
 
     @staticmethod
     def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None, g=None):
@@ -819,7 +793,7 @@ class Qest(qest):
             else:
                 return q, -u
 
-    def eval(self, qe, almbar1, almbar2, u=None, g=None, cache=False):
+    def eval(self, qe, almbar1, almbar2, u=None, g=None, distortion='lens'):
         """
         Compute quadratic estimator
 
@@ -835,9 +809,8 @@ class Qest(qest):
             Geometry instance defined within declination range. This will be used
             to compute spherical harmonics functions with ducc0. If None, the slower
             full-sky healpy functions will be used.
-        cache: bool=True
-            If True, the QE results will be loaded from cache if available.
-
+        distortion: str
+            distortion type, 'lens' or 'prf' or 'tau'
         Returns
         -------
         glm, clm: tuple of complex array
@@ -845,16 +818,13 @@ class Qest(qest):
         """
         assert almbar1.shape[-1] == self.size, f"almbar size {almbar1.shape[-1]} don't match lmax {self.lmax})"
         assert almbar2.shape[-1] == self.size, f"almbar size {almbar2.shape[-1]} don't match lmax {self.lmax})"
-        if cache and qe in self.glm:
-            logger.warning("We've already computed this!")
-            return self.glm[qe], self.clm[qe]
 
-        if qe in ['prf']:
+        if distortion in ['prf']:
             assert u is not None, "Need profile function to compute this estimator"
 
-        q = weights.weights_plus(qe, self.cls, self.lmax, u=u)
+        q = weights.weights_plus(qe, self.cls, self.lmax, u=u, distortion=distortion)
 
-        logger.info(f'Running lensing reconstruction: {qe}')
+        logger.info(f'Running {distortion} reconstruction: {qe}')
 
         retglm = 0
         retclm = 0
@@ -895,78 +865,75 @@ class Qest(qest):
             retglm += glm
             retclm += clm
 
-        self.glm[qe] = retglm
-        self.clm[qe] = retclm
+        return retglm, retclm
 
-        return self.glm[qe], self.clm[qe]
+    # def get_aresp(self, flX, flY, qe1=None, qe2=None, u=None, fast=False, curl=False):
+    #     """
+    #     Compute analytical response function for 1D filtering
+    #
+    #     Parameters
+    #     ----------
+    #     flX, flY
+    #       1D real arrays representing the filter functions for the X and Y fields
+    #     qe1: string
+    #       First estimator
+    #     qe2: string
+    #       Second estimator; if None, assumes it is the same as qe1
+    #     fast: bool=False
+    #         If True, uses the fast response function calculation.
+    #     curl: bool=False
+    #         If True, `qe1` and `qe2` are suffixed with `curl` to compute curl-mode response.
+    #     Returns
+    #     ----------
+    #     aresp:
+    #       Analytical response function
+    #     """
+    #     if qe1 is None:
+    #         assert 0, "qe1 must be defined"
+    #
+    #     qeXY = weights.weights_plus(qe1 if not curl else f'{qe1}curl', self.cls, self.lmax, u=u)
+    #
+    #     if qe2 is None or qe2 == qe1:
+    #         qeZA = qeXY
+    #     else:
+    #         qeZA = weights.weights_plus(qe2 if not curl else f'{qe2}curl', self.cls, self.lmax, u=u)
+    #
+    #     aresp = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
+    #     return aresp
 
-    def get_aresp(self, flX, flY, qe1=None, qe2=None, u=None, fast=False, curl=False):
-        """
-        Compute analytical response function for 1D filtering
-
-        Parameters
-        ----------
-        flX, flY
-          1D real arrays representing the filter functions for the X and Y fields
-        qe1: string
-          First estimator
-        qe2: string
-          Second estimator; if None, assumes it is the same as qe1
-        fast: bool=False
-            If True, uses the fast response function calculation.
-        curl: bool=False
-            If True, `qe1` and `qe2` are suffixed with `curl` to compute curl-mode response.
-        Returns
-        ----------
-        aresp:
-          Analytical response function
-        """
-        if qe1 is None:
-            assert 0, "qe1 must be defined"
-
-        qeXY = weights.weights_plus(qe1 if not curl else f'{qe1}curl', self.cls, self.lmax, u=u)
-
-        if qe2 is None or qe2 == qe1:
-            qeZA = qeXY
-        else:
-            qeZA = weights.weights_plus(qe2 if not curl else f'{qe2}curl', self.cls, self.lmax, u=u)
-
-        aresp = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
-        return aresp
-
-    def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='prf', curl=False):
-        """
-        Get the source hardened glm and the response function.
-        Need arguments flX, flY in order to compute the analytical response
-        needed for hardening.
-
-        Parameters
-        ----------
-        qe: string
-          Quadratic estimator type, only 'TT' is supported
-        flX, flY
-          1D real arrays representing the filter functions for the X and Y fields
-
-        Returns
-        ----------
-        plm :
-          Source hardened glm
-        resp :
-          Response function
-        """
-        assert qe == 'TT', f"We only harden for qe 'TT', got: {qe}"
-
-        ss = self.get_aresp(flX, flY, qe1=qe_hrd, u=u)
-        es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=qe, u=u, fast=False)
-        ee = self.get_aresp(flX, flY, qe1=qe, curl=curl)
-
-        plm1 = self.eval(qe, almbar1, almbar2)[1 if curl else 0]
-        plm2 = self.eval(qe_hrd, almbar1, almbar2, u)[0]
-
-        weight = -1 * es / ss
-        plm = plm1 + hp.almxfl(plm2, weight)
-        R = ee + weight * es
-        return plm, R
+    # def harden(self, qe, almbar1, almbar2, flX, flY, u, qe_hrd='prf', curl=False):
+    #     """
+    #     Get the source hardened glm and the response function.
+    #     Need arguments flX, flY in order to compute the analytical response
+    #     needed for hardening.
+    #
+    #     Parameters
+    #     ----------
+    #     qe: string
+    #       Quadratic estimator type, only 'TT' is supported
+    #     flX, flY
+    #       1D real arrays representing the filter functions for the X and Y fields
+    #
+    #     Returns
+    #     ----------
+    #     plm :
+    #       Source hardened glm
+    #     resp :
+    #       Response function
+    #     """
+    #     assert qe == 'TT', f"We only harden for qe 'TT', got: {qe}"
+    #
+    #     ss = self.get_aresp(flX, flY, qe1=qe_hrd, u=u)
+    #     es = self.get_aresp(flX, flY, qe1=qe_hrd, qe2=qe, u=u, fast=False)
+    #     ee = self.get_aresp(flX, flY, qe1=qe, curl=curl)
+    #
+    #     plm1 = self.eval(qe, almbar1, almbar2)[1 if curl else 0]
+    #     plm2 = self.eval(qe_hrd, almbar1, almbar2, u)[0]
+    #
+    #     weight = -1 * es / ss
+    #     plm = plm1 + hp.almxfl(plm2, weight)
+    #     R = ee + weight * es
+    #     return plm, R
 
     def fls2fls_dict(self, fls):
         from healqest.cinv.cinv_utils import cli
@@ -984,31 +951,73 @@ class Qest(qest):
 
         return fl
 
-    def get_aresp_gmv(self, fls, qe=None, u=None, fast=False, curl=False, TTprf_type=None):
-        """
-        Compute analytical response function for GMV (jointly filtered maps)
+    # def get_aresp_gmv(self, fls, qe=None, u=None, fast=False, curl=False, TTprf_type=None):
+    #     """
+    #     Compute analytical response function for GMV (jointly filtered maps)
+    #
+    #     Parameters
+    #     ----------
+    #     qe: str
+    #         Quadratic estimator type.
+    #     fls: np.array
+    #         shape: (4, lmax+1), filter functions for TT/EE/BB/TE, i.e., 1/Cltt, 1/Clee, 1/Clbb, 1/Clte.
+    #     u: np.ndarray
+    #         shape (lmax+1, ) profile function for TTprf estimator
+    #     fast: bool=False
+    #         If True, uses the fast response function calculation.
+    #     curl: bool=False
+    #         If True, `qe` is suffixed with `curl` to compute curl-mode response.
+    #     TTprf_type: str=None
+    #         type of the prf estimator, one of ['ss', 'es', 'se'].
+    #     """
+    #     if TTprf_type is not None:
+    #         assert TTprf_type in ['ss', 'es', 'se']
+    #         assert u is not None, "Need profile function to compute this estimator"
+    #
+    #     fl = self.fls2fls_dict(fls)
+    #
+    #     s1, s2 = qe[0], qe[1]
+    #     assert s1 in 'TEB' and s2 in 'TEB', f"qe must be one of TEB, got: {qe}"
+    #
+    #     if self.gmv:
+    #         keys = list(fl.keys())
+    #     else:
+    #         keys = [f"{s1}{s1}", f"{s2}{s2}"]  # SQE only picks the 2 (can be the same) diagonal terms.
+    #
+    #     if TTprf_type in ['ss', 'es']:
+    #         loop1 = loop2 = 'T'
+    #     else:
+    #         loop1 = loop2 = 'TEB'
+    #     if TTprf_type in ['ss', 'se']:
+    #         qeXY = weights.weights_plus('prf', self.cls, self.lmax, u=u)
+    #     else:
+    #         qeXY = weights.weights_plus(qe if not curl else f"{qe}curl", self.cls, self.lmax)
+    #
+    #     R = np.zeros(self.Lmax+1, dtype=float)
+    #     for _s1 in loop1:
+    #         _qe1 = s1+_s1
+    #         if _qe1 not in keys:
+    #             continue
+    #         flX = fl[_qe1]*self.fl_cut[s1]
+    #         for _s2 in loop2:
+    #             _qe2 = s2 + _s2
+    #
+    #             if _qe2 not in keys:
+    #                 continue
+    #             flY = fl[_qe2]*self.fl_cut[s2]
+    #             if TTprf_type in ['ss', 'es']:
+    #                 qeZA = weights.weights_plus('prf', self.cls, self.lmax, u=u)
+    #             else:
+    #                 qeZA = weights.weights_plus(_s1+_s2 if not curl else f"{_s1+_s2}curl", self.cls, self.lmax)
+    #             _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax+1, dtype=complex), flX, flY, fast=fast)
+    #             R += _R
+    #     return R
 
-        Parameters
-        ----------
-        qe: str
-            Quadratic estimator type.
-        fls: np.array
-            shape: (4, lmax+1), filter functions for TT/EE/BB/TE, i.e., 1/Cltt, 1/Clee, 1/Clbb, 1/Clte.
-        u: np.ndarray
-            shape (lmax+1, ) profile function for TTprf estimator
-        fast: bool=False
-            If True, uses the fast response function calculation.
-        curl: bool=False
-            If True, `qe` is suffixed with `curl` to compute curl-mode response.
-        TTprf_type: str=None
-            type of the prf estimator, one of ['ss', 'es', 'se'].
-        """
-        if TTprf_type is not None:
-            assert TTprf_type in ['ss', 'es', 'se']
-            assert u is not None, "Need profile function to compute this estimator"
+    def get_resp(self, fls, qe=None, u=None, fast=False, curl=False, type1='lens', type2=None):
 
+        if type2 is None:
+            type2 = type1
         fl = self.fls2fls_dict(fls)
-
         s1, s2 = qe[0], qe[1]
         assert s1 in 'TEB' and s2 in 'TEB', f"qe must be one of TEB, got: {qe}"
 
@@ -1017,43 +1026,40 @@ class Qest(qest):
         else:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]  # SQE only picks the 2 (can be the same) diagonal terms.
 
-        if TTprf_type in ['ss', 'es']:
-            loop1 = loop2 = 'T'
-        else:
-            loop1 = loop2 = 'TEB'
-        if TTprf_type in ['ss', 'se']:
-            qeXY = weights.weights_plus('prf', self.cls, self.lmax, u=u)
-        else:
-            qeXY = weights.weights_plus(qe if not curl else f"{qe}curl", self.cls, self.lmax)
+        loop1 = weights.weights_plus.stokes(distortion=type2)
+        loop2 = weights.weights_plus.stokes(distortion=type2)
 
-        R = np.zeros(self.Lmax+1, dtype=float)
+        qeXY = weights.weights_plus(qe, self.cls, self.lmax, distortion=type1, curl=curl, u=u)
+
+        R = np.zeros(self.Lmax + 1, dtype=float)
+
         for _s1 in loop1:
-            _qe1 = s1+_s1
+            _qe1 = s1 + _s1
             if _qe1 not in keys:
                 continue
             flX = fl[_qe1]*self.fl_cut[s1]
             for _s2 in loop2:
                 _qe2 = s2 + _s2
-
                 if _qe2 not in keys:
                     continue
                 flY = fl[_qe2]*self.fl_cut[s2]
-                if TTprf_type in ['ss', 'es']:
-                    qeZA = weights.weights_plus('prf', self.cls, self.lmax, u=u)
-                else:
-                    qeZA = weights.weights_plus(_s1+_s2 if not curl else f"{_s1+_s2}curl", self.cls, self.lmax)
-                _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax+1, dtype=complex), flX, flY, fast=fast)
+                qeZA = weights.weights_plus(_s1+_s2, self.cls, self.lmax, distortion=type2, curl=curl, u=u)
+                _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
                 R += _R
         return R
 
-    def get_harden_weights(self, qe, fls, u, curl=False, fast=False):
-        ss = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=False, TTprf_type='ss')
-        es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_type='es')
-        se = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=curl, TTprf_type='se')
+    def get_harden_weights(self, qe, fls, u, curl=False, fast=False, type1='lens', type2='prf'):
+        assert type2 == 'prf', "This is implemented for TTprf only (for any estimator)."
+        # ss = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=False, TTprf_type='ss')
+        # es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_type='es')
+        # se = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=curl, TTprf_type='se')
+        es = self.get_resp(fls, qe, curl=curl, fast=fast, type1=type1, type2=type2, u=u)
+        ss = self.get_resp(fls, 'TT', curl=False, fast=fast, type1=type2, type2=type1, u=u)
+        se = self.get_resp(fls, 'TT', curl=curl, fast=fast, type1=type2, type2=type1, u=u)
         weight = -1*es/ss
         return weight, se
 
-    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False):
+    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False, type1='lens', type2='lens'):
         """
         compute lensing reconstruction for grad and curl modes, return also the analytical response functions.
 
@@ -1071,7 +1077,10 @@ class Qest(qest):
             Geometry instance defined within declination range.
         fast: bool=False
             If True, uses the fast response function calculation.
-
+        type1: str
+            distortion field  type for the estimator, 'lens' or 'prf' or 'tau'
+        type2: str
+            distortion field  type for the second (hardened) estimator.
         Returns
         -------
         [glm, clm]: list of complex array
@@ -1091,16 +1100,18 @@ class Qest(qest):
             _qe = qe
 
         glm, clm = self.eval(_qe, almbars1[i1], almbars2[i2], g=g)
-        aresp_g = self.get_aresp_gmv(fls, _qe, fast=fast)
-        aresp_c = self.get_aresp_gmv(fls, _qe, fast=fast, curl=True)
+        # aresp_g = self.get_aresp_gmv(fls, _qe, fast=fast)
+        # aresp_c = self.get_aresp_gmv(fls, _qe, fast=fast, curl=True)
+        aresp_g = self.get_resp(fls, _qe, fast=fast, type1=type1, type2=type1)
+        aresp_c = self.get_resp(fls, _qe, fast=fast, curl=True, type1=type1, type2=type1)
 
-        # do the source hardened stuff
+        # do the source harden stuff
         if qe.endswith('prf'):
             if not self.gmv:
                 assert _qe=='TT', f"We only harden for 'TT' for SQE, got: {qe}"
-            slm = self.eval('prf', almbars1[0], almbars2[0], u=u, g=g)[0]
-            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast)
-            w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast)
+            slm = self.eval('TT', almbars1[0], almbars2[0], u=u, g=g, distortion='prf')[0]
+            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast, type1=type1, type2=type2)
+            w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1, type2=type2)
 
             glm += hp.almxfl(slm, w_g)
             clm += hp.almxfl(slm, w_c)

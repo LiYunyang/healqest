@@ -1150,7 +1150,7 @@ class weights_plus:
         if distortion == 'prf':
             assert u is not None, "Must provide u(ell)"
         if curl and distortion != 'lens':
-            logger.warning(f"{distortion} type doesn't has curl mode.")
+            logger.warning(f"{distortion} type doesn't has curl mode, ignore `curl`")
 
         self.lmax = lmax
         self.distortion = distortion

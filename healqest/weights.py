@@ -1126,7 +1126,7 @@ logger = logging.getLogger(__name__)
 #
 
 class weights_plus:
-    def __init__(self, est, cls, lmax, u=None):
+    def __init__(self, est, cls, lmax, curl=False, u=None, distortion='lens'):
         """
         Parameters:
         -----------
@@ -1139,13 +1139,21 @@ class weights_plus:
         u: array
             f(ell) that describe the power spectrum of a foreground or beam function for profile hardening (can be
             array of 1s)
+        distortion: str
+            type of distortion, 'lens', 'amp', or 'src' (source hardening)
         """
-
         if est == 'prf':
+            logger.warning('prf will be moved to a distortion type rather than an estimator name in future releases.')
+            est = 'TT'
+            distortion = 'prf'
+
+        if distortion == 'prf':
             assert u is not None, "Must provide u(ell)"
+        if curl and distortion != 'lens':
+            logger.warning(f"{distortion} type doesn't has curl mode.")
 
         self.lmax = lmax
-
+        self.distortion = distortion
         logger.debug('Computing weights -- cmblensplus style')
 
         sl = {ii: cls[ii] for ii in cls.keys()}
@@ -1156,17 +1164,26 @@ class weights_plus:
         self.l = np.arange(self.lmax + 1, dtype=np.float64)
 
         if est in ['TT', 'EE', 'BB', 'TE', 'TB', 'EB']:
-            self.init_weights(est, sl=sl)
-        elif est in ['prf']:
-            self.init_weights(est, sl=sl, u=u)
-        elif est in ['TTcurl', 'EEcurl', 'BBcurl', 'TEcurl', 'TBcurl', 'EBcurl', 'T2curl', 'T1curl']:
-            self.init_weights(est[:2], sl=sl, curl=True)
+            self.init_weights(est, sl=sl, curl=curl, u=u)
         elif est in ['ET', 'BT', 'BE']:
-            self.init_weights(est[::-1], sl=sl, swap=True)
-        elif est in ['ETcurl', 'BTcurl', 'BEcurl']:
-            self.init_weights(est[:2][::-1], sl=sl, swap=True, curl=True)
+            self.init_weights(est[::-1], sl=sl, swap=True, curl=curl, u=u)
+        # elif est in ['TTcurl', 'EEcurl', 'BBcurl', 'TEcurl', 'TBcurl', 'EBcurl', 'T2curl', 'T1curl']:
+        #     self.init_weights(est[:2], sl=sl, curl=True)
+        # elif est in ['ETcurl', 'BTcurl', 'BEcurl']:
+        #     self.init_weights(est[:2][::-1], sl=sl, swap=True, curl=True)
         else:
             raise NotImplementedError(f"{est} is not implemented yet")
+
+    @classmethod
+    def stokes(cls, distortion):
+        if distortion == 'lens':
+            return ['T', 'E', 'B']
+        elif distortion == 'tau':
+            return ['T', 'E', 'B']
+        elif distortion == 'prf':
+            return ['T']
+        else:
+            raise NotImplementedError(f"{distortion} is not implemented yet")
 
     def add_term(self, ws1, ws2):
         idx = len(self.w)
@@ -1200,10 +1217,11 @@ class weights_plus:
         """
         coefficients for spin 0+1 fields and spin 2+-1 fields (eq 169/170)
         """
-        assert s in [-1, 1]
-        w = -np.sqrt(self.l*(self.l+1))*cl[:self.lmax+1]
-        if s<0:
-            w *= (-1)**s
+        w = cl[:self.lmax+1].copy()
+        if s in [-1, 1]:
+            w *= -np.sqrt(self.l*(self.l+1))
+            if s<0:
+                w *= (-1)**s
         return w, s
 
     def w_X21(self, cl, s, factor:complex = 1):
@@ -1221,6 +1239,17 @@ class weights_plus:
             w = np.conj(w)*(-1)**s
         return w, s
 
+    def w_X00(self, cl, s, conj=False, factor=1.0):
+        """
+        coefficients for patchy-tau
+        """
+        w = cl[:self.lmax+1].copy()*factor
+
+        if conj:
+            s = -s
+            w = np.conj(w)*(-1)**s
+        return w, s
+
     def init_weights(self, est, sl, swap=False, curl=False, u=None):
         """
         Initialize weights for the base estimators: TT/EE/BB/TE/TB/EB
@@ -1235,38 +1264,65 @@ class weights_plus:
             modify the weights such that "grad" gives the curl estimator and vice versa (off by -1).
         """
 
-        if est == 'TT':
-            self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['tt'], 1))
-            self.add_term(self.w_X01(sl['tt'], 1), self.w_X0('T', conj=False))  # swap 1-2
-        elif est == 'TE':
-            self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['te'], 1))
-            self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('E', conj=False))
-            self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('E', conj=True))
-        elif est == 'TB':
-            self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('B', conj=False))
-            self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('B', conj=True))
-        elif est == 'EE':
-            self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['ee'], -1, factor=0.5))
-            self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['ee'], 3, factor=-0.5))
-            self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('E', conj=False))  # swap 1-2
-            self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('E', conj=True))  # swap 1-2
-        elif est == 'BB':
-            pass
-            # if 'bb' in sl:
-            #     self.add_term(self.w_X0('B', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
-            #     self.add_term(self.w_X0('B', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
-            #     self.add_term(self.w_X21(sl['bb'], -1, factor=1j), self.w_X0('B', conj=False), )  # swap 1-2
-            #     self.add_term(self.w_X21(sl['bb'], 3, factor=-1j), self.w_X0('B', conj=True), )  # swap 1-2
-        elif est == 'EB':
-            self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('B', conj=False))
-            self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('B', conj=True))
-            if 'bb' in sl:
-                self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
-                self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
-        elif est == 'prf':
-            self.add_term(ws1=(u[:self.lmax + 1], 0), ws2=(u[:self.lmax + 1], 0))
+        if self.distortion == 'lens':
+            if est == 'TT':
+                self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['tt'], 1))
+                self.add_term(self.w_X01(sl['tt'], 1), self.w_X0('T', conj=False))  # swap 1-2
+            elif est == 'TE':
+                self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['te'], 1))
+                self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('E', conj=False))
+                self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('E', conj=True))
+            elif est == 'TB':
+                self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('B', conj=False))
+                self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('B', conj=True))
+            elif est == 'EE':
+                self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['ee'], -1, factor=0.5))
+                self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['ee'], 3, factor=-0.5))
+                self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('E', conj=False))  # swap 1-2
+                self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('E', conj=True))  # swap 1-2
+            elif est == 'BB':
+                pass
+                # if 'bb' in sl:
+                #     self.add_term(self.w_X0('B', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
+                #     self.add_term(self.w_X0('B', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
+                #     self.add_term(self.w_X21(sl['bb'], -1, factor=1j), self.w_X0('B', conj=False), )  # swap 1-2
+                #     self.add_term(self.w_X21(sl['bb'], 3, factor=-1j), self.w_X0('B', conj=True), )  # swap 1-2
+            elif est == 'EB':
+                self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('B', conj=False))
+                self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('B', conj=True))
+                if 'bb' in sl:
+                    self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
+                    self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
+            else:
+                raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
+        elif self.distortion == 'tau':
+            if est == 'TT':
+                self.add_term(self.w_X0('T', conj=False), self.w_X00(sl['tt'], 0))
+                self.add_term(self.w_X00(sl['tt'], 0), self.w_X0('T', conj=False))  # swap 1-2
+            elif est == 'TE':
+                self.add_term(self.w_X0('T', conj=False), self.w_X00(sl['te'], 0))
+                self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=-0.5), self.w_X0('E', conj=False))
+                self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=-0.5), self.w_X0('E', conj=True))
+            elif est == 'TB':
+                self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=-0.5), self.w_X0('B', conj=False))
+                self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=-0.5), self.w_X0('B', conj=True))
+            elif est == 'EE':
+                self.add_term(self.w_X0('E', conj=False), self.w_X00(sl['ee'], -2, factor=-0.5))
+                self.add_term(self.w_X0('E', conj=True), self.w_X00(sl['ee'], -2, factor=-0.5, conj=True))
+                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5), self.w_X0('E', conj=False)) # swap 1-2
+                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5, conj=True), self.w_X0('E', conj=True)) # swap 1-2
+            elif est=='EB':
+                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5), self.w_X0('B', conj=False))
+                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5, conj=True), self.w_X0('B', conj=True))
+            else:
+                raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
+        elif self.distortion == 'prf':
+            if est == 'TT':
+                self.add_term(ws1=(u[:self.lmax + 1], 0), ws2=(u[:self.lmax + 1], 0))
+            else:
+                raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
         else:
-            raise NotImplementedError(f"{est} is not implemented yet")
+            raise NotImplementedError(f"Distortion type: {self.distortion} not recognized.")
 
         if swap:
             # flip the weights for asymmetric estimators
@@ -1274,17 +1330,21 @@ class weights_plus:
                 s = self.s[k]
                 self.w[k][0], self.w[k][1] = w[1], w[0]
                 self.s[k][0], self.s[k][1] = s[1], s[0]
-        if est == 'prf':
-            # profile hardened estimators for lensing
-            f3 = 1/u[:self.lmax + 1]*0.5  # the 0.5 factor accounts for the second half redundant terms.
-            s3 = 0
-        else:
+
+        if self.distortion == 'lens':
             # non-hardened estimators
             f3 = np.sqrt(self.l*(self.l + 1))*0.5
             # YL doesn't understand the 0.5 factor. But this is consistent with old implementation (also doesn't matter)
             if curl:
                 f3 = -f3*1j
             s3 = 1
+        elif self.distortion == 'tau':
+            f3 = np.ones(self.lmax+1)*0.5
+            s3 = 0
+        elif self.distortion == 'prf':
+            # profile hardened estimators for lensing
+            f3 = 1/u[:self.lmax + 1]*0.5  # the 0.5 factor accounts for the second half redundant terms.
+            s3 = 0
 
         for k, w in self.w.items():
             self.w[k][2] = f3
@@ -1310,50 +1370,3 @@ class weights_plus:
         self.w.update(new_w)
         self.s.update(new_s)
         self.ntrm = len(self.w)
-
-
-
-'''
-def weights_TT(idx,sltt,lmax):
-    f1 = -0.5*np.ones_like(l)
-    f2 = np.sqrt(l*(l+1))
-    f3 = np.sqrt( l*(l+1) )*sltt[:lmax+1]; f3[:3]=0
-    if idx==0: w1=f3; w2=f1; wL=f2; s1=+1; s2=+0; sL=+1
-    if idx==1: w1=f3; w2=f1; wL=f2; s1=-1; s2=+0; sL=-1
-    if idx==2: w1=f3; w2=f1; wL=f2; s1=+0; s2=-1; sL=-1
-    if idx==3: w1=f3; w2=f1; wL=f2; s1=+0; s2=+1; sL=+1
-    return w1,w2,wL,s1,s2,sL
-
-def weights_EE(idx,slee,lmax):
-    l  = np.arange(lmax+1,dtype=np.float64)
-    f1 = -0.25*np.ones_like(l)
-    f2 = +np.sqrt(l*(l+1))
-    f3 = +np.sqrt((l+2.)*(l-1.))*slee[:lmax+1]; f3[:3]=0
-    f4 = -np.sqrt((l+3.)*(l-2.))*slee[:lmax+1]; f4[:3]=0
-    if idx==0: w1=f3; w2=f1; wL=f2; s1=-1; s2=+2; sL=+1
-    if idx==1: w1=f4; w2=f1; wL=f2; s1=-3; s2=+2; sL=-1
-    if idx==2: w1=f4; w2=f1; wL=f2; s1=+3; s2=-2; sL=+1
-    if idx==3: w1=f3; w2=f1; wL=f2; s1=+1; s2=-2; sL=-1
-    if idx==4: w1=f1; w2=f3; wL=f2; s1=-2; s2=+1; sL=-1
-    if idx==5: w1=f1; w2=f4; wL=f2; s1=-2; s2=+3; sL=+1
-    if idx==6: w1=f1; w2=f4; wL=f2; s1=+2; s2=-3; sL=-1
-    if idx==7: w1=f1; w2=f3; wL=f2; s1=+2; s2=-1; sL=+1
-    return w1,w2,wL,s1,s2,sL
-
-def weights_TE(idx,slte,lmax):
-    l  =  np.arange(lmax+1,dtype=np.float64)
-    f1 = -0.25*np.ones_like(l)
-    f2 =  np.sqrt(l*(l+1))
-    f3 =  np.sqrt((l+2.)*(l-1.))*slte[:lmax+1]; f3[:3]=0
-    f4 = -np.sqrt((l+3.)*(l-2.))*slte[:lmax+1]; f4[:3]=0
-    f5 = -0.5*np.ones_like(l,dtype=np.float64)
-    f6 =  np.sqrt(l*(l+1))
-    f7 =  np.sqrt(l*(l+1))*slte[:lmax+1]
-    if idx==0: w1=f3; w2=f1; wL=f2; s1=-1; s2=+2; sL=+1
-    if idx==1: w1=f4; w2=f1; wL=f2; s1=-3; s2=+2; sL=+1
-    if idx==2: w1=f4; w2=f1; wL=f2; s1=+3; s2=-2; sL=+1
-    if idx==3: w1=f3; w2=f1; wL=f2; s1=+1; s2=-2; sL=-1
-    if idx==4: w1=f5; w2=f7; wL=f6; s1=+0; s2=-1; sL=-1
-    if idx==5: w1=f5; w2=f7; wL=f6; s1=+0; s2=+1; sL=+1
-    return w1,w2,wL,s1,s2,sL
-'''

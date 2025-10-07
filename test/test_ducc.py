@@ -135,7 +135,7 @@ def test_smoothing(setup, fwhm, pol, weights):
           f"use_weights={use_weights}")
 
     m = setup['m']
-    m[:, setup['mask']] = hp.UNSEEN
+    m[:, ~setup['mask']] = hp.UNSEEN
     t1 = perf_counter()
     m1 = hp.smoothing(m, fwhm=np.deg2rad(fwhm), pol=pol, iter=0, use_weights=use_weights,
                       use_pixel_weights=use_pixel_weights)

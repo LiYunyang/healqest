@@ -1164,3 +1164,62 @@ class Qest(qest):
             aresp_c += w_c*se_c
 
         return [glm, clm], [aresp_g, aresp_c]
+
+
+# Generalized bias-hardening tools
+def det(idx_i, idx_j, func):
+    """
+    compute determinant of submat, with row, col index specified by idx_i and idx_j
+    """
+    if len(idx_i)==len(idx_j)==1:
+        return func(idx_i[0], idx_j[0])
+    tot = 0
+    for k, j in enumerate(idx_j):
+        tot += func(idx_i[0], j)*cofactor(idx_i, idx_j, 0, k, func=func)
+    return tot
+
+
+def cofactor(idx_i, idx_j, ki, kj, func):
+    """
+    compute cofactor of submat, with row, col index specified by idx_i and idx_j, for element (ki, kj)
+    """
+    # sometimes we run into computing cofactor of a 1x1 matrix.
+    if len(idx_i)==len(idx_j)==1:
+        return np.ones_like(func(idx_i[0], idx_j[0]))
+    sign = (-1)**(ki + kj)
+    i_sub = list(idx_i.copy())
+    j_sub = list(idx_j.copy())
+    i_sub.pop(ki)
+    j_sub.pop(kj)
+    det_minor = det(i_sub, j_sub, func)
+    return sign*det_minor
+
+
+def get_harden_resps(keys, func):
+    """
+    Example
+    -------
+    >>> func = lambda k1, k2: np.sum([R[f'{k1}-{k2}'][qe] for qe in ['TT', 'EE', 'TE', 'ET']], axis=0)
+    >>> get_harden_resps([ 'tau', 'lens', 'prf'], func=func)
+    """
+
+    R = 0
+    C11 = cofactor(keys, keys, 0, 0, func)
+    for j, k in enumerate(keys):
+        Rk = func(keys[0], k)
+        Ck = cofactor(keys, keys, 0, j, func)
+        R += Ck*Rk/C11
+    return R
+
+
+def get_harden_weights(keys, i, func):
+    """
+    Example
+    -------
+    >>> keys = ['tau', 'lens', 'prf']
+    >>> func = lambda k1, k2: np.sum([R[f'{k1}-{k2}'][qe] for qe in ['TT', 'EE', 'TE', 'ET']], axis=0)
+    >>> w_len = get_harden_weights(keys, 1, func=func) # weights for the lens component to harden against tau
+    """
+    C11 = cofactor(keys, keys, 0, 0, func)
+    Ck = cofactor(keys, keys, i, 0, func)
+    return Ck/C11

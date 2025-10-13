@@ -1057,10 +1057,12 @@ class Qest(qest):
         else:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]  # SQE only picks the 2 (can be the same) diagonal terms.
 
-        qeXY = weights.weights_plus(qe, self.cls, self.lmax, distortion=type1, curl=curl, u=u)
-        assert qe in weights.weights_plus.estimators(type1)
-
         R = np.zeros(self.Lmax + 1, dtype=float)
+        if qe not in weights.weights_plus.estimators(type1):
+            logger.warning(f"{type1} distortion does not have {qe} defined. set response to 0.")
+            return R
+        else:
+            qeXY = weights.weights_plus(qe, self.cls, self.lmax, distortion=type1, curl=curl, u=u)
 
         for _s1 in 'TEB':
             _qe1 = s1 + _s1
@@ -1076,12 +1078,12 @@ class Qest(qest):
                 if _s1+_s2 not in weights.weights_plus.estimators(type2):
                     # sometimes `_qe2` is not defined for the second distortion field,
                     # in this case it should be skipped.
-                    logger.warning(f"qe {_s1}{_s2} not in weights plus estimators")
+                    logger.warning(f"{type2} distortion field does not have {_s1}{_s2} defined.")
                     continue
-
-                qeZA = weights.weights_plus(_s1+_s2, self.cls, self.lmax, distortion=type2, curl=curl, u=u)
-                _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
-                R += _R
+                else:
+                    qeZA = weights.weights_plus(_s1+_s2, self.cls, self.lmax, distortion=type2, curl=curl, u=u)
+                    _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
+                    R += _R
         return R
 
     def get_harden_weights(self, qe, fls, u, curl=False, fast=False, type1='lens', type2='prf'):

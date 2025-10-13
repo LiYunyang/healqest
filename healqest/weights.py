@@ -1345,7 +1345,8 @@ class weights_plus:
             raise NotImplementedError
 
     def set_base_weights(self, distortion, est, sl, u):
-        assert est in self.__class__.estimators(distortion)
+        if est not in self.__class__.estimators(distortion):
+            raise ValueError('distortion %s is not a valid estimator' % distortion)
         if distortion == 'lens':
             func = self._set_base_weights_lens
         elif distortion == 'tau':

@@ -1213,6 +1213,21 @@ class weights_plus:
             w = np.conj(w)*(-1)**s
         return w, s
 
+    def w_X0j(self, X, conj=False):
+        # like w_X0, just use j for E instead of B.
+        if X == 'E':
+            w = -1j*np.ones_like(self.l)
+            s = 2
+        elif X == 'B':
+            w = -np.ones_like(self.l)
+            s= 2
+        else:
+            raise ValueError("X must be 'E' or 'B'")
+        if conj:
+            s = -s
+            w = np.conj(w)*(-1)**s
+        return w, s
+
     def w_X01(self, cl, s):
         """
         coefficients for spin 0+1 fields and spin 2+-1 fields (eq 169/170)
@@ -1244,11 +1259,105 @@ class weights_plus:
         coefficients for patchy-tau
         """
         w = cl[:self.lmax+1].copy()*factor
-
         if conj:
             s = -s
             w = np.conj(w)*(-1)**s
         return w, s
+
+    def _set_base_weights_lens(self, est, sl, *args):
+        if est=='TT':
+            self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['tt'], 1))
+            self.add_term(self.w_X01(sl['tt'], 1), self.w_X0('T', conj=False))  # swap 1-2
+        elif est=='TE':
+            self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['te'], 1))
+            self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('E', conj=False))
+            self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('E', conj=True))
+        elif est=='TB':
+            self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('B', conj=False))
+            self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('B', conj=True))
+        elif est=='EE':
+            self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['ee'], -1, factor=0.5))
+            self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['ee'], 3, factor=-0.5))
+            self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('E', conj=False))  # swap 1-2
+            self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('E', conj=True))  # swap 1-2
+        elif est=='BB':
+            pass
+            # if 'bb' in sl:
+            #     self.add_term(self.w_X0('B', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
+            #     self.add_term(self.w_X0('B', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
+            #     self.add_term(self.w_X21(sl['bb'], -1, factor=1j), self.w_X0('B', conj=False), )  # swap 1-2
+            #     self.add_term(self.w_X21(sl['bb'], 3, factor=-1j), self.w_X0('B', conj=True), )  # swap 1-2
+        elif est=='EB':
+            self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('B', conj=False))
+            self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('B', conj=True))
+            if 'bb' in sl:
+                self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
+                self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
+        else:
+            raise NotImplementedError
+
+    def _set_base_weights_tau(self, est, sl, *args):
+        if est=='TT':
+            self.add_term(self.w_X0('T', conj=False), self.w_X00(sl['tt'], 0))
+            self.add_term(self.w_X00(sl['tt'], 0), self.w_X0('T', conj=False))  # swap 1-2
+        elif est=='TE':
+            self.add_term(self.w_X0('T', conj=False), self.w_X00(sl['te'], 0))
+            self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=-0.5), self.w_X0('E', conj=False))
+            self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=-0.5), self.w_X0('E', conj=True))
+        elif est=='TB':
+            self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=-0.5), self.w_X0('B', conj=False))
+            self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=-0.5), self.w_X0('B', conj=True))
+        elif est=='EE':
+            self.add_term(self.w_X0('E', conj=False), self.w_X00(sl['ee'], -2, factor=-0.5))
+            self.add_term(self.w_X0('E', conj=True), self.w_X00(sl['ee'], -2, factor=-0.5, conj=True))
+            self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5), self.w_X0('E', conj=False))  # swap 1-2
+            self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5, conj=True), self.w_X0('E', conj=True))  # swap 1-2
+        elif est=='EB':
+            self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5), self.w_X0('B', conj=False))
+            self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5, conj=True), self.w_X0('B', conj=True))
+        else:
+            raise NotImplementedError
+
+    def _set_base_weights_rot(self, est, sl, *args):
+        if est=='TE':
+            self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=1), self.w_X0j('E', conj=False))
+            self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=1), self.w_X0j('E', conj=True))
+        elif est=='TB':
+            self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=-1), self.w_X0j('B', conj=False))
+            self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=-1), self.w_X0j('B', conj=True))
+        elif est=='EE':
+            self.add_term(self.w_X0j('E', conj=False), self.w_X00(sl['ee'], -2, conj=False, factor=1))
+            self.add_term(self.w_X0j('E', conj=True), self.w_X00(sl['ee'], -2, conj=True, factor=1))
+            self.add_term(self.w_X00(sl['ee'], -2, conj=False, factor=1), self.w_X0j('E', conj=False))
+            self.add_term(self.w_X00(sl['ee'], -2, conj=True, factor=1), self.w_X0j('E', conj=True))
+        elif est=='EB':
+            self.add_term(self.w_X00(sl['ee'], -2, conj=False, factor=-1), self.w_X0j('B', conj=False))
+            self.add_term(self.w_X00(sl['ee'], -2, conj=True, factor=-1), self.w_X0j('B', conj=True))
+        else:
+            raise NotImplementedError
+
+    def _set_base_weights_prf(self, est, sl, u):
+        if est=='TT':
+            self.add_term(ws1=(u[:self.lmax + 1], 0), ws2=(u[:self.lmax + 1], 0))
+        else:
+            raise NotImplementedError
+
+    def set_base_weights(self, distortion, est, sl, u):
+        assert est in self.__class__.estimators(distortion)
+        if distortion == 'lens':
+            func = self._set_base_weights_lens
+        elif distortion == 'tau':
+            func = self._set_base_weights_tau
+        elif distortion == 'rot':
+            func = self._set_base_weights_rot
+        elif distortion == 'prf':
+            func = self._set_base_weights_prf
+        else:
+            raise NotImplementedError(f"{distortion} is not implemented yet")
+        try:
+            func(est, sl, u)
+        except NotImplementedError:
+            raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
 
     def init_weights(self, est, sl, swap=False, curl=False, u=None):
         """
@@ -1264,65 +1373,7 @@ class weights_plus:
             modify the weights such that "grad" gives the curl estimator and vice versa (off by -1).
         """
 
-        if self.distortion == 'lens':
-            if est == 'TT':
-                self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['tt'], 1))
-                self.add_term(self.w_X01(sl['tt'], 1), self.w_X0('T', conj=False))  # swap 1-2
-            elif est == 'TE':
-                self.add_term(self.w_X0('T', conj=False), self.w_X01(sl['te'], 1))
-                self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('E', conj=False))
-                self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('E', conj=True))
-            elif est == 'TB':
-                self.add_term(self.w_X21(sl['te'], -1, factor=0.5), self.w_X0('B', conj=False))
-                self.add_term(self.w_X21(sl['te'], 3, factor=-0.5), self.w_X0('B', conj=True))
-            elif est == 'EE':
-                self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['ee'], -1, factor=0.5))
-                self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['ee'], 3, factor=-0.5))
-                self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('E', conj=False))  # swap 1-2
-                self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('E', conj=True))  # swap 1-2
-            elif est == 'BB':
-                pass
-                # if 'bb' in sl:
-                #     self.add_term(self.w_X0('B', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
-                #     self.add_term(self.w_X0('B', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
-                #     self.add_term(self.w_X21(sl['bb'], -1, factor=1j), self.w_X0('B', conj=False), )  # swap 1-2
-                #     self.add_term(self.w_X21(sl['bb'], 3, factor=-1j), self.w_X0('B', conj=True), )  # swap 1-2
-            elif est == 'EB':
-                self.add_term(self.w_X21(sl['ee'], -1, factor=0.5), self.w_X0('B', conj=False))
-                self.add_term(self.w_X21(sl['ee'], 3, factor=-0.5), self.w_X0('B', conj=True))
-                if 'bb' in sl:
-                    self.add_term(self.w_X0('E', conj=False), self.w_X21(sl['bb'], -1, factor=0.5j))
-                    self.add_term(self.w_X0('E', conj=True), self.w_X21(sl['bb'], 3, factor=-0.5j))
-            else:
-                raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
-        elif self.distortion == 'tau':
-            if est == 'TT':
-                self.add_term(self.w_X0('T', conj=False), self.w_X00(sl['tt'], 0))
-                self.add_term(self.w_X00(sl['tt'], 0), self.w_X0('T', conj=False))  # swap 1-2
-            elif est == 'TE':
-                self.add_term(self.w_X0('T', conj=False), self.w_X00(sl['te'], 0))
-                self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=-0.5), self.w_X0('E', conj=False))
-                self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=-0.5), self.w_X0('E', conj=True))
-            elif est == 'TB':
-                self.add_term(self.w_X00(sl['te'], -2, conj=False, factor=-0.5), self.w_X0('B', conj=False))
-                self.add_term(self.w_X00(sl['te'], -2, conj=True, factor=-0.5), self.w_X0('B', conj=True))
-            elif est == 'EE':
-                self.add_term(self.w_X0('E', conj=False), self.w_X00(sl['ee'], -2, factor=-0.5))
-                self.add_term(self.w_X0('E', conj=True), self.w_X00(sl['ee'], -2, factor=-0.5, conj=True))
-                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5), self.w_X0('E', conj=False)) # swap 1-2
-                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5, conj=True), self.w_X0('E', conj=True)) # swap 1-2
-            elif est=='EB':
-                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5), self.w_X0('B', conj=False))
-                self.add_term(self.w_X00(sl['ee'], -2, factor=-0.5, conj=True), self.w_X0('B', conj=True))
-            else:
-                raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
-        elif self.distortion == 'prf':
-            if est == 'TT':
-                self.add_term(ws1=(u[:self.lmax + 1], 0), ws2=(u[:self.lmax + 1], 0))
-            else:
-                raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
-        else:
-            raise NotImplementedError(f"Distortion type: {self.distortion} not recognized.")
+        self.set_base_weights(distortion=self.distortion, est=est, sl=sl, u=u)
 
         if swap:
             # flip the weights for asymmetric estimators
@@ -1338,13 +1389,15 @@ class weights_plus:
             if curl:
                 f3 = -f3*1j
             s3 = 1
-        elif self.distortion == 'tau':
+        elif self.distortion in ['tau', 'rot']:
             f3 = np.ones(self.lmax+1)*0.5
             s3 = 0
         elif self.distortion == 'prf':
             # profile hardened estimators for lensing
             f3 = 1/u[:self.lmax + 1]*0.5  # the 0.5 factor accounts for the second half redundant terms.
             s3 = 0
+        else:
+            raise NotImplementedError(f"{self.distortion} is not implemented yet")
 
         for k, w in self.w.items():
             self.w[k][2] = f3

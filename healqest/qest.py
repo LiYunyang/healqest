@@ -1013,7 +1013,38 @@ class Qest(qest):
     #             R += _R
     #     return R
 
-    def get_resp(self, fls, qe=None, u=None, fast=False, curl=False, type1='lens', type2=None):
+    def get_resp(self, fls, qe, u=None, fast=False, curl=False, type1='lens', type2=None):
+        """
+        Compute the cross response between two estimators. Assume joint cinv filtering.
+
+        Note
+        ----
+        For example, we want to see how much the f^XY estimator extract the distrotion field (encoded by weights g)
+        from filtered maps \bar{X} and \bar{Y}, which can be decomposed into W^{XZ} Z and W^{YA} A,
+        where X/Y/Z/A are T/E/B, and W are the filter functions (gmv, or sqe in the diagonal case).
+        In the general form, this is computing f^{XY} W^{XZ} W^{YA} g^{ZA}. Note that, some terms in g might not
+        exist, e.g. non-TT terms for the profile estimator.
+
+        Parameters
+        ----------
+        fls: array of shape (4, lmax+1)
+            filter functions for TT/EE/BB/TE, i.e., 1/Cl
+        qe: str
+            Quadratic estimator type, e.g., 'TT','EB'
+        u: np.ndarray=None
+            profile function for prf estimator
+        fast: bool
+            If True, uses the fast response function calculation.
+        curl: bool
+            If True, `qe` is suffixed with `curl` to compute curl-mode response.
+        type1, type2: str
+            distortion field  type for the estimator, 'lens' or 'prf' or 'tau' or 'rot'.
+
+        Returns
+        -------
+        R: np.ndarray
+            response function
+        """
 
         if type2 is None:
             type2 = type1

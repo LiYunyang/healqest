@@ -1175,13 +1175,15 @@ class weights_plus:
             raise NotImplementedError(f"{est} is not implemented yet")
 
     @classmethod
-    def stokes(cls, distortion):
+    def estimators(cls, distortion):
         if distortion == 'lens':
-            return ['T', 'E', 'B']
+            return ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']
         elif distortion == 'tau':
-            return ['T', 'E', 'B']
+            return ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']
+        elif distortion == 'rot':
+            return ['TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']
         elif distortion == 'prf':
-            return ['T']
+            return ['TT']
         else:
             raise NotImplementedError(f"{distortion} is not implemented yet")
 

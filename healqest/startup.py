@@ -51,7 +51,7 @@ def get_git_version():
 
 
 class PartialFormatter(string.Formatter):
-    """Allow delayed fornatting of values in strings."""
+    """Allow delayed formatting of values in strings."""
     def get_value(self, key, args, kwargs):
         # Try to resolve the key
         try:

@@ -510,7 +510,11 @@ class GeometryTF:
 
     def filter_maps(self, maps, nthreads=None):
         """Apply lx cut to maps of shape (1,2,3) for T/QU/TQU. [inplace]"""
-        return self.apply_map(np.atleast_2d(maps), nthreads=nthreads)
+        out = self.apply_map(np.atleast_2d(maps), nthreads=nthreads)
+        if maps.ndim == 1:
+            assert out.shape[0] == 1
+            return out[0]
+        return out
 
     def filter_maps_partial(self, maps, nthreads=None):
         """"fast filtering of a 1d partial maps (only pixels defined by self.ipix)"""

@@ -563,6 +563,7 @@ class Config:
                 _mask = hq.read_map(self.path(_, field=self.field), field=field)
             except IndexError:
                 _mask = hq.read_map(self.path(_, field=self.field), field=0)
+                logger.warning(f"field {field} not found in mask file {self.path(_)}, using field 0 instead.")
             if mask is None:
                 mask = _mask
             else:
@@ -590,6 +591,7 @@ class Config:
                 return self.mask_qe['t']
             else:
                 logger.error("ps mask not given, try QE P-mask, but it is not consistent with T-mask!.")
+                return self.mask_qe["p"]
 
     @cached_property
     def mask_resp(self):

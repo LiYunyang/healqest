@@ -442,8 +442,9 @@ class GeometryTF:
 
     def _cut_ms(self, legs):
         ms = np.arange(legs.shape[2], dtype=int)
-        for ir, (mc, np_i) in enumerate(zip(self.ma, 1./self.g.nphi)):
-            legs[:, ir, :] *= np_i*(ms<mc)
+        for ir, (_mc, np_i) in enumerate(zip(self.ma, self.g.nphi)):
+            mc = min(_mc, np_i // 2+1)
+            legs[:, ir, :] *= (ms<mc)/np_i
 
     def _apply_tf_inplace(self, alms, maps, nthreads):
         if maps is not None:

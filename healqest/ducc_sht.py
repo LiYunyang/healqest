@@ -108,6 +108,8 @@ class Geometry:
             t2 = np.pi / 2 - np.deg2rad(min(dec_range))
             n1 = max(n1, hp.ang2pix(nside, t1, 0) - 1)
             n2 = min(n2, hp.ang2pix(nside, t2, 2 * np.pi) + 4*nside+1)
+        else:
+            self.dec_range = None
         ipix = np.arange(n1, n2)
         theta, phi = hp.pix2ang(nside, ipix)
         if dec_range is not None:
@@ -427,9 +429,21 @@ class GeometryTF:
         self.ma = mcuts_max
 
     def set_ipix(self, ipix):
-        """delayed setting of the pixels"""
+        """Delayed setting of the pixels."""
+        if ipix.max() > self.g.ofs[-1] + self.g.nphi[-1]:
+            raise ValueError(
+                f"ipix contains pixels outside the geometry with range {self.g.dec_range}. "
+                "Probably need to extend the southern declination limit."
+            )
+        if ipix.min() < self.g.ofs[0]:
+            raise ValueError(
+                f"ipix contains pixels outside the geometry with range {self.g.dec_range}. "
+                "Probably need to extend the northern declination limit."
+            )
         self.ipix = ipix
-        self.tf_pix = ipix - self.g.ofs[0]  # internal index to map from reduced pix to full pixels.
+        self.tf_pix = (
+            ipix - self.g.ofs[0]
+        )  # internal index to map from reduced pix to full pixels.
         assert all(self.tf_pix >= 0)
 
     @cached_property

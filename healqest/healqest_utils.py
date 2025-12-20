@@ -1688,7 +1688,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
 
 
-def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_hp=False):
+def read_map(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=False):
     """A wrapper to read the partial maps, as fits or npy files.
 
     Parameters
@@ -1698,29 +1698,18 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
     field: int/str or list of int/str
         column(s) to read from the FITS file or column index for npy arrays. If now, grab all data columns.
     dtype: str or type
-    partial : bool, optional
-        If True, fits file is assumed to be a partial-sky file with explicit indexing, and the bad pixels are set
-        to hp.UNSEEN. If False, implicit indexing is assumed and bad pixels are set to 0  Default: False.
-        A partial sky file is one in which OBJECT=PARTIAL and INDXSCHM=EXPLICIT,
-        and the first column is then assumed to contain pixel indices.
-        A full sky file is one in which OBJECT=FULLSKY and INDXSCHM=IMPLICIT.
-        At least one of these keywords must be set for the indexing
-        scheme to be properly identified.
     hdu : int, optional
         the header number to look at (start at 0)
     h : bool, optional
         If True, return also the header. Default: False.
-    use_hp: bool=False
-        If True, use the healpy read_map to read fits map, otherwise, use the faster IO code.
+    return_cosmo: bool=False
+        If True, make sure the return polarization map is in COSMOS format (flipping U sign if needed).
     """
     if isinstance(field, (str, int)):
         field = [field]
 
     def _allocate(nside,):
-        if partial:
-            return np.full((len(field), hp.nside2npix(nside)), hp.UNSEEN, dtype=dtype)
-        else:
-            return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
+        return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
 
     try:
         if os.path.splitext(fname)[1] == '.npy':
@@ -1747,42 +1736,87 @@ def read_map(fname, field=(0, ), dtype=None, partial=False, hdu=1, h=False, use_
             return np.squeeze(out)
         else:
             """load fits partial maps"""
-            from astropy.io import fits
-            with fits.open(fname, memmap=True) as hdul:
-                names = hdul[hdu].columns.names.copy()
-                try:
-                    # for partial maps, we skip the index column
-                    names.remove('PIXEL')
-                except ValueError:
-                    pass
-                fields_num = []
-                fields_name = []
-                if field is None:
-                    field = names
-                for c in field:
-                    if isinstance(c, str):
-                        if c in names:
-                            fields_num.append(names.index(c))
-                            fields_name.append(c)
-                        else:
-                            raise ValueError(f"Column {c} not found in the FITS file: {names}")
-                    elif isinstance(c, (int, np.integer)):
-                        fields_num.append(c)
-                        fields_name.append(names[c])
-                    else:
-                        raise TypeError(f"field {c} ({type(c)})?")
-                if use_hp:
-                    return hp.read_map(fname, field=tuple(fields_num), dtype=dtype, hdu=hdu, h=h, partial=partial)
-                else:
-                    out = _allocate(nside=int(dict(hdul[hdu].header)['NSIDE']))
-                    for j, name in enumerate(fields_name):
-                        out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]
-                    if h:
-                        return np.squeeze(out), hdul[hdu].header
-                    else:
-                        return np.squeeze(out)
+            return read_map_fits(fname, field=field, dtype=dtype, hdu=hdu, h=h, return_cosmo=return_cosmo)
     except Exception as e:
         raise e from IOError(f"Error reading file: {fname}")
+
+
+def read_map_fits(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=False):
+    """Read healpy maps.
+
+    Parameters
+    ----------
+    fname: str
+        a path to '.npy' or '.fits' file.
+    field: int/str or list of int/str
+        column(s) to read from the FITS file or column index for npy arrays. If now, grab all data columns.
+    dtype: str or type=None
+    hdu : int, optional
+        the header number to look at (start at 0)
+    h : bool, optional
+        If True, return also the header. Default: False.
+    return_cosmo: bool=False
+        If True, make sure the return polarization map is in COSMO format (flipping U sign if needed).
+    """
+    from astropy.io import fits
+
+    if isinstance(field, (str, int)):
+        field = [field]
+
+    def _allocate(nside,):
+        return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
+
+    with fits.open(fname, memmap=True) as hdul:
+        names = hdul[hdu].columns.names.copy()
+        try:
+            # for partial maps, we skip the index column
+            names.remove('PIXEL')
+        except ValueError:
+            pass
+        fields_num = []
+        fields_name = []
+        if field is None:
+            field = names
+        for c in field:
+            if isinstance(c, str):
+                if c in names:
+                    fields_num.append(names.index(c))
+                    fields_name.append(c)
+                else:
+                    raise ValueError(f"Column {c} not found in the FITS file: {names}")
+            elif isinstance(c, (int, np.integer)):
+                fields_num.append(c)
+                fields_name.append(names[c])
+            else:
+                raise TypeError(f"field {c} ({type(c)})?")
+
+        iau2cosmo = False
+        polconv = hdul[hdu].header.get('POLCCONV', None)
+        if return_cosmo:
+            if polconv in ['HEALPIX', "COSMO"]:
+                pass
+            elif polconv in ['IAU']:
+                iau2cosmo = True
+            else:
+                logger.warning(f"Request to return COSMO format, but POLCONV={polconv} is unrecogonized. "
+                               f"Assuming COSMO and do nothing.")
+
+        out = _allocate(nside=int(dict(hdul[hdu].header)['NSIDE']))
+        partial = 'PIXEL' in hdul[hdu].columns.names
+        for j, name in enumerate(fields_name):
+            if iau2cosmo and (fields_num[j] == 2 or name == 'U_POLARISATION'):
+                logger.warning(f"Converting the {fields_num[j]}th map {name} from {polconv} to COSMO")
+                fac = -1
+            else:
+                fac = 1
+            if partial:
+                out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]*fac
+            else:
+                out[j, :] = hdul[hdu].data[name]*fac
+        if h:
+            return np.squeeze(out), hdul[hdu].header
+        else:
+            return np.squeeze(out)
 
 
 def generate_seed(seed, cmbset, bundle=None, extra_tag=None):

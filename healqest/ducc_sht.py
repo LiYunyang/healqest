@@ -428,6 +428,15 @@ class GeometryTF:
         self.mi = mcuts_min
         self.ma = mcuts_max
 
+    @classmethod
+    def from_mask(cls, geom, mask, lx_cut, **kwargs):
+        try:
+            hp.get_nside(mask)
+        except Exception:
+            raise ValueError("mask must be in Healpix format.")
+        ipix = np.where(mask!=0)[0]
+        return cls(geom, ipix=ipix, lx_cut=lx_cut, **kwargs)
+
     def set_ipix(self, ipix):
         """Delayed setting of the pixels."""
         if ipix.max() > self.g.ofs[-1] + self.g.nphi[-1]:

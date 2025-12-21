@@ -1852,14 +1852,15 @@ def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
         if return_eps:
             hdu = fits.open(fname)[3]
             return hdu.data['eps']
-        maps = read_map(fname, field=None, partial=False, hdu=1, dtype=np.float64)
+        maps = read_map(fname, field=None, hdu=1, dtype=np.float64)
         hdu = fits.open(fname)[2]
         fl = np.array([hdu.data[_.name] for _ in hdu.columns])
         return np.atleast_2d(maps), fl
     else:
         assert len(maps) in (1, 3)
         assert len(fl) in (1, 4)
-        hp.write_map(fname, maps, overwrite=True, dtype=np.float64, partial=True)
+        hp.write_map(fname, maps, overwrite=True, dtype=np.float64, partial=True,
+                     extra_header=[('POLCCONV', 'COSMO')])
         with fits.open(fname, mode='update') as hdul:
             colnames = ['flT', 'flE', 'flB', 'flTE']
             hdul.append(fits.BinTableHDU.from_columns([

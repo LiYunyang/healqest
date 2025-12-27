@@ -397,7 +397,7 @@ class Config:
                         bb=dat[2],
                         te=dat[3])
 
-        file_cmb = str(resources.files('healqest') / 'camb' / self.file_cambcmb)
+        file_cmb = str(resources.files('healqest') / 'data/camb' / self.file_cambcmb)
         ell, *dat = utils.get_lensedcls(file_cmb, lmax=self.cinv_lmax)
         out['cmb'] = dat2dict(ell, dat)
 
@@ -410,7 +410,7 @@ class Config:
 
     @cached_property
     def cmbcl(self):
-        cambcls = str(resources.files('healqest') / 'camb' / self.file_cmb)
+        cambcls = str(resources.files('healqest') / 'data/camb' / self.file_cmb)
         try:
             ell, sltt, slee, slbb, slte = utils.get_lensedcls(cambcls, lmax=self.lmax)
         except ValueError:

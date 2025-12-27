@@ -75,5 +75,5 @@ if __name__ == "__main__":
                                                    'wraparound': False,
                                                    'initializedcheck': True}),  # compile wigerd.pyx through cython
         # cmdclass={"build_ext": BuildF2Py}, # compile wigerd.pyf through f2py
-        package_data={"healqest": ["camb/*", "*.so", "src/*.h"]},
+        package_data={"healqest": ["*.so", "src/*.h", "data/*"]},
     )

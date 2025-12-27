@@ -680,3 +680,42 @@ def alm2mat(alm, lmax=None):
         out[m, m: m + n] = alm[idx: idx + n]
         idx += n
     return out
+
+
+def get_almvar(wl0, lmax, Lmax=30):
+    """
+    Compute the variance in alm given the variance in pixel space.
+
+    Mathematically, this is computing \int Y_lm^dagger W Y_lm, where W is diagonal in pixel space.
+
+    Parameters
+    ----------
+    wl0: array-like
+        The alm of the variance map
+    lmax: int
+        The maximum l/m to compute
+    Lmax: int=30
+        The maximum L to use from the precomputed w3jllmm.npy file.
+
+    Returns
+    -------
+    out: array-like
+        The variance per alm mode up to lmax.
+    """
+    from importlib import resources
+    fname = str(resources.files('healqest')/'data'/'w3jllmm.npy')
+    try:
+        load = np.load(fname, mmap_mode='r')
+    except FileNotFoundError:
+        raise FileNotFoundError("Could not find the precomputed w3jllmm.npy file.  Please generate from scripts.")
+    _lmax = hp.Alm.getlmax(load.shape[0])
+    _Lmax = load.shape[1]-1
+    if lmax > _lmax:
+        raise ValueError(f"requested lmax {lmax} is larger than max pre-computed {_lmax}")
+    if Lmax > load.shape[1]-1:
+        raise ValueError(f"requested lmax {Lmax} is larger than max pre-computed {_Lmax}")
+
+    out = np.zeros(load.shape[0], dtype=float)
+    for L in range(Lmax+1):
+        out += wl0[L].real*load[:, L]
+    return reduce_lmax(out, lmax)

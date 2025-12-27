@@ -8,3 +8,4 @@ dist/
 build/
 local/
 healqest/cython/*.c
+healqest/data/w3jllmm.npy

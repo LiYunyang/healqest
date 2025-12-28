@@ -687,6 +687,7 @@ def get_almvar(wl0, lmax, Lmax=30):
     Compute the variance in alm given the variance in pixel space.
 
     Mathematically, this is computing \int Y_lm^dagger W Y_lm, where W is diagonal in pixel space.
+    In matrix notation, this is computting Y⁻¹ w Y = Yᵀ w Y dS -- dS is the pixel area
 
     Parameters
     ----------

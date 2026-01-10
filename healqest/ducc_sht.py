@@ -417,7 +417,11 @@ class GeometryTF:
         self.ipix = None
         self.tf_pix = None
         if ipix is not None:
-            self.set_ipix(ipix)
+            pass
+        else:
+            # very tricky, with unit type, np.arange becomes float!
+            ipix = np.arange(self.g.ofs[0], self.g.ofs[-1] + self.g.nphi[-1]).astype(int)
+        self.set_ipix(ipix)
 
         assert self.m_apodeg==0, 'need to reimplement that, it was not working well anyways'
         ms_min = np.int_(self.lx_cut*np.sin(np.minimum(self.g.theta + self.m_apodeg*np.pi/180., np.pi)))
@@ -683,7 +687,7 @@ def alm2mat(alm, lmax=None):
 
 
 def get_almvar(wl0, lmax, Lmax=30):
-    """
+    r"""
     Compute the variance in alm given the variance in pixel space.
 
     Mathematically, this is computing \int Y_lm^dagger W Y_lm, where W is diagonal in pixel space.

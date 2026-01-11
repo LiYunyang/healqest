@@ -1092,12 +1092,12 @@ class Qest(qest):
         # es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_type='es')
         # se = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=curl, TTprf_type='se')
         es = self.get_resp(fls, qe, curl=curl, fast=fast, type1=type1, type2=type2, u=u)
-        ss = self.get_resp(fls, 'TT', curl=False, fast=fast, type1=type2, type2=type1, u=u)
+        ss = self.get_resp(fls, 'TT', curl=False, fast=fast, type1=type2, type2=type2, u=u)
         se = self.get_resp(fls, 'TT', curl=curl, fast=fast, type1=type2, type2=type1, u=u)
         weight = -1*es/ss
         return weight, se
 
-    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False, type1='lens', type2=None):
+    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False, type1='lens'):
         """
         compute lensing reconstruction for grad and curl modes, return also the analytical response functions.
 
@@ -1117,8 +1117,7 @@ class Qest(qest):
             If True, uses the fast response function calculation.
         type1: str
             distortion field  type for the estimator, 'lens' or 'prf' or 'tau'
-        type2: str
-            distortion field  type for the second (hardened) estimator.
+
         Returns
         -------
         [glm, clm]: list of complex array
@@ -1151,9 +1150,9 @@ class Qest(qest):
             if not self.gmv:
                 assert _qe=='TT', f"We only harden for 'TT' for SQE, got: {qe}"
             slm = self.eval('TT', almbars1[0], almbars2[0], u=u, g=g, distortion='prf')[0]
-            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast, type1=type1, type2=type2)
+            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast, type1=type1, type2='prf')
             if type1=='lens':
-                w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1, type2=type2)
+                w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1, type2='prf')
             else:
                 w_c = np.zeros_like(w_g)
                 se_c = np.zeros_like(se_g)

@@ -10,6 +10,7 @@ from healqest import weights, resp
 logger = logging.getLogger(__name__)
 np.seterr(all='ignore')
 
+
 class qest(object):
 
     def __init__(self, config, cls, verbose=True):
@@ -756,15 +757,15 @@ class Qest(qest):
         self.cls = Cls
         if nside is None:
             nside = utils.get_nside(lmax)
-        self.nside=nside
+        self.nside = nside
 
-        assert self.lmax < 2.0 * self.nside, "lmax must be less that 2*nside"
+        assert self.lmax<2.0*self.nside, "lmax must be less that 2*nside"
         self.gmv = gmv
 
     @staticmethod
     def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None, g=None):
         """ convert a spin-0 alm into a complex spin field (Q +/- iU): out = Q, +/-U"""
-        if spin == 0:
+        if spin==0:
             walm = hp.almxfl(alm, fell)
             # alm2map is recommended over alm2map_spin for spin=0
             if g is None:
@@ -774,12 +775,12 @@ class Qest(qest):
             return out, 0
         else:
             zero = np.zeros_like(alm)
-            _fell = (-1) ** spin * np.conj(fell) if spin < 0 else fell
+            _fell = (-1)**spin*np.conj(fell) if spin<0 else fell
             _fell *= -1
-            if np.all(fell.imag == 0):
+            if np.all(fell.imag==0):
                 E = hp.almxfl(alm, _fell.real)
                 B = zero
-            elif np.all(fell.real == 0):
+            elif np.all(fell.real==0):
                 E = zero
                 B = hp.almxfl(alm, _fell.imag)
             else:
@@ -788,7 +789,7 @@ class Qest(qest):
                 q, u = hp.alm2map_spin([E, B], nside=nside, spin=np.abs(spin), lmax=lmax, mmax=mmax)
             else:
                 q, u = g.alm2map_spin([E, B], spin=np.abs(spin), lmax=lmax, mmax=mmax)
-            if spin > 0:
+            if spin>0:
                 return q, u
             else:
                 return q, -u
@@ -816,8 +817,8 @@ class Qest(qest):
         glm, clm: tuple of complex array
             Gradient/curl component of the plm
         """
-        assert almbar1.shape[-1] == self.size, f"almbar size {almbar1.shape[-1]} don't match lmax {self.lmax})"
-        assert almbar2.shape[-1] == self.size, f"almbar size {almbar2.shape[-1]} don't match lmax {self.lmax})"
+        assert almbar1.shape[-1]==self.size, f"almbar size {almbar1.shape[-1]} don't match lmax {self.lmax})"
+        assert almbar2.shape[-1]==self.size, f"almbar size {almbar2.shape[-1]} don't match lmax {self.lmax})"
 
         if distortion in ['prf']:
             assert u is not None, "Need profile function to compute this estimator"
@@ -829,8 +830,8 @@ class Qest(qest):
         retglm = 0
         retclm = 0
         if g is not None:
-            assert g.nside == self.nside
-        assert q.ntrm%2 == 0, f"Number of terms must be even: {q.ntrm}"
+            assert g.nside==self.nside
+        assert q.ntrm%2==0, f"Number of terms must be even: {q.ntrm}"
         for i in range(0, q.ntrm//2):
             # skipping second half of reducant terms
             wX, wY, wP, sX, sY, sP = q.w[i][0], q.w[i][1], q.w[i][2], q.s[i][0], q.s[i][1], q.s[i][2]
@@ -840,20 +841,20 @@ class Qest(qest):
             XYq = Xq*Yq - Xu*Yu  # XY = X*Y
             XYu = Xq*Yu + Yq*Xu  # XY = X*Y
 
-            if np.all(wP.imag == 0):
+            if np.all(wP.imag==0):
                 _wP = wP
-            elif np.all(wP.real == 0):
+            elif np.all(wP.real==0):
                 # swap grad/curl mode such that glm is curl and clm is grad
                 # wP has an -1j factor, here we move the factor from wP to XY.
                 _wP = wP*1j
                 XYq, XYu = XYu, -XYq  # XY *=-1j
             else:
                 raise ValueError("wP must be real or imaginary")
-            if sP < 0:
+            if sP<0:
                 # This is for the second half reduncant transform, we normally don't end up here.
                 # XY = np.conj(XY) * (-1) ** sP  # because wP has a (-1)**sP factor, here we are canceling it.
-                XYq *= (-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
-                XYu *= -(-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
+                XYq *= (-1)**sP  # XY = np.conj(XY) * (-1) ** sP
+                XYu *= -(-1)**sP  # XY = np.conj(XY) * (-1) ** sP
 
             if g is None:
                 glm, clm = hp.map2alm_spin([XYq, XYu], np.abs(sP), self.Lmax)
@@ -1013,7 +1014,7 @@ class Qest(qest):
     #             R += _R
     #     return R
 
-    def get_resp(self, fls, qe, u=None, fast=False, curl=False, type1='lens', type2=None):
+    def get_resp(self, fls, qe, fls2=None, u=None, fast=False, curl=False, type1='lens', type2=None):
         """
         Compute the cross response between two estimators. Assume joint cinv filtering.
 
@@ -1027,7 +1028,7 @@ class Qest(qest):
 
         Parameters
         ----------
-        fls: array of shape (4, lmax+1)
+        fls, fls2: array of shape (4, lmax+1)
             filter functions for TT/EE/BB/TE, i.e., 1/Cl
         qe: str
             Quadratic estimator type, e.g., 'TT','EB'
@@ -1048,12 +1049,16 @@ class Qest(qest):
 
         if type2 is None:
             type2 = type1
-        fl = self.fls2fls_dict(fls)
+        fl1 = self.fls2fls_dict(fls)
+        if fls2 is None:
+            fl2 = fl1
+        else:
+            fl2 = self.fls2fls_dict(fls2)
         s1, s2 = qe[0], qe[1]
         assert s1 in 'TEB' and s2 in 'TEB', f"qe must be one of TEB, got: {qe}"
 
         if self.gmv:
-            keys = list(fl.keys())
+            keys = list(fl1.keys())
         else:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]  # SQE only picks the 2 (can be the same) diagonal terms.
 
@@ -1068,36 +1073,37 @@ class Qest(qest):
             _qe1 = s1 + _s1
             if _qe1 not in keys:
                 continue
-            flX = fl[_qe1]*self.fl_cut[s1]
+            flX = fl1[_qe1]*self.fl_cut[s1]
             for _s2 in 'TEB':
                 _qe2 = s2 + _s2
                 if _qe2 not in keys:
                     continue
-                flY = fl[_qe2]*self.fl_cut[s2]
+                flY = fl2[_qe2]*self.fl_cut[s2]
 
-                if _s1+_s2 not in weights.weights_plus.estimators(type2):
+                if _s1 + _s2 not in weights.weights_plus.estimators(type2):
                     # sometimes `_qe2` is not defined for the second distortion field,
                     # in this case it should be skipped.
                     logger.warning(f"{type2} distortion field does not have {_s1}{_s2} defined.")
                     continue
                 else:
-                    qeZA = weights.weights_plus(_s1+_s2, self.cls, self.lmax, distortion=type2, curl=curl, u=u)
-                    _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=fast)
+                    qeZA = weights.weights_plus(_s1 + _s2, self.cls, self.lmax, distortion=type2, curl=curl, u=u)
+                    _R = resp.fill_resp_fullsky(qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY,
+                                                fast=fast)
                     R += _R
         return R
 
-    def get_harden_weights(self, qe, fls, u, curl=False, fast=False, type1='lens', type2='prf'):
-        assert type2 == 'prf', "This is implemented for TTprf only (for any estimator)."
+    def get_harden_weights(self, qe, fls, u, fls2=None, curl=False, fast=False, type1='lens', type2='prf'):
+        assert type2=='prf', "This is implemented for TTprf only (for any estimator)."
         # ss = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=False, TTprf_type='ss')
         # es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_type='es')
         # se = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=curl, TTprf_type='se')
-        es = self.get_resp(fls, qe, curl=curl, fast=fast, type1=type1, type2=type2, u=u)
-        ss = self.get_resp(fls, 'TT', curl=False, fast=fast, type1=type2, type2=type2, u=u)
-        se = self.get_resp(fls, 'TT', curl=curl, fast=fast, type1=type2, type2=type1, u=u)
+        es = self.get_resp(fls, qe, curl=curl, fast=fast, type1=type1, type2=type2, u=u, fls2=fls2)
+        ss = self.get_resp(fls, 'TT', curl=False, fast=fast, type1=type2, type2=type2, u=u, fls2=fls2)
+        se = self.get_resp(fls, 'TT', curl=curl, fast=fast, type1=type2, type2=type1, u=u, fls2=fls2)
         weight = -1*es/ss
         return weight, se
 
-    def rec_and_resp(self, qe, almbars1, almbars2, fls, u=None, g=None, fast=False, type1='lens'):
+    def rec_and_resp(self, qe, almbars1, almbars2, fls, fls2=None, u=None, g=None, fast=False, type1='lens'):
         """
         compute lensing reconstruction for grad and curl modes, return also the analytical response functions.
 
@@ -1107,8 +1113,8 @@ class Qest(qest):
             Quadratic estimator type, e.g., 'TT','TTprf'
         almbars1, almbars2: complex arrays
             First and second filtered alms, shape (3, nalm)
-        fls: np.ndarray
-            shape: (4, lmax+1), filter functions for TT/EE/BB/TE
+        fls, fls2: np.ndarray.
+            shape: (4, lmax+1), filter functions for TT/EE/BB/TE. If the two are the same, then set fls2=None.
         u: np.ndarray=None
             profile function for TTprf estimator
         g: Geometry=None
@@ -1139,9 +1145,9 @@ class Qest(qest):
         glm, clm = self.eval(_qe, almbars1[i1], almbars2[i2], g=g, distortion=type1)
         # aresp_g = self.get_aresp_gmv(fls, _qe, fast=fast)
         # aresp_c = self.get_aresp_gmv(fls, _qe, fast=fast, curl=True)
-        aresp_g = self.get_resp(fls, _qe, fast=fast, type1=type1, type2=type1)
-        if type1 == 'lens':
-            aresp_c = self.get_resp(fls, _qe, fast=fast, curl=True, type1=type1, type2=type1)
+        aresp_g = self.get_resp(fls, _qe, fast=fast, type1=type1, type2=type1, fls2=fls2)
+        if type1=='lens':
+            aresp_c = self.get_resp(fls, _qe, fast=fast, curl=True, type1=type1, type2=type1, fls2=fls2)
         else:
             aresp_c = np.zeros_like(aresp_g)
 
@@ -1150,9 +1156,11 @@ class Qest(qest):
             if not self.gmv:
                 assert _qe=='TT', f"We only harden for 'TT' for SQE, got: {qe}"
             slm = self.eval('TT', almbars1[0], almbars2[0], u=u, g=g, distortion='prf')[0]
-            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast, type1=type1, type2='prf')
+            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast, type1=type1, type2='prf',
+                                                fls2=fls2)
             if type1=='lens':
-                w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1, type2='prf')
+                w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1, type2='prf',
+                                                    fls2=fls2)
             else:
                 w_c = np.zeros_like(w_g)
                 se_c = np.zeros_like(se_g)

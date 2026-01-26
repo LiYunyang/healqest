@@ -16,7 +16,7 @@ import string
 import shutil
 import sys
 from itertools import combinations
-from typing import Union, get_type_hints
+from typing import Union, Tuple, get_type_hints
 import warnings
 
 import numpy as np
@@ -112,7 +112,8 @@ class Config:
     fmask_cinv: Union[str, list[str]] = None  # path(s) to mask used for cinv
 
     # === lensrec ===
-    rectype: str  # [sqe,gmv,mh,xilc,gmvph]
+    rectype: str  # [sqe,gmv]
+    ilctype: str = 'mv'  # [mv, xilc, tsz]
     mvtypes: list[str]  # subset of ['TT', 'TE', 'EE', 'TB', 'EB'] for SQE
     nside: int  # Map nside, used for ducc wrapper. This is enforced for lensrec too, so 2nside>Lmax
     lminT: int  # override lmin
@@ -234,8 +235,14 @@ class Config:
 
         # append a second level of directory to distinguish rectypes
         assert self.rectype in ['naive', 'sqe', 'gmv']
-        self.outdir =f"{self.outdir}/{self.rectype}"
-        self.recdir = f"{self.recdir}/{self.rectype}"
+        assert self.ilctype in ['mv', 'xilc', 'tsz']
+        if self.ilctype == 'mv':
+            subname =f"{self.rectype}"
+        else:
+            subname = f"{self.rectype}_{self.ilctype}"
+        self.outdir =f"{self.outdir}/{subname}"
+        self.recdir = f"{self.recdir}/{subname}"
+        # all three types of ILC ('mv', 'cibfree', 'tszfree') go into the same `cinvdir`
         self.cinvdir = f"{self.cinvdir}/{self.rectype}"
 
         # set field specific settings
@@ -305,7 +312,7 @@ class Config:
             raise NotImplementedError(f"turning {type(x)} into list is not implemented")
 
     @staticmethod
-    def ktype2ij(ktype, i, j=None, cmbset='a') -> (int, int, str, str):
+    def ktype2ij(ktype, i, j=None, cmbset='a') -> Tuple[int, int, str, str]:
         """
         Convert the 2-letter ktype to seed and cmbset of the two maps
         """
@@ -364,6 +371,18 @@ class Config:
             return qes
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
+
+    @property
+    def ilcs(self):
+        """return the list of ILC type(s) needed for lensrec"""
+        if self.ilctype == 'mv':
+            return ['mv']
+        elif self.ilctype == 'xilc':
+            return ['tszfree', 'cibfree']
+        elif self.ilctype == 'tsz':
+            return ['mv', 'tszfree']
+        else:
+            raise ValueError(f'Undefined ilctype: {self.ilctype}')
 
     @property
     def qes(self):
@@ -621,14 +640,14 @@ class Config:
                 return f"bundle{b1}.{b2}"
 
     # === setup paths ===
-    def p_cinv(self, cinv_type:str, seed, cmbset, N1=False, bundle=None, suffix='fits'):
+    def p_cinv(self, seed, cmbset, ilc_type: str = 'mv', N1=False, bundle=None, suffix='fits'):
         """
         Path to the cinv files (as output of cinv, or input of reclens)
 
         Parameter
         ---------
         cinv_type: str
-            Type of the cinv file. Can be stp or jtp
+            Type of the cinv file. Can be sqe or gmv
         seed: int
         cmbset: str
             Single letter strings. Accepted values are 'a', 'b'
@@ -641,7 +660,7 @@ class Config:
         subdir = 'cinv'
         if bundle is not None:  # MF and N1 don't do bundle
             subdir = f"{subdir}/{self.bundle2str(bundle)}"
-        fname = f'cinv_{cinv_type}_{seed}_{cmbset}{N1_tag}.{suffix}'
+        fname = f'cinv_{ilc_type}_{seed}_{cmbset}{N1_tag}.{suffix}'
         return self.path(self.cinvdir, subdir, fname)
 
     def p_plm(self, tag=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None,

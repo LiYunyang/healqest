@@ -1812,7 +1812,8 @@ def read_map_fits(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=F
             if partial:
                 out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]*fac
             else:
-                out[j, :] = hdul[hdu].data[name]*fac
+                # out[j, :] = hdul[hdu].data[name]*fac
+                out[j, :] = hdul[hdu].data.field(name).astype(dtype, copy=False).ravel()*fac
         if h:
             return np.squeeze(out), hdul[hdu].header
         else:

@@ -54,9 +54,10 @@ class TFObj:
     bl_e: NDArray = None  # (lmax+1, )
     bl_b: NDArray = None  # (lmax+1, )
     lx_cut = None
+    lx_power = None
     m_cut = None
 
-    def __init__(self, npol, lmax, tf1d, tf2d=None, bl=None, lx_cut=None, m_cut=None):
+    def __init__(self, npol, lmax, tf1d, tf2d=None, bl=None, lx_cut=None, lx_power=None, m_cut=None):
         """
         Parameters
         ----------
@@ -88,9 +89,10 @@ class TFObj:
         if lx_cut is not None:
             assert bl is not None, "lx_cut requires bl to be set"
             self.lx_cut = lx_cut
+            self.lx_power = lx_power
             self.m_cut = m_cut
             if tf2d is not None:
-                logger.warning(f"using lx_cut={lx_cut} in lieu of the provided tf2d")
+                logger.warning(f"using lx_cut={lx_cut}, power={lx_power} in lieu of the provided tf2d")
                 _tf2d = np.array([None, None])
                 tf2d = None
 
@@ -481,7 +483,8 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
 
         # setup the TF object for the theta-dependent m-cut
         if tf.lx_cut:
-            self.g_tf = ducc_sht.GeometryTF(self.g, self.nonzero, lx_cut=tf.lx_cut, m_cut=tf.m_cut)
+            self.g_tf = ducc_sht.GeometryTF(self.g, self.nonzero, lx_cut=tf.lx_cut, m_cut=tf.m_cut,
+                                            power=tf.lx_power)
         else:
             self.g_tf = None
 

@@ -28,9 +28,10 @@ from healqest import utils, healqest_utils as hq
 
 try:
     from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    if rank != 0:
+    if rank!=0:
         warnings.filterwarnings("ignore")
 except ImportError:
     rank = 0
@@ -52,6 +53,7 @@ def get_git_version():
 
 class PartialFormatter(string.Formatter):
     """Allow delayed formatting of values in strings."""
+
     def get_value(self, key, args, kwargs):
         # Try to resolve the key
         try:
@@ -94,17 +96,20 @@ class Config:
     cinv_lmin: int = None  # minimum l for cinv
     cinv_mmin: int = None  # minimum m for cinv
     file_bl: Union[str, float]  # path to beam file or gaussian beam size in arcmin FWHM
-    file_tf1d: Union[str, int] = None  # path to tf1d file. If a tf2d file is given, it will compute tf1d from it. If a integer is given, this is interpreted as a l_cut.
+    file_tf1d: Union[str, int] = None  # path to tf1d file. If a tf2d file is given, it will compute tf1d from it.
+    # If a integer is given, this is interpreted as a l_cut.
     file_tf2d: Union[str, list] = None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
-    lx_cut: int=None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still be used for effective 1d beam)
+    lx_cut: int = None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still
+    # be used for effective 1d beam)
+    lx_power: float = None  # the power of the lx filter. For wide+summer fields, use 6.
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
     file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.
-    file_slm0: str=None  # path to data file, if differs from file_slm
+    file_slm0: str = None  # path to data file, if differs from file_slm
     file_nlm: str = None  # path to noise alm files for std/N0-type sims.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
     file_nlm_N1: str = None  # path to noise alm files for N1-type sims.
-    add_noise: bool=True  # whether to add noise in simulations (either through file_nlm or customized noise generation functions)
+    add_noise: bool = True  # whether to add noise in simulations (either through file_nlm or customized noise generation functions)
     nlev_t: float = None  # NET value, if not specified, nlev_t = nlev_p / sqrt(2)
     nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
@@ -169,9 +174,9 @@ class Config:
         script = sys._getframe(1).f_globals['__file__']
         logger.info(f"script: {os.path.basename(script)}")
         logger.info(f"main IO directory (`outdir`): {obj.path(obj.outdir)}")
-        if obj.cinvdir != obj.outdir:
+        if obj.cinvdir!=obj.outdir:
             logger.info(f"cinv IO directory (`cinvdir`): {obj.path(obj.cinvdir)}")
-        if obj.recdir != obj.outdir:
+        if obj.recdir!=obj.outdir:
             logger.info(f"lensrec IO directory (`recdir`): {obj.path(obj.recdir)}")
 
         # save a hard copy of the config file and current script
@@ -190,7 +195,7 @@ class Config:
         git_track: bool=False
             If True, append the git commit hash to the copied script file name.
         """
-        if rank == 0:
+        if rank==0:
             os.makedirs(self.path(self.outdir), exist_ok=True)
             name, ext = os.path.splitext(os.path.basename(script_file))
             name = name.split('.')[0]  # strip suffix like "reclens.test.py"
@@ -236,11 +241,11 @@ class Config:
         # append a second level of directory to distinguish rectypes
         assert self.rectype in ['naive', 'sqe', 'gmv']
         assert self.ilctype in ['mv', 'xilc', 'tsz']
-        if self.ilctype == 'mv':
-            subname =f"{self.rectype}"
+        if self.ilctype=='mv':
+            subname = f"{self.rectype}"
         else:
             subname = f"{self.rectype}_{self.ilctype}"
-        self.outdir =f"{self.outdir}/{subname}"
+        self.outdir = f"{self.outdir}/{subname}"
         self.recdir = f"{self.recdir}/{subname}"
         # all three types of ILC ('mv', 'cibfree', 'tszfree') go into the same `cinvdir`
         self.cinvdir = f"{self.cinvdir}/{self.rectype}"
@@ -252,16 +257,16 @@ class Config:
         # auto adjust spice kwargs
         if self.spice_kwargs:
             for key in ['apodizesigma', 'thetamax']:
-                if self.spice_kwargs.get(key, None) == 'dec':
+                if self.spice_kwargs.get(key, None)=='dec':
                     self.spice_kwargs[key] = max(self.dec_range) - min(self.dec_range)
                 elif isinstance(self.spice_kwargs[key], dict):
                     self.spice_kwargs[key] = self.spice_kwargs[key][self.field]
 
         # cinv settings:
         if self.nlev_p is None and self.nlev_t is not None:
-            self.nlev_p = self.nlev_t * np.sqrt(2)
+            self.nlev_p = self.nlev_t*np.sqrt(2)
         if self.nlev_t is None and self.nlev_p is not None:
-            self.nlev_t = self.nlev_p / np.sqrt(2)
+            self.nlev_t = self.nlev_p/np.sqrt(2)
 
         # mvtypes has to be a list
         self.mvtypes = list(self.mvtypes)
@@ -316,29 +321,29 @@ class Config:
         """
         Convert the 2-letter ktype to seed and cmbset of the two maps
         """
-        if j is None and len(set(ktype)) == 2:
+        if j is None and len(set(ktype))==2:
             # default `seed2` is `seed1 + 1`
-            j = i+1
+            j = i + 1
         if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
             # there are special cases for 'xY'/'Xy'/'yX'/'Yx'
-            if len(cmbset) == 1:
+            if len(cmbset)==1:
                 cmbset1, cmbset2 = cmbset, cmbset
             else:
-                assert len(cmbset) == 2
+                assert len(cmbset)==2
                 assert ktype in ['xy', 'yx']
-                if ktype == 'xy':
+                if ktype=='xy':
                     cmbset1, cmbset2 = cmbset
-                elif ktype == 'yx':
+                elif ktype=='yx':
                     cmbset2, cmbset1 = cmbset
-            if ktype == 'xx':
+            if ktype=='xx':
                 seed1, seed2 = i, i
-            elif ktype == 'xy':
+            elif ktype=='xy':
                 seed1, seed2 = i, j
-            elif ktype == 'yx':
+            elif ktype=='yx':
                 seed1, seed2 = j, i
-            elif ktype == 'x0':
+            elif ktype=='x0':
                 seed1, seed2 = i, 0
-            elif ktype == '0x':
+            elif ktype=='0x':
                 seed1, seed2 = 0, i
             else:
                 raise AssertionError
@@ -357,7 +362,7 @@ class Config:
             return hq.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
             return hq.get_qes(mvtype)
-        elif mvtype in ['TBEB', 'qTBEB', 'TEET','EBBE']:
+        elif mvtype in ['TBEB', 'qTBEB', 'TEET', 'EBBE']:
             return hq.get_qes(mvtype)
         elif mvtype in Qest.__prf_estimators__:  # single prf estimators
             return [mvtype]
@@ -367,7 +372,7 @@ class Config:
             return qes
         elif mvtype in ['GMVprf', 'GTTEETEprf', 'GTBEBprf']:  # compund prf estimators for GMV
             _qes = hq.get_qes(mvtype.removesuffix('prf').removeprefix('G'))
-            qes = [_+'prf' if _+'prf' in Qest.__prf_estimators__ else _ for _ in _qes]
+            qes = [_ + 'prf' if _ + 'prf' in Qest.__prf_estimators__ else _ for _ in _qes]
             return qes
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
@@ -375,11 +380,11 @@ class Config:
     @property
     def ilcs(self):
         """return the list of ILC type(s) needed for lensrec"""
-        if self.ilctype == 'mv':
+        if self.ilctype=='mv':
             return ['mv']
-        elif self.ilctype == 'xilc':
+        elif self.ilctype=='xilc':
             return ['tszfree', 'cibfree']
-        elif self.ilctype == 'tsz':
+        elif self.ilctype=='tsz':
             return ['mv', 'tszfree']
         else:
             raise ValueError(f'Undefined ilctype: {self.ilctype}')
@@ -409,14 +414,14 @@ class Config:
         out = dict()
 
         def dat2dict(ell, dat):
-            assert ell[0] == 0
-            assert ell[-1] == self.cinv_lmax
+            assert ell[0]==0
+            assert ell[-1]==self.cinv_lmax
             return dict(tt=dat[0],
                         ee=dat[1],
                         bb=dat[2],
                         te=dat[3])
 
-        file_cmb = str(resources.files('healqest') / 'data/camb' / self.file_cambcmb)
+        file_cmb = str(resources.files('healqest')/'data/camb'/self.file_cambcmb)
         ell, *dat = utils.get_lensedcls(file_cmb, lmax=self.cinv_lmax)
         out['cmb'] = dat2dict(ell, dat)
 
@@ -429,7 +434,7 @@ class Config:
 
     @cached_property
     def cmbcl(self):
-        cambcls = str(resources.files('healqest') / 'data/camb' / self.file_cmb)
+        cambcls = str(resources.files('healqest')/'data/camb'/self.file_cmb)
         try:
             ell, sltt, slee, slbb, slte = utils.get_lensedcls(cambcls, lmax=self.lmax)
         except ValueError:
@@ -441,7 +446,7 @@ class Config:
     def bl(self):
         if self.file_bl is None:
             logger.error("beam file not given! assuming unity bl for now.")
-            bl = np.ones(self.cinv_lmax+1)
+            bl = np.ones(self.cinv_lmax + 1)
         elif isinstance(self.file_bl, str):
             beam_file = self.path(self.file_bl)
             logger.warning("temporarily loading the 150 GHz beam file")
@@ -533,12 +538,12 @@ class Config:
 
         if self.file_tf1d:
             if isinstance(self.file_tf1d, int):
-                out = np.ones(self.cinv_lmax+1)
+                out = np.ones(self.cinv_lmax + 1)
                 out[:self.file_tf1d] = 0
                 return dict(t=out.copy(), p=out.copy())
             elif isinstance(self.file_tf1d, str):
                 fname, ext = os.path.splitext(self.file_tf1d)
-                if ext == '.npz':
+                if ext=='.npz':
                     loaded = np.load(self.path(self.file_tf1d, field=self.field))
                     logger.warning("tf1d file is tf2d, converting to tf1d...")
                     if 'tf2d_t' in loaded.files:
@@ -549,7 +554,7 @@ class Config:
                     tf_t = self._tf2d2tf1d(tf_t, self.dec_range)
                     tf_p = self._tf2d2tf1d(tf_p, self.dec_range)
                     return dict(t=tf_t, p=tf_p)
-                elif ext == '.npy':
+                elif ext=='.npy':
                     raise NotImplementedError("npy tf1d is not supported yet, please use npz format.")
             else:
                 raise ValueError("file_tf1d must be either int or str")
@@ -561,8 +566,8 @@ class Config:
         if self.profile is None:
             return None
         # assert self.profile in ['src', 'tsz']
-        if self.profile == 'src':
-            return np.ones(self.lmax+1)
+        if self.profile=='src':
+            return np.ones(self.lmax + 1)
         elif self.profile.endswith('npy'):
             return np.load(self.path(self.profile))
         else:
@@ -624,7 +629,7 @@ class Config:
     @cached_property
     def mask_boundary(self):
         """boundary mask used to save plm as partial maps"""
-        return self._load_mask(self.fmask_qe, field=2) !=0
+        return self._load_mask(self.fmask_qe, field=2)!=0
 
     @staticmethod
     def bundle2str(bundle):
@@ -714,8 +719,8 @@ class Config:
         subdir = 'cls'
         if SAN0:
             assert N1 is False
-            assert ktype2 == ktype1
-            assert seed2 == seed1
+            assert ktype2==ktype1
+            assert seed2==seed1
             subdir = 'cls/san0'
         elif N1:
             subdir = 'cls/lensrec_N1'
@@ -787,6 +792,7 @@ class Config:
 
 class MapsBase(abc.ABC):
     """Base class for maps, used for testing and as a base for Maps class."""
+
     def __init__(self, nside, ):
         pass
 
@@ -847,10 +853,10 @@ def parser():
     p = argparse.ArgumentParser()
 
     def none_str(value):
-        return None if value.lower() == 'none' else value
+        return None if value.lower()=='none' else value
 
     def none_int(value):
-        return None if value.lower() == 'none' else int(value)
+        return None if value.lower()=='none' else int(value)
 
     p.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
     p.add_argument('-f', '--field', default=None, type=none_str, help='SPT field')
@@ -935,7 +941,7 @@ def setup_logger(verbose=3, force=True, quiet=True):
     quiet: bool=True
         If True, scilence sub-warning level message from selected modules.
     """
-    if rank > 0:
+    if rank>0:
         # Silence all logging on non-root ranks
         logging.disable(logging.CRITICAL)
         # return
@@ -954,7 +960,7 @@ def setup_logger(verbose=3, force=True, quiet=True):
 
     if quiet:
         for name in logging.root.manager.loggerDict:
-            if not name.startswith("healqest") and name != "__main__":
+            if not name.startswith("healqest") and name!="__main__":
                 logging.getLogger(name).setLevel(logging.WARNING)
             else:
                 pass

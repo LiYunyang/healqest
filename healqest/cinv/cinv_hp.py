@@ -13,6 +13,7 @@ import logging
 from . import opfilt_hp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
+
 logger = logging.getLogger(__name__)
 
 
@@ -41,8 +42,8 @@ class cinv(object):
             Geometry object of `nside` will be used. This should give identical results as healpy but still a 2x
             speed-up.
         """
-        assert lmax >= 1024
-        assert nside >= 512
+        assert lmax>=1024
+        assert nside>=512
         self.lib_dir = lib_dir  # Output directory
         self.lmax = lmax  # Lmax to use for filtering
         self.nside = nside
@@ -54,7 +55,7 @@ class cinv(object):
         ell = np.arange(lmax + 1, dtype=float)
         if ellscale:
             logger.debug("Applying ell scaling: l(l+1)/2pi")
-            rescal_cl = np.sqrt(ell * (ell + 1) / 2.0 / np.pi)
+            rescal_cl = np.sqrt(ell*(ell + 1)/2.0/np.pi)
             rescal_cl[0] = 1
         else:
             logger.debug("Not applying any ell scaling")
@@ -71,11 +72,11 @@ class cinv(object):
         # cltt has l^2 and tf^2 has 1/l^2 factor already.
         # This means nltt/tf1d_scal^2 == l^2 * nltt/tf1d_unscal^2.
         # nl_res    = {k: rescal_cl ** 2 * nl_res[k][:lmax + 1] for k in  nl_res.keys()}
-        self.dl = {k: rescal_cl**2 * v[:lmax+1] for k, v in cl.items()}
+        self.dl = {k: rescal_cl**2*v[:lmax + 1] for k, v in cl.items()}
 
         self.nl_res = nl_res.copy()
         if self.nl_res is None:
-            self.nl_res = {k: np.zeros_like(v[:lmax+1]) for k, v in cl.items()}
+            self.nl_res = {k: np.zeros_like(v[:lmax + 1]) for k, v in cl.items()}
         else:
             for k, v in self.nl_res.items():
                 self.nl_res[k][:2] = 0  # enforce this cutoff is important for convergence!
@@ -95,14 +96,14 @@ class cinv(object):
             # self.g = None  # fallback to hp
         else:
             self.g = g
-            assert self.g.nside == nside
+            assert self.g.nside==nside
 
     def get_tal(self, a, lmax=None):
         if lmax is None:
             lmax = self.lmax
         assert a.lower() in ["t", "e", "b"], a
         ret = np.loadtxt(os.path.join(self.lib_dir, "tal.dat"))
-        assert len(ret) > lmax, (len(ret), lmax)
+        assert len(ret)>lmax, (len(ret), lmax)
         return ret[: lmax + 1]
 
     def solve(self, soltn, tpn_map, verbose=True):
@@ -172,10 +173,11 @@ class cinv_t(cinv):
 
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, bl=None, lx_cut=None,
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, bl=None, lx_cut=None, lx_power=None,
                  eps_min=1.0e-5, ellscale=True, g=None, mmin=None):
-        assert len(ninv) == 1
-        tf = opfilt_hp.TFObj(npol=1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, bl=bl, m_cut=mmin)
+        assert len(ninv)==1
+        tf = opfilt_hp.TFObj(npol=1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl,
+                             m_cut=mmin)
         # only take the first entry as the temperation ninv
         super(cinv_t, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
                                      ellscale=ellscale, tf=tf, g=g)
@@ -196,11 +198,11 @@ class cinv_t(cinv):
 
     def get_fl(self, pol, lmax):
         assert pol.lower()=='t'
-        out = self.pre_op.fl[0, :self.lmax + 1] * self.rescal_cl[:self.lmax + 1] ** 2
+        out = self.pre_op.fl[0, :self.lmax + 1]*self.rescal_cl[:self.lmax + 1]**2
         if lmax is None:
             return out
         else:
-            return out[:lmax+1]
+            return out[:lmax + 1]
 
 
 class cinv_p(cinv):
@@ -238,12 +240,13 @@ class cinv_p(cinv):
 
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, bl=None, lx_cut=None,
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d=None, bl=None, lx_cut=None, lx_power=None,
                  eps_min=1.0e-5, ellscale=True, g=None, mmin=None):
 
         assert isinstance(ninv, list)
         assert len(ninv) in [2]
-        tf = opfilt_hp.TFObj(npol=2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, bl=bl, m_cut=mmin)
+        tf = opfilt_hp.TFObj(npol=2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power,
+                             bl=bl, m_cut=mmin)
         super(cinv_p, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
                                      ellscale=ellscale, tf=tf, g=g)
 
@@ -255,14 +258,14 @@ class cinv_p(cinv):
     def apply_ivf(self, qumap, soltn=None):
         if soltn is not None:
             logger.debug("soltn is not None")
-            assert len(soltn) == 2
-            assert hp.Alm.getlmax(soltn.shape[-1]) == self.lmax
+            assert len(soltn)==2
+            assert hp.Alm.getlmax(soltn.shape[-1])==self.lmax
             eblm = soltn.copy()
         else:
             logger.debug("soltn is None")
             eblm = np.zeros((2, hp.Alm.getsize(self.lmax)), dtype=np.complex128)
 
-        assert len(qumap) == 2
+        assert len(qumap)==2
         logger.info("cinv_p.solve")
         self.solve(eblm, qumap)
         hp.almxfl(eblm[0], self.rescal_cl, inplace=True)
@@ -348,11 +351,11 @@ class cinv_p(cinv):
     def get_fl(self, pol, lmax):
         assert pol.lower() in 'eb'
         i = 'eb'.index(pol.lower())
-        out = self.pre_op.fl[i, :self.lmax+1]*self.rescal_cl[:self.lmax+1]**2
+        out = self.pre_op.fl[i, :self.lmax + 1]*self.rescal_cl[:self.lmax + 1]**2
         if lmax is None:
             return out
         else:
-            return out[:lmax+1]
+            return out[:lmax + 1]
 
 
 class cinv_tp(cinv):
@@ -396,12 +399,13 @@ class cinv_tp(cinv):
         Whether to scale by multipole ell, by default True.
     """
 
-    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d, bl=None, lx_cut=None,
+    def __init__(self, lib_dir, lmax, nside, cl, nl_res, ninv, tf1d, tf2d, bl=None, lx_cut=None, lx_power=None,
                  eps_min=1.0e-5, ellscale=False, g=None, mmin=None):
 
         assert isinstance(ninv, list)
         assert len(ninv) in [3]  # TT/PP or TT/QQ/UU
-        tf = opfilt_hp.TFObj(npol=3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, bl=bl, m_cut=mmin)
+        tf = opfilt_hp.TFObj(npol=3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power,
+                             bl=bl, m_cut=mmin)
 
         super(cinv_tp, self).__init__(lib_dir, lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min,
                                       ellscale=ellscale, g=g, tf=tf)
@@ -416,7 +420,7 @@ class cinv_tp(cinv):
         return self._pre_op
 
     def apply_ivf(self, tqumap, soltn=None):  # , apply_fini=''):
-        assert len(tqumap) == 3
+        assert len(tqumap)==3
         if soltn is not None:
             ttlm, telm, tblm = soltn
         else:
@@ -428,16 +432,16 @@ class cinv_tp(cinv):
         return teblm
 
     def get_fl(self, pol, lmax):
-        if pol == 'te':
+        if pol=='te':
             out = self.pre_op.fl_te[:self.lmax + 1]*self.rescal_cl[:self.lmax + 1]**2
         else:
             assert pol.lower() in 'teb'
             i = 'teb'.index(pol.lower())
-            out = self.pre_op.fl[i, :self.lmax+1]*self.rescal_cl[:self.lmax+1]**2
+            out = self.pre_op.fl[i, :self.lmax + 1]*self.rescal_cl[:self.lmax + 1]**2
         if lmax is None:
             return out
         else:
-            return out[:lmax+1]
+            return out[:lmax + 1]
 
 
 class library_sepTP(object):
@@ -469,12 +473,12 @@ class library_sepTP(object):
         Args: idx    : simulation index
               Returns: inverse-filtered temperature healpy alm array
         """
-        tfname = os.path.join(self.lib_dir, "sim_%04d_tlm.fits" % idx if idx >= 0 else "dat_tlm.fits")
+        tfname = os.path.join(self.lib_dir, "sim_%04d_tlm.fits"%idx if idx>=0 else "dat_tlm.fits")
 
         if not os.path.exists(tfname):
             pass
         else:
-            logger.info("Loading file: %s" % tfname)
+            logger.info("Loading file: %s"%tfname)
             tlm, elm, blm = hp.read_alm(tfname, hdu=[1, 2, 3])
 
         if self.lfilt is not None:
@@ -491,7 +495,7 @@ class library_sepTP(object):
         Args: idx    : simulation index
               Returns: inverse-filtered temperature healpy alm array
         """
-        tfname = os.path.join(self.lib_dir, f"sim_{seed:04d}_{cmbset}_tlm.fits" if seed >= 0 else "dat_tlm.fits")
+        tfname = os.path.join(self.lib_dir, f"sim_{seed:04d}_{cmbset}_tlm.fits" if seed>=0 else "dat_tlm.fits")
         if not os.path.exists(tfname):
             logger.info("tlm file doesnt exit so creating one")
             if self.soltn_lib is not None:
@@ -576,19 +580,19 @@ class library_sepTP(object):
     #     tfname = os.path.join(self.lib_dir, "sim_%04d_tlm.fits" % idx if idx >= 0 else "dat_tlm.fits")
     #
     #     Loading unfiltered alms
-        # if not os.path.exists(tfname):
-        #     pass
-        # else:
-        #     logger.info("Loading file: %s" % tfname)
-        #     tlm, elm, blm = hp.read_alm(tfname, hdu=[1, 2, 3])
-        #
-        # Apply lmin/lmax cuts in 1d
-        # if self.lfilt is not None:
-        #     hp.almxfl(tlm, self.lfilt, inplace=True)
-        #     hp.almxfl(elm, self.lfilt, inplace=True)
-        #     hp.almxfl(blm, self.lfilt, inplace=True)
-        #
-        # return tlm, elm, blm
+    # if not os.path.exists(tfname):
+    #     pass
+    # else:
+    #     logger.info("Loading file: %s" % tfname)
+    #     tlm, elm, blm = hp.read_alm(tfname, hdu=[1, 2, 3])
+    #
+    # Apply lmin/lmax cuts in 1d
+    # if self.lfilt is not None:
+    #     hp.almxfl(tlm, self.lfilt, inplace=True)
+    #     hp.almxfl(elm, self.lfilt, inplace=True)
+    #     hp.almxfl(blm, self.lfilt, inplace=True)
+    #
+    # return tlm, elm, blm
 
     def get_sim_eblm(self, seed, cmbset, bundle):
         """Returns an inverse-filtered E-polarization simulation.
@@ -617,7 +621,6 @@ class library_sepTP(object):
             hp.almxfl(elm, self.lfilt, inplace=True)
             hp.almxfl(blm, self.lfilt, inplace=True)
         return elm, blm
-
 
     # def get_sim_tmliklm(self, idx):
     #     '''
@@ -691,7 +694,8 @@ class library_cinv_sepTP(library_sepTP):
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cinvt:cinv_t = None, cinvp:cinv_p = None, cl_weights=None, soltn_lib=None,
+    def __init__(self, lib_dir, sim_lib, cinvt: cinv_t = None, cinvp: cinv_p = None, cl_weights=None,
+                 soltn_lib=None,
                  lfilt=None, add_noise=False):
         super(library_cinv_sepTP, self).__init__(lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt,
                                                  add_noise=add_noise)
@@ -701,12 +705,12 @@ class library_cinv_sepTP(library_sepTP):
         self.lmax = self.cinv_t.lmax if self.cinv_t is not None else self.cinv_p.lmax
 
     def get_fl(self, pol, lmax=None):
-        if pol == 'te':
-            out = np.zeros(self.lmax+1)  # sep filtering/SQE doesn't need TE.
+        if pol=='te':
+            out = np.zeros(self.lmax + 1)  # sep filtering/SQE doesn't need TE.
             if lmax is not None:
-                return out[:lmax+1]
+                return out[:lmax + 1]
             return out
-        if pol == 't':
+        if pol=='t':
             return self.cinv_t.get_fl(pol='t', lmax=lmax)
         elif pol in 'eb':
             return self.cinv_p.get_fl(pol=pol, lmax=lmax)
@@ -851,16 +855,15 @@ class library_cinv_jTP(library_jTP):
 
     """
 
-    def __init__(self, lib_dir, sim_lib, cinv_jtp: cinv_tp, cl_weights: dict=None, soltn_lib=None, lfilt=None,
+    def __init__(self, lib_dir, sim_lib, cinv_jtp: cinv_tp, cl_weights: dict = None, soltn_lib=None, lfilt=None,
                  add_noise=False):
-
         super(library_cinv_jTP, self).__init__(lib_dir, sim_lib, cl_weights, soltn_lib=soltn_lib, lfilt=lfilt,
                                                add_noise=add_noise)
         self.cinv_tp = cinv_jtp
         self.g = cinv_jtp.g
 
     # def get_fal(self, lmax=None):
-        # return self.cinv_tp.get_fal(lmax=lmax)
+    # return self.cinv_tp.get_fal(lmax=lmax)
 
     def _apply_ivf(self, tqumap, soltn=None):
         return self.cinv_tp.apply_ivf(tqumap, soltn=soltn)

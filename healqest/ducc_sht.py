@@ -7,6 +7,7 @@ import numba
 import healpy as hp
 import ducc0
 from packaging import version
+
 if version.parse(ducc0.__version__)<version.parse('0.36.0'):
     warnings.warn(
         f"ducc0 version {ducc0.__version__} is lower than the required version 0.36.0. "
@@ -14,10 +15,11 @@ if version.parse(ducc0.__version__)<version.parse('0.36.0'):
     )
 
 import logging
+
 logger = logging.getLogger(__name__)
 
-rtype = {np.dtype(np.complex128):np.dtype(np.float64), np.dtype(np.complex64):np.dtype(np.float32)}
-ctype = {rtype[ctyp]:ctyp for ctyp in rtype}
+rtype = {np.dtype(np.complex128): np.dtype(np.float64), np.dtype(np.complex64): np.dtype(np.float32)}
+ctype = {rtype[ctyp]: ctyp for ctyp in rtype}
 
 
 def get_nthreads(nthreads=None):
@@ -29,12 +31,15 @@ def get_nthreads(nthreads=None):
 
 def _load_pixel_weights(nside):
     from astropy.utils import data
+
     DATAURL = "https://healpy.github.io/healpy-data/"
     DATAURL_MIRROR = "https://github.com/healpy/healpy-data/releases/download/"
     filename = f"full_weights/healpix_full_weights_nside_{nside:04d}.fits"
-    with (data.conf.set_temp("dataurl", DATAURL),
-          data.conf.set_temp("dataurl_mirror", DATAURL_MIRROR),
-          data.conf.set_temp("remote_timeout", 30)):
+    with (
+        data.conf.set_temp("dataurl", DATAURL),
+        data.conf.set_temp("dataurl_mirror", DATAURL_MIRROR),
+        data.conf.set_temp("remote_timeout", 30),
+    ):
         pixel_weights_filename = data.get_pkg_data_filename(filename, package="healpy")
     return pixel_weights_filename
 
@@ -45,10 +50,9 @@ def _load_ring_weights(nside):
 
 
 def unfold_weights(nside, ring=True):
-    """
-    Translated from Healpix/idl/unfold_weights.pro
-    """
+    """Translated from Healpix/idl/unfold_weights.pro."""
     from astropy.io import fits
+
     if ring:
         weights_file = _load_ring_weights(nside)
         w = np.array(fits.open(weights_file)[1].data['TEMPERATURE WEIGHTS']).ravel()
@@ -59,31 +63,31 @@ def unfold_weights(nside, ring=True):
     out = np.zeros(hp.nside2npix(nside), dtype=float)
 
     if ring:
-        n4 = 4 * nside
+        n4 = 4*nside
         j = 0
         for i in range(1, n4):
-            it = i if i < (n4 - i) else n4 - i
-            npix = 4 * (it if it < nside else nside)
-            out[j:j + npix] = w[it - 1]
+            it = i if i<(n4 - i) else n4 - i
+            npix = 4*(it if it<nside else nside)
+            out[j: j + npix] = w[it - 1]
             j += npix
     else:
         npix = hp.nside2npix(nside)
         pix = 0
         vpix = 0
-        for i in range(2 * nside):
-            shifted = (i < nside - 1) or ((i + nside) % 2 != 0)
+        for i in range(2*nside):
+            shifted = (i<nside - 1) or ((i + nside)%2!=0)
             qpix = min(nside, i + 1)
-            odd = qpix % 2 != 0
-            wpix = ((qpix + 1) // 2) + (0 if (odd or shifted) else 1)
-            psouth = npix - pix - (qpix * 4)  # Position in the Southern hemisphere
+            odd = qpix%2!=0
+            wpix = ((qpix + 1)//2) + (0 if (odd or shifted) else 1)
+            psouth = npix - pix - (qpix*4)  # Position in the Southern hemisphere
 
-            for j in range(qpix * 4):
-                j4 = j % qpix
+            for j in range(qpix*4):
+                j4 = j%qpix
                 rpix = min(j4, qpix - (1 if shifted else 0) - j4)
                 out[pix + j] = w[vpix + rpix]
-                if i != 2 * nside - 1:  # Everywhere except the equator
+                if i!=2*nside - 1:  # Everywhere except the equator
                     out[psouth + j] = w[vpix + rpix]
-            pix += qpix * 4
+            pix += qpix*4
             vpix += wpix
     return out + 1
 
@@ -100,27 +104,26 @@ class Geometry:
         dec_range: tuple=None
             The range of declination in degrees. If None, use the whole sky.
         """
-
         n1, n2 = 0, hp.nside2npix(nside)
         if dec_range is not None:
             self.dec_range = dec_range
-            t1 = np.pi / 2 - np.deg2rad(max(dec_range))
-            t2 = np.pi / 2 - np.deg2rad(min(dec_range))
+            t1 = np.pi/2 - np.deg2rad(max(dec_range))
+            t2 = np.pi/2 - np.deg2rad(min(dec_range))
             n1 = max(n1, hp.ang2pix(nside, t1, 0) - 1)
-            n2 = min(n2, hp.ang2pix(nside, t2, 2 * np.pi) + 4*nside+1)
+            n2 = min(n2, hp.ang2pix(nside, t2, 2*np.pi) + 4*nside + 1)
         else:
-            self.dec_range = None
+            self.dec_range = None  # unset for fullsky.
         ipix = np.arange(n1, n2)
         theta, phi = hp.pix2ang(nside, ipix)
         if dec_range is not None:
-            sel = np.logical_and(theta > t1, theta < t2)
+            sel = np.logical_and(theta>t1, theta<t2)
             theta = theta[sel]
             phi = phi[sel]
             ipix = ipix[sel]
 
         # this combo is much faster than np.unique, but assumes "theta" is sorted
-        assert np.all(np.diff(theta) >= 0)
-        _theta = theta[np.insert(np.diff(theta) != 0, 0, True)]
+        assert np.all(np.diff(theta)>=0)
+        _theta = theta[np.insert(np.diff(theta)!=0, 0, True)]
         theta_idx = np.searchsorted(_theta, theta)
         self.nphi = np.bincount(theta_idx)
 
@@ -134,27 +137,25 @@ class Geometry:
         self.ofs = np.full(_theta.shape, np.iinfo(np.int64).max, dtype=np.int64)
         np.minimum.at(self.ofs, theta_idx, ipix)
         self.ofs = np.asarray(self.ofs, np.uint64)
-        # self.weight = np.full(len(_theta), 4 * np.pi / hp.nside2npix(nside), dtype=np.float64)
         self.pixelarea = hp.nside2pixarea(nside)
 
         self.theta = _theta
         self.nside = nside
-        self._lmax = 3 * nside - 1
+        self._lmax = 3*nside - 1
 
         self._ring_weights = None
         self._pixel_weights = None
+        self.ipix_slice = slice(self.ofs[0], int(self.ofs[-1] + self.nphi[-1] + 1))
 
     def restrict(self):
-        """
-        Create a Geometry instance from nside and optional declination range.
-        """
+        """Create a Geometry instance from nside and optional declination range."""
         obj = self.__class__(self.nside, self.dec_range)
         obj.ofs -= self.ofs[0]
         return obj
 
     @property
     def nph(self):
-        """alias for consistency with lenspyx-based calls"""
+        """Alias for consistency with lenspyx-based calls."""
         return self.nphi
 
     @property
@@ -170,15 +171,22 @@ class Geometry:
         return self._pixel_weights
 
     def npix(self):
-        """Number of pixels"""
+        """Number of pixels."""
         return int(np.sum(self.nphi))
 
     def get_kwargs(self, lmax, mmax, nthreads, **kwargs):
         nthreads = get_nthreads(nthreads)
         lmax = self._lmax if lmax is None else lmax
         mmax = lmax if mmax is None else mmax
-        out = dict(lmax=lmax, mmax=mmax, nphi=self.nphi, phi0=self.phi0, nthreads=nthreads, ringstart=self.ofs,
-                   theta=self.theta)
+        out = dict(
+            lmax=lmax,
+            mmax=mmax,
+            nphi=self.nphi,
+            phi0=self.phi0,
+            nthreads=nthreads,
+            ringstart=self.ofs,
+            theta=self.theta,
+        )
 
         if kwargs.get('iter', 0)>0:
             out['maxiter'] = kwargs['iter']
@@ -188,9 +196,9 @@ class Geometry:
     def format_maps(self, maps, check=True, use_weights=False, use_pixel_weights=False):
         """Formating maps to be compatible as input to `map2alm`.
 
-        The new maps will be reshaped to (nmaps, npix), and masked if there are bad pixels, and applied with
-        weights. If no weights is required and the map has no bad pixels, an view of the original map will be
-        returned, otherwise a copy will be returned.
+        The new maps will be reshaped to (nmaps, npix), and masked if there are bad pixels,
+        and applied with weights. If no weights is required and the map has no bad pixels,
+        an view of the original map will be returned, otherwise a copy will be returned.
         """
         maps = np.atleast_2d(maps)
         mask = None
@@ -208,18 +216,19 @@ class Geometry:
             if use_pixel_weights:
                 assert not use_weights
                 w = self.pixel_weights
-            maps = maps * w.astype(maps.dtype)
+            maps = maps*w.astype(maps.dtype)
         if check:
             if masked:
                 maps[mask] = 0
         return maps
 
     def map2alm(self, maps, lmax=None, mmax=None, iter=0, pol=True, use_weights=False, use_pixel_weights=False,
-                nthreads=None,  rtol=1e-5, check=True, alms=None, margin=0, **kwargs):
+                nthreads=None, rtol=1e-5, check=True, alms=None, **kwargs):
         """
         Computes the alm of a Healpix map. The input maps must all be in ring ordering.
 
         Parameters
+        ----------
         maps : array-like, shape (Npix,) or (n, Npix)
             The input map or a list of n input maps. Must be in ring ordering.
         lmax : int, scalar, optional
@@ -249,19 +258,14 @@ class Geometry:
         alms: array-like
             The output alms buffer.
         """
-        assert hp.get_nside(maps) == self.nside
-        if margin:
-            lmax0 = lmax
-            lmax = lmax0 + margin
-        else:
-            lmax0 = None
+        assert hp.get_nside(maps)==self.nside
         maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
         nmaps = maps.shape[0]
         kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
         if alms is None:
             alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype])
         else:
-            if alms.ndim == 1:
+            if alms.ndim==1:
                 alms = alms[np.newaxis, :]
 
         func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
@@ -278,8 +282,6 @@ class Geometry:
             alms *= self.pixelarea
 
         out = np.squeeze(alms)
-        if lmax0 is not None:
-            out = reduce_lmax(out, lmax=lmax0)
         return out
 
     def alm2map(self, alms, lmax=None, mmax=None, pol=True, nthreads=None, maps=None, **kwargs):
@@ -293,18 +295,19 @@ class Geometry:
         ----------
         alms: complex, array or sequence of arrays
             A complex array or a sequence of complex arrays.
-            Each array must have a size of the form: mmax * (2 * lmax + 1 - mmax) / 2 + lmax + 1
+            Each array must have a size of the form: mmax * (2*lmax+1-mmax)/2 + lmax+1
         lmax: None or int, scalar, optional
             Explicitly define lmax (needed if mmax!=lmax)
         mmax: None or int, scalar, optional
             Explicitly define mmax (needed if mmax!=lmax)
         pol: bool, optional
-            If True, assumes input alms are TEB. Output will be TQU maps. (input must be 1/2 or 3 alms)
-            If False, apply spin 0 harmonic transform to each alm. (input can be any number of alms)
-            If there is only one input alm, it has no effect. Default: True.
+            If True, assumes input alms are TEB. Output will be TQU maps. (input must be 1/2 or
+             3 alms). If False, apply spin 0 harmonic transform to each alm. (input can be
+             any number of alms). If there is only one input alm, it has no effect. Default:
+             True.
         nthreads: int=None
-            Controls the number of threads used in the computation. If None, it will use the value of
-            `OMP_NUM_THREADS`.
+            Controls the number of threads used in the computation. If None, it will use the
+            value of `OMP_NUM_THREADS`.
         maps: array-like, shape (Npix,) or (nmaps, Npix)
             The output maps buffer. If None, a new array will be created.
 
@@ -315,7 +318,7 @@ class Geometry:
         if maps is None:
             maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=rtype[alms.dtype])
         else:
-            if maps.ndim == 1:
+            if maps.ndim==1:
                 maps = maps[np.newaxis, :]
         func = ducc0.sht.synthesis
         if lmax is None:
@@ -333,16 +336,16 @@ class Geometry:
         return np.squeeze(maps)
 
     def map2alm_spin(self, maps, spin, lmax=None, mmax=None, *, iter=0, use_weights=False, use_pixel_weights=False,
-                     nthreads=None,  rtol=1e-5, check=True, **kwargs):
-        if spin == 0:
+                     nthreads=None, rtol=1e-5, check=True, **kwargs):
+        if spin==0:
             return list(-self.map2alm(maps, lmax=lmax, mmax=mmax, pol=False, iter=iter, use_weights=use_weights,
-                                      use_pixel_weights=use_pixel_weights, nthreads=nthreads,  rtol=rtol,
+                                      use_pixel_weights=use_pixel_weights, nthreads=nthreads, rtol=rtol,
                                       check=check, **kwargs))
         else:
-            assert hp.get_nside(maps) == self.nside
+            assert hp.get_nside(maps)==self.nside
             maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check)
             nmaps = maps.shape[0]
-            assert nmaps == 2, "spin function only accepts 2 maps"
+            assert nmaps==2, "spin function only accepts 2 maps"
 
             kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
             func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
@@ -353,7 +356,7 @@ class Geometry:
             return list(alms)
 
     def alm2map_spin(self, alms, spin, lmax=None, mmax=None, *, nthreads=None, maps=None, **kwargs):
-        if spin ==0:
+        if spin==0:
             out = list(-self.alm2map(alms, lmax=lmax, mmax=mmax, pol=False, nthreads=nthreads, maps=maps, **kwargs))
             if maps is not None:
                 # inplace mutation if maps is sent in as a buffer.
@@ -362,11 +365,11 @@ class Geometry:
         else:
             alms = np.atleast_2d(alms)
             nmaps = alms.shape[0]
-            assert nmaps == 2, "spin function only accepts 2 maps"
+            assert nmaps==2, "spin function only accepts 2 maps"
             if maps is None:
                 maps = np.zeros((nmaps, hp.nside2npix(self.nside)), dtype=rtype[alms.dtype])
             else:
-                assert maps.shape[0] == 2
+                assert maps.shape[0]==2
             func = ducc0.sht.synthesis
             if lmax is None:
                 lmax = hp.Alm.getlmax(alms.shape[-1])
@@ -398,22 +401,46 @@ def fast_subtract(maps, cut_map, ipix, tf_pix):
 @numba.njit(fastmath=True, parallel=False)
 def fast_assign(src, dst, ipix, tf_pix):
     for i in numba.prange(src.shape[0]):  # Parallel over rows
-        for j in range(ipix.size):        # Sequential over columns
+        for j in range(ipix.size):  # Sequential over columns
             dst[i, tf_pix[j]] = src[i, ipix[j]]
 
 
 class GeometryTF:
     """Extends the Geometry class to apply a (theta-dependent) filter."""
-    def __init__(self, geom, ipix=None, lx_cut=0, m_cut=0, m_apodeg=0):
-        assert geom.ofs[0] == np.min(geom.ofs)
+
+    def __init__(self, geom, ipix=None, lx_cut=0, m_cut=0, m_apodeg=0, power=None):
+        """
+        Setup a Geometry for m(theta) filter.
+
+        Parameters
+        ----------
+        geom: Geometry
+        ipix: int array, optional
+            The pixels to include for filtering, must be a subset of geom pixels. If None, use all pixels in
+            geom, which are in contuguous rings.
+        lx_cut: int
+            The cut in lx to apply.
+        m_cut: int
+            The cut in m to apply.
+        m_apodeg
+        power: float=None
+            The power of the filter. If set, the filter will take a Gaussian or exp-power-law form instead of
+            a hard cut. This number must be positive.
+        """
+        assert geom.ofs[0]==np.min(geom.ofs)
         self.g = geom
         self.lx_cut = lx_cut
+
+        self.power = power
+        if self.power is not None:
+            assert self.power>0, "power must be positive"
         if m_cut is None:
             m_cut = 0
         if m_apodeg is None:
             m_apodeg = 0
         self.m_cut = m_cut
         self.m_apodeg = m_apodeg
+
         self.ipix = None
         self.tf_pix = None
         if ipix is not None:
@@ -424,13 +451,25 @@ class GeometryTF:
         self.set_ipix(ipix)
 
         assert self.m_apodeg==0, 'need to reimplement that, it was not working well anyways'
-        ms_min = np.int_(self.lx_cut*np.sin(np.minimum(self.g.theta + self.m_apodeg*np.pi/180., np.pi)))
-        ms_max = np.int_(self.lx_cut*np.sin(np.maximum(self.g.theta - self.m_apodeg*np.pi/180., 0.)))
-        mcuts_min = np.maximum(np.minimum(ms_min, ms_max), self.m_cut)
-        mcuts_max = np.maximum(np.maximum(ms_min, ms_max), self.m_cut)
+        if power is not None:
+            _lx = 3*self.lx_cut  # for Gaussian or exp-power-law.
+        else:
+            _lx = self.lx_cut  # for sharp cut off
+        _m = self.m_cut
+        ms_min = np.int_(_lx*np.sin(np.minimum(self.g.theta + self.m_apodeg*np.pi/180.0, np.pi)))
+        ms_max = np.int_(_lx*np.sin(np.maximum(self.g.theta - self.m_apodeg*np.pi/180.0, 0.0)))
+        mcuts_min = np.maximum(np.minimum(ms_min, ms_max), _m)
+        mcuts_max = np.maximum(np.maximum(ms_min, ms_max), _m)
         mcuts_min = np.maximum(mcuts_min, 0)
         self.mi = mcuts_min
         self.ma = mcuts_max
+
+        if power is not None:
+            self.mc = self.lx_cut*np.sin(np.minimum(self.g.theta, np.pi))
+            self.fm = self.fm_power_law(power=self.power)
+        else:
+            self.mc = self.ma
+            self.fm = None
 
     @classmethod
     def from_mask(cls, geom, mask, lx_cut, **kwargs):
@@ -443,25 +482,27 @@ class GeometryTF:
 
     def set_ipix(self, ipix):
         """Delayed setting of the pixels."""
-        if ipix.max() > self.g.ofs[-1] + self.g.nphi[-1]:
+        if ipix.max()>self.g.ofs[-1] + self.g.nphi[-1]:
             raise ValueError(
                 f"ipix contains pixels outside the geometry with range {self.g.dec_range}. "
                 "Probably need to extend the southern declination limit."
             )
-        if ipix.min() < self.g.ofs[0]:
+        if ipix.min()<self.g.ofs[0]:
             raise ValueError(
                 f"ipix contains pixels outside the geometry with range {self.g.dec_range}. "
                 "Probably need to extend the northern declination limit."
             )
         self.ipix = ipix
-        self.tf_pix = (
-            ipix - self.g.ofs[0]
-        )  # internal index to map from reduced pix to full pixels.
-        assert all(self.tf_pix >= 0)
+        self.tf_pix = ipix - self.g.ofs[0]  # internal index to map from reduced pix to full pixels.
+        assert all(self.tf_pix>=0)
+
+    @property
+    def nside(self):
+        return self.g.nside
 
     @cached_property
     def ofs(self):
-        return self.g.ofs-self.g.ofs[0]
+        return self.g.ofs - self.g.ofs[0]
 
     @cached_property
     def npix(self):
@@ -469,15 +510,22 @@ class GeometryTF:
 
     def _cut_ms(self, legs):
         ms = np.arange(legs.shape[2], dtype=int)
-        for ir, (_mc, np_i) in enumerate(zip(self.ma, self.g.nphi)):
-            mc = min(_mc, np_i // 2+1)
-            legs[:, ir, :] *= (ms<mc)/np_i
+        for ir, (_mc, np_i) in enumerate(zip(self.mc, self.g.nphi)):
+            legs[:, ir, :] *= (1 - self.get_filter(ms, mc=_mc))/np_i
+            legs[:, ir, :] *= ms<np_i//2 + 1
+
+    def get_filter(self, m: np.ndarray, mc):
+        if self.fm is None:
+            return (m>=mc).astype(float)
+        else:
+            fm = self.fm(m, mc=mc)
+            return fm
 
     def _apply_tf_inplace(self, alms, maps, nthreads):
         if maps is not None:
             assert maps.ndim==2, maps.shape
         assert alms.ndim==2, alms.shape
-        self.g.alm2map(alms, maps=maps, nthreads=nthreads, )
+        self.g.alm2map(alms, maps=maps, nthreads=nthreads)
         maps = self.apply_map(maps, nthreads=nthreads)
         return maps
 
@@ -502,19 +550,19 @@ class GeometryTF:
         nmaps, npix = maps.shape
         nthreads = get_nthreads(nthreads)
         kw = dict(nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
-        if self.lx_cut>0 or self.m_cut>0:
-            _maps = np.zeros((nmaps, self.npix), dtype=maps.dtype)
-            if fast:
-                fast_assign(maps, _maps, self.ipix, self.tf_pix)
-            else:
-                _maps[:, self.tf_pix] = maps[:, self.ipix]
-            legs = ducc0.sht.map2leg(map=_maps, mmax=np.max(self.ma), **kw)
-            self._cut_ms(legs)
-            cut_map = ducc0.sht.leg2map(leg=legs, **kw)
-            if fast:
-                fast_subtract(maps, cut_map, self.ipix, self.tf_pix)
-            else:
-                maps[:, self.ipix] -= cut_map[:, self.tf_pix]
+
+        _maps = np.zeros((nmaps, self.npix), dtype=maps.dtype)
+        if fast:
+            fast_assign(maps, _maps, self.ipix, self.tf_pix)
+        else:
+            _maps[:, self.tf_pix] = maps[:, self.ipix]
+        legs = ducc0.sht.map2leg(map=_maps, mmax=np.max(self.ma), **kw)
+        self._cut_ms(legs)
+        cut_map = ducc0.sht.leg2map(leg=legs, **kw)
+        if fast:
+            fast_subtract(maps, cut_map, self.ipix, self.tf_pix)
+        else:
+            maps[:, self.ipix] -= cut_map[:, self.tf_pix]
         return maps
 
     def apply(self, alms, nthreads=None):
@@ -529,7 +577,7 @@ class GeometryTF:
         return alms
 
     def filter_alms(self, alms, nthreads=None):
-        """Apply lx cut to alms of shape (1,2,3) for T/EB/TEB. [inplace]"""
+        """Apply lx cut to alms of shape (1,2,3) for T/EB/TEB (inplace)."""
         nthreads = get_nthreads(nthreads)
         lmax = hp.Alm.getlmax(alms.shape[-1])
         maps = np.atleast_2d(self.g.alm2map(alms, nthreads=nthreads))
@@ -537,17 +585,17 @@ class GeometryTF:
         return self.g.map2alm(maps, nthreads=nthreads, check=False, lmax=lmax)
 
     def filter_maps(self, maps, nthreads=None):
-        """Apply lx cut to maps of shape (1,2,3) for T/QU/TQU. [inplace]"""
+        """Apply lx cut to maps of shape (1,2,3) for T/QU/TQU (inplace)."""
         out = self.apply_map(np.atleast_2d(maps), nthreads=nthreads)
-        if maps.ndim == 1:
-            assert out.shape[0] == 1
+        if maps.ndim==1:
+            assert out.shape[0]==1
             return out[0]
         return out
 
     def filter_maps_partial(self, maps, nthreads=None):
-        """"fast filtering of a 1d partial maps (only pixels defined by self.ipix)"""
+        """Fast filtering of a 1d partial maps (only pixels defined by self.ipix)."""
         nthreads = get_nthreads(nthreads)
-        assert maps.ndim == 1
+        assert maps.ndim==1
         kw = dict(nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
         if self.lx_cut>0 or self.m_cut>0:
             _maps = self.buffer
@@ -565,6 +613,13 @@ class GeometryTF:
     @cached_property
     def buffer3d(self):
         return np.zeros((3, self.npix), dtype=np.float64)
+
+    @staticmethod
+    def fm_power_law(power=6):
+        def func(m, mc):
+            return np.exp(-((mc/m)**power))
+
+        return func
 
 
 def map2lens(maps, plm, g=None, **kwargs):
@@ -606,7 +661,7 @@ def alm2lens(alms, plm, nside, g=None, **kwargs):
     """
     lmax = hp.Alm.getlmax(len(plm))
     ell = np.arange(lmax + 1)
-    al0 = -np.sqrt(ell * (ell + 1) / 2)
+    al0 = -np.sqrt(ell*(ell + 1)/2)
 
     if g is None:
         alm2map_spin = hp.alm2map_spin
@@ -621,20 +676,20 @@ def alm2lens(alms, plm, nside, g=None, **kwargs):
     alms = np.atleast_2d(alms)
     tp = alm2map_spin([hp.almxfl(alms[0], -al0), zero], spin=1, lmax=lmax, **kwargs)
     out = np.zeros((alms.shape[0], hp.nside2npix(nside)), dtype=float)
-    out[0] = 2 * (p[0] * tp[0] + p[1] * tp[1])
+    out[0] = 2*(p[0]*tp[0] + p[1]*tp[1])
     del tp
 
     if alms.shape[0]==3:
-        al2p = -np.sqrt((ell - 2) * (ell + 3) / 2)
+        al2p = -np.sqrt((ell - 2)*(ell + 3)/2)
         Zp = alm2map_spin([hp.almxfl(alms[1], al2p),
                            hp.almxfl(alms[2], al2p)], spin=3, lmax=lmax, **kwargs)
 
-        al2m = -np.sqrt((ell + 2) * (ell - 1) / 2)
+        al2m = -np.sqrt((ell + 2)*(ell - 1)/2)
         Zm = alm2map_spin([hp.almxfl(alms[1], al2m),
                            hp.almxfl(alms[2], al2m)], spin=1, lmax=lmax, **kwargs)
 
-        out[1] = (p[1] * Zm[1] - p[0] * Zm[0]) + (p[0] * Zp[0] + p[1] * Zp[1])
-        out[2] = -(p[0] * Zm[1] + p[1] * Zm[0]) + (p[0] * Zp[1] - p[1] * Zp[0])
+        out[1] = (p[1]*Zm[1] - p[0]*Zm[0]) + (p[0]*Zp[0] + p[1]*Zp[1])
+        out[2] = -(p[0]*Zm[1] + p[1]*Zm[0]) + (p[0]*Zp[1] - p[1]*Zp[0])
     return out
 
 
@@ -648,8 +703,8 @@ def get_dec_range(mask, dec=None):
     if dec is None:
         dec = hp.pix2ang(nside, np.arange(hp.nside2npix(nside)), lonlat=True)[1]
 
-    dec1 = int(np.floor(np.min(dec[mask > 0])))
-    dec2 = int(np.ceil(np.max(dec[mask > 0])))
+    dec1 = int(np.floor(np.min(dec[mask>0])))
+    dec2 = int(np.ceil(np.max(dec[mask>0])))
     return dec1, dec2
 
 
@@ -714,13 +769,13 @@ def get_almvar(wl0, lmax, Lmax=30):
     except FileNotFoundError:
         raise FileNotFoundError("Could not find the precomputed w3jllmm.npy file.  Please generate from scripts.")
     _lmax = hp.Alm.getlmax(load.shape[0])
-    _Lmax = load.shape[1]-1
-    if lmax > _lmax:
+    _Lmax = load.shape[1] - 1
+    if lmax>_lmax:
         raise ValueError(f"requested lmax {lmax} is larger than max pre-computed {_lmax}")
-    if Lmax > load.shape[1]-1:
+    if Lmax>load.shape[1] - 1:
         raise ValueError(f"requested lmax {Lmax} is larger than max pre-computed {_Lmax}")
 
     out = np.zeros(load.shape[0], dtype=float)
-    for L in range(Lmax+1):
+    for L in range(Lmax + 1):
         out += wl0[L].real*load[:, L]
     return reduce_lmax(out, lmax)

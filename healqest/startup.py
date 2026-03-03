@@ -560,11 +560,13 @@ class Config:
     def profile_u(self):
         if self.profile is None:
             return None
-        assert self.profile in ['src', 'tsz']
+        # assert self.profile in ['src', 'tsz']
         if self.profile == 'src':
             return np.ones(self.lmax+1)
+        elif self.profile.endswith('npy'):
+            return np.load(self.path(self.profile))
         else:
-            raise NotImplementedError
+            raise NotImplementedError(f"can not handle profile {self.profile}")
 
     @cached_property
     def g(self):

@@ -104,48 +104,34 @@ class Geometry:
         dec_range: tuple=None
             The range of declination in degrees. If None, use the whole sky.
         """
-        n1, n2 = 0, hp.nside2npix(nside)
+        self.dec_range = dec_range
         if dec_range is not None:
-            self.dec_range = dec_range
-            t1 = np.pi/2 - np.deg2rad(max(dec_range))
-            t2 = np.pi/2 - np.deg2rad(min(dec_range))
-            n1 = max(n1, hp.ang2pix(nside, t1, 0) - 1)
-            n2 = min(n2, hp.ang2pix(nside, t2, 2*np.pi) + 4*nside + 1)
+            r1, r2 = hp.pix2ring(nside, hp.ang2pix(nside, np.zeros(2), np.sort(dec_range)[::-1], lonlat=True))
+            self.r1 = max(0, r1 - 1)  # leave a 1-ring margin
+            self.r2 = min(4*nside - 1, r2 + 1)  # leave a 1-ring margin
         else:
-            self.dec_range = None  # unset for fullsky.
-        ipix = np.arange(n1, n2)
-        theta, phi = hp.pix2ang(nside, ipix)
-        if dec_range is not None:
-            sel = np.logical_and(theta>t1, theta<t2)
-            theta = theta[sel]
-            phi = phi[sel]
-            ipix = ipix[sel]
+            self.r1, self.r2 = 0, 4*nside - 1
 
-        # this combo is much faster than np.unique, but assumes "theta" is sorted
-        assert np.all(np.diff(theta)>=0)
-        _theta = theta[np.insert(np.diff(theta)!=0, 0, True)]
-        theta_idx = np.searchsorted(_theta, theta)
-        self.nphi = np.bincount(theta_idx)
+        ring = np.arange(self.r1, self.r2 + 1)
+        self.ofs, self.nphi, *_ = hp.ringinfo(nside, ring)
+        self.ofs = np.ascontiguousarray(self.ofs, dtype=np.uint64)
+        self.nphi = np.ascontiguousarray(self.nphi, dtype=np.uint64)
+        self.theta, self.phi0 = hp.pix2ang(nside, self.ofs.astype(int))
 
-        _theta = np.asarray(_theta, np.float64)
-        self.nphi = np.asarray(self.nphi, np.uint64)
-
-        self.phi0 = np.full(_theta.shape, np.inf, dtype=np.float64)
-        np.minimum.at(self.phi0, theta_idx, phi)
-
-        # hardware acceleration for int type but not unsigned int; convert to uint64 later
-        self.ofs = np.full(_theta.shape, np.iinfo(np.int64).max, dtype=np.int64)
-        np.minimum.at(self.ofs, theta_idx, ipix)
-        self.ofs = np.asarray(self.ofs, np.uint64)
         self.pixelarea = hp.nside2pixarea(nside)
 
-        self.theta = _theta
         self.nside = nside
         self._lmax = 3*nside - 1
-
         self._ring_weights = None
         self._pixel_weights = None
         self.ipix_slice = slice(self.ofs[0], int(self.ofs[-1] + self.nphi[-1] + 1))
+
+    @property
+    def mask(self):
+        """Return the co-latitude mask of the geometry."""
+        out = np.zeros(hp.nside2npix(self.nside), dtype=bool)
+        out[self.ipix_slice] = True
+        return out
 
     def restrict(self):
         """Create a Geometry instance from nside and optional declination range."""

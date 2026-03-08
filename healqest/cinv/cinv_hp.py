@@ -92,7 +92,7 @@ class cinv(object):
 
         if g is None:
             from healqest.ducc_sht import Geometry
-            self.g = Geometry(nside=nside, dec_range=None)  # fallback to full-sky ducc
+            self.g = Geometry(nside=nside)  # fallback to full-sky ducc
             # self.g = None  # fallback to hp
         else:
             self.g = g

@@ -93,25 +93,33 @@ def unfold_weights(nside, ring=True):
 
 
 class Geometry:
-    def __init__(self, nside, dec_range=None):
+    def __init__(self, nside, r1=None, r2=None):
         """
-        Setup the geometry for ducc-style SHT.
+        Initialize a Geometry instance with nside and ring range (r1, r2).
 
         Parameters
         ----------
         nside: int
-            The nside of the map.
-        dec_range: tuple=None
-            The range of declination in degrees. If None, use the whole sky.
+            Nside of the Healpix map.
+        r1, r2: int
+            ring range of the partial map geometry. Use None for full sky
         """
-        self.dec_range = dec_range
-        if dec_range is not None:
-            r1, r2 = hp.pix2ring(nside, hp.ang2pix(nside, np.zeros(2), np.sort(dec_range)[::-1], lonlat=True))
-            self.r1 = max(0, r1 - 1)  # leave a 1-ring margin
-            self.r2 = min(4*nside - 1, r2 + 1)  # leave a 1-ring margin
-        else:
-            self.r1, self.r2 = 0, 4*nside - 1
+        if isinstance(r1, (list, np.ndarray)):
+            raise TypeError(
+                "The interface of `Geometry` has changed. Now, the __init__ function takes the ring range "
+                "(r1, r2) instead of declination range. "
+                "Please use `Geometry.from_dec()` or `Geometry.from_mask()` to create a Geometry "
+                "instance from declination range or mask."
+            )
+        if r1 is None:
+            r1 = 0
+        if r2 is None:
+            r2 = 4 * nside - 1
 
+        r1, r2 = min(r1, r2), max(r1, r2)
+        assert 0 <= r1 <= r2 < 4 * nside, f"Invalid ring range: r1={r1}, r2={r2}, nside={nside}"
+        self.r1 = r1
+        self.r2 = r2
         ring = np.arange(self.r1, self.r2 + 1)
         self.ofs, self.nphi, *_ = hp.ringinfo(nside, ring)
         self.ofs = np.ascontiguousarray(self.ofs, dtype=np.uint64)
@@ -119,12 +127,43 @@ class Geometry:
         self.theta, self.phi0 = hp.pix2ang(nside, self.ofs.astype(int))
 
         self.pixelarea = hp.nside2pixarea(nside)
-
         self.nside = nside
-        self._lmax = 3*nside - 1
+        self._lmax = 3 * nside - 1
+        self.ipix_slice = slice(self.ofs[0], int(self.ofs[-1] + self.nphi[-1]))
         self._ring_weights = None
         self._pixel_weights = None
-        self.ipix_slice = slice(self.ofs[0], int(self.ofs[-1] + self.nphi[-1] + 1))
+
+    @classmethod
+    def from_dec(cls, nside, dec_range=None):
+        """Create a Geometry instance from nside and ring range."""
+        if dec_range is not None:
+            r1, r2 = hp.pix2ring(nside, hp.ang2pix(nside, np.zeros(2), np.sort(dec_range)[::-1], lonlat=True))
+            r1 = max(0, r1 - 1)  # leave a 1-ring margin
+            r2 = min(4*nside - 1, r2 + 1)  # leave a 1-ring margin
+        else:
+            r1, r2 = 0, 4*nside - 1
+        return cls(nside, r1, r2)
+
+    @classmethod
+    def from_mask(cls, mask):
+        r1, r2 = get_rings(mask)
+        nside = hp.get_nside(mask)
+        return cls(nside, r1, r2)
+
+    @property
+    def is_fullsky(self):
+        """Check if the geometry is full-sky."""
+        return self.r1==0 and self.r2==4*self.nside - 1
+
+    @property
+    def dec_range(self):
+        """Return the declination range of the geometry, (dec_min, dec_mask).
+
+        Note that the ordering is opposite to the rings r1/r2.
+        """
+        dec1 = np.degrees(np.pi/2 - self.theta[0])
+        dec2 = np.degrees(np.pi/2 - self.theta[-1])
+        return dec2, dec1
 
     @property
     def mask(self):
@@ -468,7 +507,7 @@ class GeometryTF:
 
     def set_ipix(self, ipix):
         """Delayed setting of the pixels."""
-        if ipix.max()>self.g.ofs[-1] + self.g.nphi[-1]:
+        if ipix.max()>=self.g.ofs[-1] + self.g.nphi[-1]:
             raise ValueError(
                 f"ipix contains pixels outside the geometry with range {self.g.dec_range}. "
                 "Probably need to extend the southern declination limit."
@@ -692,6 +731,13 @@ def get_dec_range(mask, dec=None):
     dec1 = int(np.floor(np.min(dec[mask>0])))
     dec2 = int(np.ceil(np.max(dec[mask>0])))
     return dec1, dec2
+
+
+def get_rings(mask):
+    ipix = np.where(mask>0)[0]
+    nside = hp.get_nside(mask)
+    r1, r2 = hp.pix2ring(nside, ipix[[0, -1]])
+    return r1, r2
 
 
 def reduce_lmax(alm, lmax=4000):

@@ -16,7 +16,7 @@ def setup():
     dec_range = [-70, -40]
     ra, dec = hp.pix2ang(nside, np.arange(hp.nside2npix(nside)), lonlat=True)
     mask = np.logical_and(dec > dec_range[0], dec < dec_range[1])
-    g = ducc_sht.Geometry(nside=nside, dec_range=[dec_range[0], dec_range[1]])
+    g = ducc_sht.Geometry.from_dec(nside=nside, dec_range=[dec_range[0], dec_range[1]])
     m = np.random.normal(0, 1, (3, hp.nside2npix(nside)))*mask
     # pre-loading the cache
     g.pixel_weights

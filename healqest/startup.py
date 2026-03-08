@@ -576,7 +576,7 @@ class Config:
     @cached_property
     def g(self):
         from healqest.ducc_sht import Geometry
-        return Geometry(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
+        return Geometry.from_dec(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
 
     # === setup masks ===
     def _load_mask(self, item, field=0):

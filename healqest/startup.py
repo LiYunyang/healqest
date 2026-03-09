@@ -319,7 +319,7 @@ class Config:
     @staticmethod
     def ktype2ij(ktype, i, j=None, cmbset='a') -> Tuple[int, int, str, str]:
         """
-        Convert the 2-letter ktype to seed and cmbset of the two maps
+        Convert the 2-letter ktype to seed and cmbset of the two maps used for reconstruction.
         """
         if j is None and len(set(ktype))==2:
             # default `seed2` is `seed1 + 1`
@@ -335,6 +335,8 @@ class Config:
                     cmbset1, cmbset2 = cmbset
                 elif ktype=='yx':
                     cmbset2, cmbset1 = cmbset
+                else:
+                    raise AssertionError
             if ktype=='xx':
                 seed1, seed2 = i, i
             elif ktype=='xy':
@@ -525,7 +527,7 @@ class Config:
         return tf
 
     @cached_property
-    def tf1d(self) -> np.ndarray | None:
+    def tf1d(self) -> dict | None:
         """
         Return 1d TF functions.
 
@@ -688,7 +690,7 @@ class Config:
             Indicate the stacking type for mean-field calculations.
         bundle: int, tuple of ints =None
         cmbset: str
-            cmbset for MF. For cases when the stack type is in ['xy', 'yx', 'x0', '0x', 'xx'].
+            cmbset for MF, e.g. 'a'/'b'. For cases when the stack type is in ['xy', 'yx', 'x0', '0x', 'xx'].
         """
         subdir = 'lensrec_N1' if N1 else 'lensrec'
         if bundle is not None and not N1:  # MF and N1 don't do bundle
@@ -715,7 +717,15 @@ class Config:
 
     def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False, cmbset='a',
               curl=False):
-        """paths to power spectra files."""
+        """Paths to power spectra files.
+
+        Parameters
+        ----------
+
+        coadd: bool=False
+            special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing reconstruction
+            map is coadded before taking spectra.
+        """
         subdir = 'cls'
         if SAN0:
             assert N1 is False

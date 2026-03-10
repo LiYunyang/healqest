@@ -112,12 +112,12 @@ class Geometry:
                 "instance from declination range or mask."
             )
         if r1 is None:
-            r1 = 0
+            r1 = 1
         if r2 is None:
             r2 = 4 * nside - 1
 
         r1, r2 = min(r1, r2), max(r1, r2)
-        assert 0 <= r1 <= r2 < 4 * nside, f"Invalid ring range: r1={r1}, r2={r2}, nside={nside}"
+        assert 1 <= r1 <= r2 < 4 * nside, f"Invalid ring range: r1={r1}, r2={r2}, nside={nside}"
         self.r1 = r1
         self.r2 = r2
         ring = np.arange(self.r1, self.r2 + 1)
@@ -138,10 +138,10 @@ class Geometry:
         """Create a Geometry instance from nside and ring range."""
         if dec_range is not None:
             r1, r2 = hp.pix2ring(nside, hp.ang2pix(nside, np.zeros(2), np.sort(dec_range)[::-1], lonlat=True))
-            r1 = max(0, r1 - 1)  # leave a 1-ring margin
-            r2 = min(4*nside - 1, r2 + 1)  # leave a 1-ring margin
+            r1 = max(1, r1 - 1)  # leave a 1-ring margin
+            r2 = min(4 * nside - 1, r2 + 1)  # leave a 1-ring margin
         else:
-            r1, r2 = 0, 4*nside - 1
+            r1, r2 = 1, 4 * nside - 1
         return cls(nside, r1, r2)
 
     @classmethod

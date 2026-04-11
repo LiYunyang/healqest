@@ -6,6 +6,7 @@ This module provides setups needed at startup, including
 """
 import abc
 import argparse
+from datetime import datetime
 from functools import cached_property
 import filecmp
 import glob
@@ -180,36 +181,45 @@ class Config:
             logger.info(f"lensrec IO directory (`recdir`): {obj.path(obj.recdir)}")
 
         # save a hard copy of the config file and current script
-        obj.copy_scripts(fname, git_track=False)
-        obj.copy_scripts(script, git_track=True)
+        obj.copy_script(fname, dir_dst=obj.outdir, git_track=False)
+        obj.copy_script(script, dir_dst=obj.outdir, git_track=True)
         if hasattr(args, 'module_path'):
-            obj.copy_scripts(args.module_path, git_track=True)
+            obj.copy_script(args.module_path, dir_dst=obj.outdir, git_track=True)
         return obj
 
-    def copy_scripts(self, script_file, git_track=False):
+    @staticmethod
+    def copy_script(fpath, dir_dst: str, git_track=True, only_rank0=True, timestamp=True):
         """
-        Copy the script/config file to the output directory.
+        Copy file to directory with version suffix and time mark (if duplicate).
 
-        script_file: str
-            absolute path to the script file (e.g., __file__).
-        git_track: bool=False
-            If True, append the git commit hash to the copied script file name.
+        The scripts named name[.suffix].ext will be copied to dir_dst as
+            - name.ext (if `versioned=False`)
+            - name.version.ext (if `versioned=True`)
+            - name.version.yymmdd_HHMM.ext (if duplicate and differ from the last one)
+        pass if the last copied file is identical to the new one.
         """
-        if rank==0:
-            os.makedirs(self.path(self.outdir), exist_ok=True)
-            name, ext = os.path.splitext(os.path.basename(script_file))
-            name = name.split('.')[0]  # strip suffix like "reclens.test.py"
-            if git_track:
-                out_fname = f"{name}.{get_git_version()}{ext}"
-            else:
-                out_fname = f"{name}{ext}"
-            existing_files = glob.glob(os.path.join(self.path(self.outdir), name) + '*' + ext)
-            existing_files.sort(key=os.path.getmtime)
-            if existing_files and filecmp.cmp(existing_files[-1], script_file):
-                exist_file = os.path.basename(existing_files[-1])
-                logger.info(f"new script {out_fname} is identical to {exist_file}, skipping copy.")
-            else:
-                shutil.copy(script_file, self.path(self.outdir, out_fname))
+
+        if only_rank0 and rank!=0:
+            return
+        os.makedirs(dir_dst, exist_ok=True)
+
+        name, ext = os.path.splitext(os.path.basename(fpath))
+        name = name.split('.')[0]  # strip suffix like "reclens.test.py"
+        if git_track:
+            out_fname = f"{name}.{get_git_version()}{ext}"
+        else:
+            out_fname = f"{name}{ext}"
+        existing_files = glob.glob(os.path.join(dir_dst, name) + '*' + ext)
+        existing_files.sort(key=os.path.getmtime)
+        if existing_files and filecmp.cmp(existing_files[-1], fpath, shallow=False):
+            exist_file = os.path.basename(existing_files[-1])
+            logger.info(f"new script {out_fname} is identical to {exist_file}, skipping copy.")
+        else:
+            if existing_files and timestamp:
+                timestamp = datetime.now().strftime('%y%m%d_%H%M')
+                base, sfx = os.path.splitext(out_fname)
+                out_fname = f"{base}.{timestamp}{sfx}"
+            shutil.copy(fpath, os.path.join(dir_dst, out_fname))
 
     def _validate_config(self, config_dict: dict):
         expected_keys = get_type_hints(self)

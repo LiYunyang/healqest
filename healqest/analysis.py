@@ -344,9 +344,7 @@ class LensingSpectra:
         if self.do_SAN0:
             cls = self.Cls + self.N0 - self.SAN0s  # replace N0 with the per-realization SAN0
             self.cov = bin_Cls(cls*fac, bins=bins)[-1]
-            self.cov_sys = N1cov/self.N_N1  # systematic err from subtracting N1
-        else:
-            self.cov_sys = N0cov/self.N + N1cov/self.N_N1  # systematic err from subtracting N0/N1
+        self.cov_sys = N0cov/self.N + N1cov/self.N_N1  # systematic err from subtracting N0/N1
 
         if resp_err:
             resp_bin, *_, resp_cov = bin_Cls(self.resp2_cls, bins=bins)[1:]

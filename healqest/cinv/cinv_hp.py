@@ -12,6 +12,7 @@ import logging
 from . import opfilt_hp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
+from .opfilt_hp import SkyInverseFilterJoint, SkyInverseFilter, NoiseInverseFilter, TFObj
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ class cinv(object):
         eps_min: float
         ellscale: bool
             If True, scale Cl as Dl.
-        tf: opfilt_hp.TFObj
+        tf: TFObj
             Transfer function object
         g: Geometry=None
             The `ducc` wrapper object used to speed up spherical harmonic transforms. If specified, the SHT will
@@ -82,7 +83,6 @@ class cinv(object):
         self.s_inv_filt = None
         self.n_inv_filt = None
 
-        self.iter_tot = None
         self.prev_eps = None
         self._pre_op = None  # placeholder for pre_op cache
 
@@ -97,7 +97,6 @@ class cinv(object):
             assert self.g.nside == nside
 
     def solve(self, soltn, tpn_map, verbose=True):
-        self.iter_tot = 0
         self.prev_eps = None
         dot_op = opfilt_hp.DotOperator()
         cd_logger = cd_monitors.logger_basic() if verbose else cd_monitors.logger_none()
@@ -120,7 +119,7 @@ class cinv(object):
         opfilt_hp.calc_fini(soltn, self.s_inv_filt)
 
     def get_fl(self, pol, lmax):
-        pass
+        raise NotImplementedError("get_fl method must be implemented in subclass")
 
     @property
     def pre_op(self):
@@ -180,19 +179,15 @@ class cinv_t(cinv):
         mmin=None,
     ):
         assert len(ninv) == 1
-        tf = opfilt_hp.TFObj(
-            npol=1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin
-        )
+        tf = TFObj(1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin)
         # only take the first entry as the temperation ninv
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, tf=tf, g=g
         )
 
         # Set up s_inv_filt and n_inv_filt
-        self.s_inv_filt = hp_utils.jit(
-            opfilt_hp.SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf
-        )
-        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
+        self.s_inv_filt = hp_utils.jit(SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
+        self.n_inv_filt = hp_utils.jit(NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
 
     def apply_ivf(self, tmap, soltn=None):
         if soltn is None:
@@ -265,25 +260,19 @@ class cinv_p(cinv):
     ):
         assert isinstance(ninv, list)
         assert len(ninv) in [2]
-        tf = opfilt_hp.TFObj(
-            npol=2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin
-        )
+        tf = TFObj(2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin)
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, tf=tf, g=g
         )
 
         # Set up s_inv_filt and n_inv_filt
-        self.s_inv_filt = hp_utils.jit(
-            opfilt_hp.SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf
-        )
-
-        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
+        self.s_inv_filt = hp_utils.jit(SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
+        self.n_inv_filt = hp_utils.jit(NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
 
     def apply_ivf(self, qumap, soltn=None):
         if soltn is not None:
             raise NotImplementedError
         else:
-            logger.debug("soltn is None")
             eblm = np.zeros((2, hp.Alm.getsize(self.lmax)), dtype=np.complex128)
 
         assert len(qumap) == 2
@@ -351,17 +340,13 @@ class cinv_tp(cinv):
     ):
         assert isinstance(ninv, list)
         assert len(ninv) in [3]  # TT/PP or TT/QQ/UU
-        tf = opfilt_hp.TFObj(
-            npol=3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin
-        )
+        tf = TFObj(3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin)
 
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, g=g, tf=tf
         )
-        self.n_inv_filt = hp_utils.jit(opfilt_hp.NoiseInverseFilter, ninv, tf=self.tf, g=g)
-        self.s_inv_filt = hp_utils.jit(
-            opfilt_hp.SkyInverseFilterJoint, s_cls=self.dl, nl_res=nl_res, tf=self.tf
-        )
+        self.n_inv_filt = hp_utils.jit(NoiseInverseFilter, ninv, tf=self.tf, g=g)
+        self.s_inv_filt = hp_utils.jit(SkyInverseFilterJoint, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
 
     @property
     def pre_op(self):
@@ -411,7 +396,7 @@ class library_cinv_sTP:
         poalrization-only filtering library
     """
 
-    def __init__(self, sim_lib, cinvt: cinv_t = None, cinvp: cinv_p = None, lfilt=None, add_noise=False):
+    def __init__(self, sim_lib, cinvt: cinv_t, cinvp: cinv_p, lfilt=None, add_noise=False):
         self.sim_lib = sim_lib
         self.lfilt = lfilt
         self.add_noise = add_noise
@@ -428,7 +413,7 @@ class library_cinv_sTP:
             return out
         elif pol == 't':
             return self.cinv_t.get_fl(pol='t', lmax=lmax)
-        elif pol in 'eb':
+        elif pol in ['e', 'b']:
             return self.cinv_p.get_fl(pol=pol, lmax=lmax)
         else:
             raise ValueError("pol must be 't'/'e'/'b'/'te'")

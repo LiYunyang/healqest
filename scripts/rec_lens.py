@@ -198,13 +198,13 @@ if __name__ == "__main__":
 
     Examples
     --------
-    # lensing reconstions for N0 sims. pairing goes upto (i2, i2+1)
+    - lensing reconstions for N0 sims. pairing goes upto (i2, i2+1)
     >>> $run scripts/rec_lens.py -c $config -m $data -f $field -i1 $i1 -i2 $i2 -skip
 
-    # lensing reconstions for N1 sims. pairing goes upto (i2, i2+1)
+    - lensing reconstions for N1 sims. pairing goes upto (i2, i2+1)
     >>> $run scripts/rec_lens.py -c $config -m $data -f $field -i1 $i1 -i2 $i2 -n1 -skip
 
-    # lensing reconstions for RDN0 . pairing goes from (0, 0) to (0, i2)
+    - lensing reconstions for RDN0 . pairing goes from (0, 0) to (0, i2)
     >>> $run scripts/rec_lens.py -c $config -m $data -f $field -i1 0 -i2 $i2 -skip -rdn0
     """
     parser = startup.parser()

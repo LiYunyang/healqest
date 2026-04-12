@@ -1,9 +1,11 @@
-"""
-This module provides setups needed at startup, including
+"""Provide setups needed at startup.
+
+including
     - parsing config files;
     - initiating the global logger
-    - modules for map io (might move maps sometime).
+    - modules for map io.
 """
+
 import abc
 import argparse
 from datetime import datetime
@@ -32,7 +34,7 @@ try:
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
-    if rank!=0:
+    if rank != 0:
         warnings.filterwarnings("ignore")
 except ImportError:
     rank = 0
@@ -97,10 +99,16 @@ class Config:
     cinv_lmin: int = None  # minimum l for cinv
     cinv_mmin: int = None  # minimum m for cinv
     file_bl: Union[str, float]  # path to beam file or gaussian beam size in arcmin FWHM
-    file_tf1d: Union[str, int] = None  # path to tf1d file. If a tf2d file is given, it will compute tf1d from it.
+    file_tf1d: Union[str, int] = (
+        None  # path to tf1d file. If a tf2d file is given, it will compute tf1d from it.
+    )
     # If a integer is given, this is interpreted as a l_cut.
-    file_tf2d: Union[str, list] = None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
-    lx_cut: int = None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still
+    file_tf2d: Union[str, list] = (
+        None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
+    )
+    lx_cut: int = (
+        None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still
+    )
     # be used for effective 1d beam)
     lx_power: float = None  # the power of the lx filter. For wide+summer fields, use 6.
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
@@ -175,9 +183,9 @@ class Config:
         script = sys._getframe(1).f_globals['__file__']
         logger.info(f"script: {os.path.basename(script)}")
         logger.info(f"main IO directory (`outdir`): {obj.path(obj.outdir)}")
-        if obj.cinvdir!=obj.outdir:
+        if obj.cinvdir != obj.outdir:
             logger.info(f"cinv IO directory (`cinvdir`): {obj.path(obj.cinvdir)}")
-        if obj.recdir!=obj.outdir:
+        if obj.recdir != obj.outdir:
             logger.info(f"lensrec IO directory (`recdir`): {obj.path(obj.recdir)}")
 
         # save a hard copy of the config file and current script
@@ -198,8 +206,7 @@ class Config:
             - name.version.yymmdd_HHMM.ext (if duplicate and differ from the last one)
         pass if the last copied file is identical to the new one.
         """
-
-        if only_rank0 and rank!=0:
+        if only_rank0 and rank != 0:
             return
         os.makedirs(dir_dst, exist_ok=True)
 
@@ -251,7 +258,7 @@ class Config:
         # append a second level of directory to distinguish rectypes
         assert self.rectype in ['naive', 'sqe', 'gmv']
         assert self.ilctype in ['mv', 'xilc', 'tsz']
-        if self.ilctype=='mv':
+        if self.ilctype == 'mv':
             subname = f"{self.rectype}"
         else:
             subname = f"{self.rectype}_{self.ilctype}"
@@ -267,16 +274,16 @@ class Config:
         # auto adjust spice kwargs
         if self.spice_kwargs:
             for key in ['apodizesigma', 'thetamax']:
-                if self.spice_kwargs.get(key, None)=='dec':
+                if self.spice_kwargs.get(key, None) == 'dec':
                     self.spice_kwargs[key] = max(self.dec_range) - min(self.dec_range)
                 elif isinstance(self.spice_kwargs[key], dict):
                     self.spice_kwargs[key] = self.spice_kwargs[key][self.field]
 
         # cinv settings:
         if self.nlev_p is None and self.nlev_t is not None:
-            self.nlev_p = self.nlev_t*np.sqrt(2)
+            self.nlev_p = self.nlev_t * np.sqrt(2)
         if self.nlev_t is None and self.nlev_p is not None:
-            self.nlev_t = self.nlev_p/np.sqrt(2)
+            self.nlev_t = self.nlev_p / np.sqrt(2)
 
         # mvtypes has to be a list
         self.mvtypes = list(self.mvtypes)
@@ -286,7 +293,6 @@ class Config:
 
     @staticmethod
     def path(path, *args, **kwargs):
-
         """
         Formatting the dir/file name.
 
@@ -328,34 +334,32 @@ class Config:
 
     @staticmethod
     def ktype2ij(ktype, i, j=None, cmbset='a') -> Tuple[int, int, str, str]:
-        """
-        Convert the 2-letter ktype to seed and cmbset of the two maps used for reconstruction.
-        """
-        if j is None and len(set(ktype))==2:
+        """Convert the 2-letter ktype to seed and cmbset of the two maps used for reconstruction."""
+        if j is None and len(set(ktype)) == 2:
             # default `seed2` is `seed1 + 1`
             j = i + 1
         if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
             # there are special cases for 'xY'/'Xy'/'yX'/'Yx'
-            if len(cmbset)==1:
+            if len(cmbset) == 1:
                 cmbset1, cmbset2 = cmbset, cmbset
             else:
-                assert len(cmbset)==2
+                assert len(cmbset) == 2
                 assert ktype in ['xy', 'yx']
-                if ktype=='xy':
+                if ktype == 'xy':
                     cmbset1, cmbset2 = cmbset
-                elif ktype=='yx':
+                elif ktype == 'yx':
                     cmbset2, cmbset1 = cmbset
                 else:
                     raise AssertionError
-            if ktype=='xx':
+            if ktype == 'xx':
                 seed1, seed2 = i, i
-            elif ktype=='xy':
+            elif ktype == 'xy':
                 seed1, seed2 = i, j
-            elif ktype=='yx':
+            elif ktype == 'yx':
                 seed1, seed2 = j, i
-            elif ktype=='x0':
+            elif ktype == 'x0':
                 seed1, seed2 = i, 0
-            elif ktype=='0x':
+            elif ktype == '0x':
                 seed1, seed2 = 0, i
             else:
                 raise AssertionError
@@ -370,6 +374,7 @@ class Config:
     def mvtype2qe(mvtype):
         # SQE type MVs
         from healqest.qest import Qest
+
         if mvtype in ['MV', 'qMV', 'PP', 'qPP', 'TTEETE', 'qTTEETE']:
             return hq.get_qes(mvtype)
         elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
@@ -391,19 +396,19 @@ class Config:
 
     @property
     def ilcs(self):
-        """return the list of ILC type(s) needed for lensrec"""
-        if self.ilctype=='mv':
+        """Return the list of ILC type(s) needed for lensrec."""
+        if self.ilctype == 'mv':
             return ['mv']
-        elif self.ilctype=='xilc':
+        elif self.ilctype == 'xilc':
             return ['tszfree', 'cibfree']
-        elif self.ilctype=='tsz':
+        elif self.ilctype == 'tsz':
             return ['mv', 'tszfree']
         else:
             raise ValueError(f'Undefined ilctype: {self.ilctype}')
 
     @property
     def qes(self):
-        """return qes for lensrec"""
+        """Return qes for lensrec."""
         qes = list()
         for mvtype in self.mvtypes:
             qes += self.mvtype2qe(mvtype)
@@ -411,12 +416,12 @@ class Config:
 
     @property
     def bundle_pairs(self):
-        """return the m-choose-2 pairs of bundles"""
+        """Return the m-choose-2 pairs of bundles."""
         return list(combinations(np.arange(self.nbundle), 2)) if self.nbundle else None
 
     @cached_property
     def cinv_cls(self) -> dict:
-        """the CMB and beam-convolved foreground cls for cinv
+        """CMB and beam-convolved foreground cls for cinv.
 
         Note
         ----
@@ -426,16 +431,16 @@ class Config:
         out = dict()
 
         def dat2dict(ell, dat):
-            assert ell[0]==0
-            assert ell[-1]==self.cinv_lmax
+            assert ell[0] == 0
+            assert ell[-1] == self.cinv_lmax
             return dict(tt=dat[0], ee=dat[1], bb=dat[2], te=dat[3])
 
-        file_cmb = str(resources.files('healqest')/'data/camb'/self.file_cambcmb)
+        file_cmb = str(resources.files('healqest') / 'data/camb' / self.file_cambcmb)
         ell, *dat = hq.get_lensedcls(file_cmb, lmax=self.cinv_lmax)
         out['cmb'] = dat2dict(ell, dat)
 
         if hasattr(self, 'file_noisefg'):
-            ell, *dat = np.loadtxt(self.path(self.file_noisefg))[:self.cinv_lmax + 1, :5].T
+            ell, *dat = np.loadtxt(self.path(self.file_noisefg))[: self.cinv_lmax + 1, :5].T
             out['nl_res'] = dat2dict(ell, dat)
         else:
             out['nl_res'] = {k: np.zeros_like(v) for k, v in out['cmb'].items()}
@@ -443,7 +448,7 @@ class Config:
 
     @cached_property
     def cmbcl(self):
-        cambcls = str(resources.files('healqest')/'data/camb'/self.file_cmb)
+        cambcls = str(resources.files('healqest') / 'data/camb' / self.file_cmb)
         try:
             ell, sltt, slee, slbb, slte = hq.get_lensedcls(cambcls, lmax=self.lmax)
         except ValueError:
@@ -459,43 +464,45 @@ class Config:
         elif isinstance(self.file_bl, str):
             beam_file = self.path(self.file_bl)
             logger.warning("temporarily loading the 150 GHz beam file")
-            bl = np.loadtxt(beam_file)[:self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
+            bl = np.loadtxt(beam_file)[: self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
         elif isinstance(self.file_bl, (float, np.floating, int, np.integer)):
-            bl = hp.gauss_beam(np.deg2rad(self.file_bl/60), lmax=self.cinv_lmax)
+            bl = hp.gauss_beam(np.deg2rad(self.file_bl / 60), lmax=self.cinv_lmax)
         else:
             raise ValueError(f"unsupported file_bl: {self.file_bl}")
         if self.cinv_lmin:
-            bl[:self.cinv_lmin] = 0
+            bl[: self.cinv_lmin] = 0
         return dict(t=bl.copy(), p=bl.copy())
 
     @cached_property
     def tf2d(self) -> Union[dict, None]:
-        """Return a 2d TFxbl functions for T/E/B"""
+        """Return a 2d TFxbl functions for T/E/B."""
         if self.file_tf2d:
             if isinstance(self.file_tf2d, (list, tuple)):
                 l, m = self.file_tf2d
                 ell, emm = hp.Alm.getlm(lmax=self.cinv_lmax)
                 alm_mask = np.ones_like(emm, dtype=float)
-                alm_mask[ell<l] = 0
-                alm_mask[emm<m] = 0
+                alm_mask[ell < l] = 0
+                alm_mask[emm < m] = 0
                 _, _, k = hq.dec2tf2d(0, *self.dec_range)
-                alm_mask[emm>k*ell] = 0
+                alm_mask[emm > k * ell] = 0
                 alm_mask = self._regularize_tf2d(alm_mask)
                 return dict(t=alm_mask.copy(), p=alm_mask.copy())
             else:
                 loaded = np.load(self.path(self.file_tf2d, field=self.field))
                 if 'tf2d_t' in loaded.files:
-                    return dict(t=self._regularize_tf2d(loaded['tf2d_t']),
-                                p=self._regularize_tf2d(loaded['tf2d_p']))
+                    return dict(
+                        t=self._regularize_tf2d(loaded['tf2d_t']), p=self._regularize_tf2d(loaded['tf2d_p'])
+                    )
                 else:
-                    return dict(t=self._regularize_tf2d(loaded['tf2d']),
-                                p=self._regularize_tf2d(loaded['tf2d']))
+                    return dict(
+                        t=self._regularize_tf2d(loaded['tf2d']), p=self._regularize_tf2d(loaded['tf2d'])
+                    )
         else:
             logger.warning("No 2d TF given.")
             return None
 
     def tfbl_1d(self, s) -> np.ndarray:
-        """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`"""
+        """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`."""
         assert s in ['t', 'p']
         if self.tf2d:
             logger.info("computing 1d TFxbl from 2d TFxbl")
@@ -508,7 +515,7 @@ class Config:
         return out
 
     def tfbl_2d(self, s) -> Union[np.ndarray, None]:
-        """Return a 2d TFxbl functions for T/E/B"""
+        """Return a 2d TFxbl functions for T/E/B."""
         assert s in ['t', 'p']
         if self.tf2d is None:
             return None
@@ -518,19 +525,19 @@ class Config:
     @staticmethod
     def _tf2d2tf1d(tf2d, dec_range):
         _, _, k = hq.dec2tf2d(0, *dec_range)
-        return np.sqrt(hp.alm2cl(tf2d.astype(complex))/k)
+        return np.sqrt(hp.alm2cl(tf2d.astype(complex)) / k)
 
     def _regularize_tf2d(self, tf):
-        """Regularize the tf2d to be in [0, 1]"""
+        """Regularize the tf2d to be in [0, 1]."""
         tf = np.maximum(np.minimum(tf, 1), 0)
         tf[np.isnan(tf)] = 0
         tf = hq.reduce_lmax(tf, self.cinv_lmax)
         if self.cinv_lmin or self.cinv_mmin:
             _ell, _emm = hp.Alm.getlm(lmax=self.cinv_lmax)
             if self.cinv_lmin:
-                tf[_ell<self.cinv_lmin] = 0
+                tf[_ell < self.cinv_lmin] = 0
             if self.cinv_mmin:
-                tf[_emm<self.cinv_mmin] = 0
+                tf[_emm < self.cinv_mmin] = 0
         return tf
 
     @cached_property
@@ -548,11 +555,11 @@ class Config:
         if self.file_tf1d:
             if isinstance(self.file_tf1d, int):
                 out = np.ones(self.cinv_lmax + 1)
-                out[:self.file_tf1d] = 0
+                out[: self.file_tf1d] = 0
                 return dict(t=out.copy(), p=out.copy())
             elif isinstance(self.file_tf1d, str):
                 fname, ext = os.path.splitext(self.file_tf1d)
-                if ext=='.npz':
+                if ext == '.npz':
                     loaded = np.load(self.path(self.file_tf1d, field=self.field))
                     logger.warning("tf1d file is tf2d, converting to tf1d...")
                     if 'tf2d_t' in loaded.files:
@@ -563,7 +570,7 @@ class Config:
                     tf_t = self._tf2d2tf1d(tf_t, self.dec_range)
                     tf_p = self._tf2d2tf1d(tf_p, self.dec_range)
                     return dict(t=tf_t, p=tf_p)
-                elif ext=='.npy':
+                elif ext == '.npy':
                     raise NotImplementedError("npy tf1d is not supported yet, please use npz format.")
             else:
                 raise ValueError("file_tf1d must be either int or str")
@@ -575,7 +582,7 @@ class Config:
         if self.profile is None:
             return None
         # assert self.profile in ['src', 'tsz']
-        if self.profile=='src':
+        if self.profile == 'src':
             return np.ones(self.lmax + 1)
         elif self.profile.endswith('npy'):
             return np.load(self.path(self.profile))
@@ -585,6 +592,7 @@ class Config:
     @cached_property
     def g(self):
         from healqest.ducc_sht import Geometry
+
         return Geometry.from_dec(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
 
     # === setup masks ===
@@ -607,13 +615,11 @@ class Config:
 
     @cached_property
     def mask_cinv(self):
-        return dict(t=self._load_mask(self.fmask_cinv, field=0),
-                    p=self._load_mask(self.fmask_cinv, field=1))
+        return dict(t=self._load_mask(self.fmask_cinv, field=0), p=self._load_mask(self.fmask_cinv, field=1))
 
     @cached_property
     def mask_qe(self):
-        return dict(t=self._load_mask(self.fmask_qe, field=0),
-                    p=self._load_mask(self.fmask_qe, field=1))
+        return dict(t=self._load_mask(self.fmask_qe, field=0), p=self._load_mask(self.fmask_qe, field=1))
 
     @cached_property
     def mask_ps(self):
@@ -621,7 +627,7 @@ class Config:
             # if T/P use different mask, file `fmask_ps` should have 3 columns, T/P/TP combined.
             return self._load_mask(self.fmask_ps, field=2)
         else:
-            if np.all(self.mask_qe['t']==self.mask_qe['p']):
+            if np.all(self.mask_qe['t'] == self.mask_qe['p']):
                 logger.warning("ps mask not given, using the QE mask.")
                 return self.mask_qe['t']
             else:
@@ -637,15 +643,17 @@ class Config:
 
     @cached_property
     def mask_boundary(self):
-        """boundary mask used to save plm as partial maps"""
-        return self._load_mask(self.fmask_qe, field=2)!=0
+        """boundary mask used to save plm as partial maps."""
+        return self._load_mask(self.fmask_qe, field=2) != 0
 
     @staticmethod
     def bundle2str(bundle):
         if bundle is None:
             return ""
         elif isinstance(bundle, str):
-            return f"bundle{bundle}"  # this is for cases like `X0`, `X` (cached maps for Mat's fast algorithm)
+            return (
+                f"bundle{bundle}"  # this is for cases like `X0`, `X` (cached maps for Mat's fast algorithm)
+            )
         elif isinstance(bundle, int):
             return f"bundle{bundle}"
         else:
@@ -656,9 +664,9 @@ class Config:
                 return f"bundle{b1}.{b2}"
 
     # === setup paths ===
-    def p_cinv(self, seed, cmbset, ilc_type: str = 'mv', N1=False, bundle=None, suffix='fits'):
+    def p_cinv(self, seed, cmbset, ilc_type: str = 'mv', N1=False, bundle=None, ext='fits'):
         """
-        Path to the cinv files (as output of cinv, or input of reclens)
+        Path to the cinv files (as output of cinv, or input of reclens).
 
         Parameter
         ---------
@@ -669,18 +677,27 @@ class Config:
             Single letter strings. Accepted values are 'a', 'b'
         N1: bool=False
         bundle: int=None
-        suffix: str='fits'
+        ext: str='fits'
         """
-
         N1_tag = "_N1" if N1 else ""
         subdir = 'cinv'
         if bundle is not None:  # MF and N1 don't do bundle
             subdir = f"{subdir}/{self.bundle2str(bundle)}"
-        fname = f'cinv_{ilc_type}_{seed}_{cmbset}{N1_tag}.{suffix}'
+        fname = f'cinv_{ilc_type}_{seed}_{cmbset}{N1_tag}.{ext}'
         return self.path(self.cinvdir, subdir, fname)
 
-    def p_plm(self, tag=None, seed1=None, seed2=None, cmbset1=None, cmbset2=None, N1=False, stack_type=None,
-              bundle=None, cmbset=None):
+    def p_plm(
+        self,
+        tag=None,
+        seed1=None,
+        seed2=None,
+        cmbset1=None,
+        cmbset2=None,
+        N1=False,
+        stack_type=None,
+        bundle=None,
+        cmbset=None,
+    ):
         """
         Return paths to plm(stacked) files.
 
@@ -722,8 +739,20 @@ class Config:
         out = self.path(self.recdir, subdir, fname)
         return out
 
-    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False, cmbset='a',
-              curl=False):
+    def p_cls(
+        self,
+        tag,
+        seed1,
+        seed2,
+        ktype1,
+        ktype2,
+        N1=False,
+        SAN0=False,
+        ext='dat',
+        coadd=False,
+        cmbset='a',
+        curl=False,
+    ):
         """Paths to power spectra files.
 
         Parameters
@@ -736,8 +765,8 @@ class Config:
         subdir = 'cls'
         if SAN0:
             assert N1 is False
-            assert ktype2==ktype1
-            assert seed2==seed1
+            assert ktype2 == ktype1
+            assert seed2 == seed1
             subdir = 'cls/san0'
         elif N1:
             subdir = 'cls/lensrec_N1'
@@ -763,13 +792,23 @@ class Config:
         return self.path(self.outdir, f"respavg_{tag}{bundle_tag}.npz")
 
     @property
-    def p_index(self, ):
+    def p_index(self):
         """path the the parital map index array"""
         return self.path(self.recdir, 'index.npz')
 
     @staticmethod
-    def f_tmp(tag, seed1=None, seed2=None, cmbset1=None, cmbset2=None, ktype=None, N1=False, mf_group=0,
-              bundle=None, curl=False):
+    def f_tmp(
+        tag,
+        seed1=None,
+        seed2=None,
+        cmbset1=None,
+        cmbset2=None,
+        ktype=None,
+        N1=False,
+        mf_group=0,
+        bundle=None,
+        curl=False,
+    ):
         """
         Return file name of a temprary file for kappa maps.
 
@@ -795,6 +834,7 @@ class Config:
 
     def unpack(self, dir='cls'):
         import tarfile
+
         for suffix in ['tar.gz', 'tar']:
             fname = self.path(self.outdir, f"{dir}.{suffix}")
             if os.path.exists(fname):
@@ -810,7 +850,7 @@ class Config:
 class MapsBase(abc.ABC):
     """Base class for maps, used for testing and as a base for Maps class."""
 
-    def __init__(self, nside, ):
+    def __init__(self, nside):
         pass
 
     @abc.abstractmethod
@@ -870,10 +910,10 @@ def parser():
     p = argparse.ArgumentParser()
 
     def none_str(value):
-        return None if value.lower()=='none' else value
+        return None if value.lower() == 'none' else value
 
     def none_int(value):
-        return None if value.lower()=='none' else int(value)
+        return None if value.lower() == 'none' else int(value)
 
     p.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
     p.add_argument('-f', '--field', default=None, type=none_str, help='SPT field')
@@ -937,13 +977,9 @@ def verbose2level(verbosity: int) -> int:
     verbose = int(verbosity)
     verbose = max(verbose, 0)
     verbose = min(verbose, 4)
-    return {
-        0: logging.CRITICAL,
-        1: logging.ERROR,
-        2: logging.WARNING,
-        3: logging.INFO,
-        4: logging.DEBUG,
-    }[verbose]
+    return {0: logging.CRITICAL, 1: logging.ERROR, 2: logging.WARNING, 3: logging.INFO, 4: logging.DEBUG}[
+        verbose
+    ]
 
 
 def setup_logger(verbose=3, force=True, quiet=True):
@@ -958,7 +994,7 @@ def setup_logger(verbose=3, force=True, quiet=True):
     quiet: bool=True
         If True, scilence sub-warning level message from selected modules.
     """
-    if rank>0:
+    if rank > 0:
         # Silence all logging on non-root ranks
         logging.disable(logging.CRITICAL)
         # return
@@ -977,7 +1013,7 @@ def setup_logger(verbose=3, force=True, quiet=True):
 
     if quiet:
         for name in logging.root.manager.loggerDict:
-            if not name.startswith("healqest") and name!="__main__":
+            if not name.startswith("healqest") and name != "__main__":
                 logging.getLogger(name).setLevel(logging.WARNING)
             else:
                 pass

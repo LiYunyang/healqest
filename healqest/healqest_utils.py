@@ -37,9 +37,7 @@ class EvalFormatter(string.Formatter):
 
 
 def reduce_lmax(alm, lmax=4000):
-    """
-    Reduce the lmax of input alm
-    """
+    """Reduce the lmax of input alm."""
     lmaxin = hp.Alm.getlmax(alm.shape[-1])
     logger.debug(f"Reducing lmax: lmax_in={lmaxin} -> lmax_out={lmax}")
     almout = np.zeros((*alm.shape[:-1], hp.Alm.getsize(lmax)), dtype=alm.dtype)
@@ -49,14 +47,14 @@ def reduce_lmax(alm, lmax=4000):
     for i in range(0, lmax + 1):
         oldf = oldi + lmaxin + 1 - i
         newf = newi + lmax + 1 - i
-        almout[..., newi:newf] = alm[..., oldi:oldf - dl]
+        almout[..., newi:newf] = alm[..., oldi : oldf - dl]
         oldi = oldf
         newi = newf
     return almout
 
 
 def get_nside(lmax):
-    """calculates the most appropriate nside based on lmax"""
+    """Calculates the most appropriate nside based on lmax."""
     nside = np.array([8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384])
     idx = np.argmin(np.abs(nside - lmax))
     return nside[idx]
@@ -66,9 +64,9 @@ def get_lensedcls(file, lmax=2000, return_dict=False):
     logger.info(f"Loading lensed Cls from {file}")
     ell, *dls = np.loadtxt(file, unpack=True)
     fac = ell * (ell + 1) / 2 / np.pi
-    cls = dls/fac
-    ell = np.concatenate([[0, 1], ell])[:lmax+1]
-    cls = np.pad(cls, ((0, 0), (2, 0)), mode='constant', constant_values=0)[..., :lmax+1]
+    cls = dls / fac
+    ell = np.concatenate([[0, 1], ell])[: lmax + 1]
+    cls = np.pad(cls, ((0, 0), (2, 0)), mode='constant', constant_values=0)[..., : lmax + 1]
     if not return_dict:
         return ell, *cls
     else:
@@ -79,20 +77,19 @@ def get_unlensedcls(file, lmax=2000):
     logger.info(f"Loading unlensed Cls from {file}")
     # order: TT/EE/BB/TE/PP/TP/EP
     ell, *dls = np.loadtxt(file, unpack=True)
-    fac = ell*(ell + 1)/2/np.pi
-    fac_p = np.sqrt(ell*(ell + 1))
-    cls = dls/fac
+    fac = ell * (ell + 1) / 2 / np.pi
+    fac_p = np.sqrt(ell * (ell + 1))
+    cls = dls / fac
     cls[4] /= fac_p**2
     cls[5:] /= fac_p
 
-    ell = np.concatenate([[0, 1], ell])[:lmax + 1]
-    cls = np.pad(cls, ((0, 0), (2, 0)), mode='constant', constant_values=0)[..., :lmax + 1]
+    ell = np.concatenate([[0, 1], ell])[: lmax + 1]
+    cls = np.pad(cls, ((0, 0), (2, 0)), mode='constant', constant_values=0)[..., : lmax + 1]
     return ell, *cls
 
 
 def get_qes(qeset):
-    """
-    Retrieve the estimators needed to compute a given QE set.
+    """Retrieve the estimators needed to compute a given QE set.
 
     Parameters
     ----------
@@ -104,9 +101,20 @@ def get_qes(qeset):
     list or None
         A list of estimators neesed.
     """
-
-    single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT", "TTbhTTprf", "GMVbhTTprf", "GMVTTEETEbhTTprf",
-              'TTprf'}
+    single = {
+        "TT",
+        "EE",
+        "TE",
+        "EB",
+        "TB",
+        "ET",
+        "BE",
+        "BT",
+        "TTbhTTprf",
+        "GMVbhTTprf",
+        "GMVTTEETEbhTTprf",
+        'TTprf',
+    }
 
     composite = {
         "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
@@ -145,20 +153,24 @@ def get_qes(qeset):
         raise ValueError(f"Unknown QE set: {qeset}")
 
 
-def kspice(m1: Union[np.ndarray, str, list],
-           m2: Union[np.ndarray, str, list] = None,
-           weight1: Union[np.ndarray, str] = None,
-           weight2: Union[np.ndarray, str] = None,
-           *,
-           lmax=-1,
-           apodizetype=1,
-           apodizesigma: Union[float, str] = "NO",
-           thetamax: float = 180,
-           tolerance: float = 5e-8,
-           subav: bool = False,
-           subdipole: bool = False,
-           script=False,
-           cl_out: str = None, spice: str = None, kernel=False):
+def kspice(  # noqa: C901
+    m1: Union[np.ndarray, str, list],
+    m2: Union[np.ndarray, str, list] = None,
+    weight1: Union[np.ndarray, str] = None,
+    weight2: Union[np.ndarray, str] = None,
+    *,
+    lmax=-1,
+    apodizetype=1,
+    apodizesigma: Union[float, str] = "NO",
+    thetamax: float = 180,
+    tolerance: float = 5e-8,
+    subav: bool = False,
+    subdipole: bool = False,
+    script=False,
+    cl_out: str = None,
+    spice: str = None,
+    kernel=False,
+):
     """
     A python wrapper for PolSpice for temperature (kappa) file only.
 
@@ -174,8 +186,8 @@ def kspice(m1: Union[np.ndarray, str, list],
         map2 for cross PS estimation. If None, m2=m1. Default: None.
     weight1, weight2: np.ndarray=None.
         shape (npix,). The weight map for map1/2. If None,no weights are applied.
-        Note that when the `weight2` is None, if `m2` is specified, `weight2` will be considered as FULL SKY rather
-        than the same as `weight1`.
+        Note that when the `weight2` is None, if `m2` is specified, `weight2` will be considered as FULL SKY
+        rather than the same as `weight1`.
     lmax: int=-1.
         The maximum ell number for PS computation. It is advised set lmax=3*nside-1
         (or lmax=-1) for minimum aliasing.
@@ -226,7 +238,6 @@ def kspice(m1: Union[np.ndarray, str, list],
     ----------
     PolSpice: http://www2.iap.fr/users/hivon/software/PolSpice/README.html
     """
-
     dtype = np.float64
 
     # locate spice binary
@@ -247,36 +258,57 @@ def kspice(m1: Union[np.ndarray, str, list],
 
     command = [
         spice,
-        "-verbosity", "0",
-        "-nlmax", str(lmax),
-        "-overwrite", "YES",
-        "-polarization", "NO",
-        "-pixelfile", "NO",
-        "-pixelfile2", "NO",
-        "-decouple", "YES",
-        "-symmetric_cl", "NO",
-        "-tolerance", str(tolerance),
-        "-apodizetype", str(apodizetype),
-        "-apodizesigma", str(apodizesigma),
-        "-thetamax", str(thetamax),
-        "-subav", "NO" if not subav else "YES",
-        "-subdipole", "NO" if not subdipole else "YES",
-        "-corfile", "NO",
+        "-verbosity",
+        "0",
+        "-nlmax",
+        str(lmax),
+        "-overwrite",
+        "YES",
+        "-polarization",
+        "NO",
+        "-pixelfile",
+        "NO",
+        "-pixelfile2",
+        "NO",
+        "-decouple",
+        "YES",
+        "-symmetric_cl",
+        "NO",
+        "-tolerance",
+        str(tolerance),
+        "-apodizetype",
+        str(apodizetype),
+        "-apodizesigma",
+        str(apodizesigma),
+        "-thetamax",
+        str(thetamax),
+        "-subav",
+        "NO" if not subav else "YES",
+        "-subdipole",
+        "NO" if not subdipole else "YES",
+        "-corfile",
+        "NO",
         # "-verbosity", "2",
     ]
     if m2 is None and weight2 is not None:
         # normally we don't want to do this
         m2 = m1
-    with tf.TemporaryDirectory(prefix='spice', ) as tmp:
-        for item, name in zip([m1, weight1, m2, weight2],
-                              ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']):
+    with tf.TemporaryDirectory(prefix='spice') as tmp:
+        for item, name in zip(
+            [m1, weight1, m2, weight2], ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']
+        ):
             if item is not None:
                 if isinstance(item, str):
                     fname = item
                 else:
                     fname = os.path.join(tmp, f"{name}.fits")
-                    hp.write_map(fname, item, overwrite=True, dtype=dtype,
-                                 partial=True if name.startswith("mapfile") else False)
+                    hp.write_map(
+                        fname,
+                        item,
+                        overwrite=True,
+                        dtype=dtype,
+                        partial=True if name.startswith("mapfile") else False,
+                    )
                 command += [f"-{name}", fname]
         if cl_out is None:
             cl_out = os.path.join(tmp, f"cls.dat")
@@ -309,9 +341,7 @@ def kspice(m1: Union[np.ndarray, str, list],
 
 
 def map_or_alm(m):
-    """
-    Check if object is a map (True) or an alm object.
-    """
+    """Check if object is a map (True) or an alm object."""
     try:
         nside = hp.get_nside(m)
         return True
@@ -319,13 +349,20 @@ def map_or_alm(m):
         return False
 
 
-def kappa_spectrum(m1: Union[np.ndarray, str, list],
-                   m2: Union[np.ndarray, str, list] = None,
-                   mask1: Union[np.ndarray, str] = None,
-                   mask2: Union[np.ndarray, str] = None,
-                   mask_alm=True, g=None, anafast=True, nside=None, cl_out: str = None, **kwargs):
+def kappa_spectrum(  # noqa: C901
+    m1: Union[np.ndarray, str, list],
+    m2: Union[np.ndarray, str, list] = None,
+    mask1: Union[np.ndarray, str] = None,
+    mask2: Union[np.ndarray, str] = None,
+    mask_alm=True,
+    g=None,
+    anafast=True,
+    nside=None,
+    cl_out: str = None,
+    **kwargs,
+):
     """
-    General power spectrum estimator
+    General power spectrum estimator.
 
     Parameters
     ----------
@@ -339,10 +376,11 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
     g: Geometry
         ducc wrapper object. `g.nside` attribute should match that of the maps.
     anafast: bool=True
-        If True, use hp.alm2cl to perform quick power spectrum estimation. The fsky-correction is automatically
-        applied so the returned power spectrum should be unbiased.
+        If True, use hp.alm2cl to perform quick power spectrum estimation. The fsky-correction is
+        automatically applied so the returned power spectrum should be unbiased.
     nside: int
-        used to convert alm2map if `m1/m2` are alm objects and `g` is not given. This is ignore if `anafast=True`
+        used to convert alm2map if `m1/m2` are alm objects and `g` is not given. This is ignore if
+        `anafast=True`.
     cl_out: str=None
         Optional output directory.
     kwargs: dict
@@ -367,7 +405,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
                         nside = hp.get_nside(mask)
                         m = hp.alm2map(obj, nside=nside)
                     else:
-                        m = g.alm2map(obj, )
+                        m = g.alm2map(obj)
                 else:
                     return obj, mask
         if m is not None:
@@ -391,7 +429,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
         elif mask2 is None:
             fsky = np.mean(mask1)
         else:
-            fsky = np.mean(mask1*mask2)
+            fsky = np.mean(mask1 * mask2)
         out /= fsky
         if cl_out is not None:
             l = np.arange(out.shape[-1])
@@ -432,15 +470,15 @@ def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
     if isinstance(field, (str, int)):
         field = [field]
 
-    def _allocate(nside, ):
+    def _allocate(nside):
         return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
 
     try:
-        if os.path.splitext(fname)[1]=='.npy':
+        if os.path.splitext(fname)[1] == '.npy':
             """load npy partial maps with index stored in parent directories"""
             idx_dir = fname
             c = 3
-            while c>0:
+            while c > 0:
                 idx_dir = os.path.dirname(idx_dir)
                 try:
                     loaded = np.load(os.path.join(idx_dir, 'index.npz'))
@@ -517,7 +555,7 @@ def read_map_fits(fname, field=(0,), dtype=float, hdu=1, h=False, return_cosmo=T
 
         nside = int(hdul[hdu].header.get("NSIDE"))
         ordering = hdul[hdu].header.get("ORDERING", "UNDEF").strip().lower()
-        if ordering=="undef":
+        if ordering == "undef":
             ordering = 'ring'
             logger.info(f"ORDERING undefined, assume RING: {basename}")
         assert ordering in ["nested", "ring"]
@@ -527,7 +565,7 @@ def read_map_fits(fname, field=(0,), dtype=float, hdu=1, h=False, return_cosmo=T
 
         iau2cosmo = False
         polconv = hdul[hdu].header.get('POLCCONV', "UNDEF").strip().lower()
-        if polconv=="undef":
+        if polconv == "undef":
             polconv = 'cosmo'
             logger.info(f"POLCONV undefined, assume COSMO: {basename}")
         assert polconv in ["cosmo", 'iau', 'healpix']
@@ -542,7 +580,7 @@ def read_map_fits(fname, field=(0,), dtype=float, hdu=1, h=False, return_cosmo=T
         out = _allocate(nside=nside)
         partial = 'PIXEL' in hdul[hdu].columns.names
         for j, name in enumerate(fields_name):
-            if iau2cosmo and (fields_num[j]==2 or name=='U_POLARISATION'):
+            if iau2cosmo and (fields_num[j] == 2 or name == 'U_POLARISATION'):
                 logger.warning(f"{polconv} to COSMO: {fields_num[j]}th map {name} of {basename}")
                 fac = -1
             else:
@@ -552,7 +590,7 @@ def read_map_fits(fname, field=(0,), dtype=float, hdu=1, h=False, return_cosmo=T
             else:
                 out[j, :] = hdul[hdu].data.field(name).astype(dtype, copy=False).ravel()
             out[j] *= fac
-            if ordering=="nested":
+            if ordering == "nested":
                 idx = hp.ring2nest(nside, np.arange(out[j].size, dtype=np.int32))
                 out[j] = out[j][idx]
         if h:
@@ -601,20 +639,23 @@ def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
     else:
         assert len(maps) in (1, 3)
         assert len(fl) in (1, 4)
-        hp.write_map(fname, maps, overwrite=True, dtype=np.float64, partial=True,
-                     extra_header=[('POLCCONV', 'COSMO')])
+        hp.write_map(
+            fname, maps, overwrite=True, dtype=np.float64, partial=True, extra_header=[('POLCCONV', 'COSMO')]
+        )
         with fits.open(fname, mode='update') as hdul:
             colnames = ['flT', 'flE', 'flB', 'flTE']
-            hdul.append(fits.BinTableHDU.from_columns([
-                fits.Column(name=colnames[i], array=_fl, format='D') for i, _fl in enumerate(fl)]))
+            hdul.append(
+                fits.BinTableHDU.from_columns(
+                    [fits.Column(name=colnames[i], array=_fl, format='D') for i, _fl in enumerate(fl)]
+                )
+            )
             if eps is not None:
                 hdul.append(fits.BinTableHDU.from_columns([fits.Column(name="eps", array=eps, format='D')]))
             hdul.flush()
 
 
 def get_spice_kernel(nside, lmax, thetamax=None, apodizesigma=None, apodizetype=None):
-    """Return the polspice coupling kernel of shape (lmax+1, 2lmax+1)"""
-
+    """Return the polspice coupling kernel of shape (lmax+1, 2lmax+1)."""
     if thetamax is None:
         thetamax = kspice.__kwdefaults__['thetamax']
     if apodizesigma is None:
@@ -635,21 +676,27 @@ def get_spice_kernel(nside, lmax, thetamax=None, apodizesigma=None, apodizetype=
     else:
         logger.warning(f"cache {fname} not found, computing it...")
         zero = np.random.normal(0, 1, hp.nside2npix(nside))
-        K = kspice(m1=zero, lmax=lmax, thetamax=thetamax, apodizesigma=apodizesigma, apodizetype=apodizetype,
-                   kernel=True)
+        K = kspice(
+            m1=zero,
+            lmax=lmax,
+            thetamax=thetamax,
+            apodizesigma=apodizesigma,
+            apodizetype=apodizetype,
+            kernel=True,
+        )
         logger.info(f"cache saved to {path}")
         np.save(path, K)
         return K
 
 
 def load_module(module_name, file_path):
-    """load a module from a given file path.
+    """Load a module from a given file path.
 
     Parameters
     ----------
     module_name: str
-        A designated name for the module (used only internally for namespace consistency). If the name starts with
-        "healqest.", then the logging level is set properly as the rest of the healqest modules.
+        A designated name for the module (used only internally for namespace consistency). If the name starts
+        with "healqest.", then the logging level is set properly as the rest of the healqest modules.
     file_path: str
         Path to the Python file containing the module.
     """
@@ -657,21 +704,6 @@ def load_module(module_name, file_path):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
-
-
-def get_diag_almbar(s, alms, config, cls, nlres):
-    ss = f"{s.lower()}{s.lower()}"
-    assert ss in ['tt', 'ee', 'bb']
-    lmax = config.lmaxT if ss=='tt' else config.lmaxP
-    lmin = config.lminT if ss=='tt' else config.lminP
-    fl = 1.0/(cls[ss][:config.lmax + 1] + nlres[ss][:config.lmax + 1])
-    fl[:lmin] = 0
-    fl[lmax + 1:] = 0
-    if alms is None:
-        return fl
-    alm = reduce_lmax(alms['teb'.index(s.lower())], config.lmax)
-    alm = hp.almxfl(alm, fl)
-    return alm, fl
 
 
 def dec2tf2d(lx, dec1, dec2):
@@ -697,21 +729,21 @@ def dec2tf2d(lx, dec1, dec2):
     m1: int
         m below m should be 0
     k: float
-        m above k* l should be 0. This value only depend on `dec2` and is useful in computing the effective transfer
-        function given some m-cut: tf1d = np.sqrt(hp.alm2cl(tf2d)/k)
+        m above k* l should be 0. This value only depend on `dec2` and is useful in computing the effective
+        transfer function given some m-cut: tf1d = np.sqrt(hp.alm2cl(tf2d)/k).
     """
     # assert 0>dec2>dec1, "dec1 and dec2 should be negative for SPT fields!"
     dec_min = min(abs(dec1), abs(dec2))
     dec_max = min(abs(dec1), abs(dec2))
-    if np.sign(dec1)!=np.sign(dec2):
+    if np.sign(dec1) != np.sign(dec2):
         dec_min = 0
-    m1 = int(np.floor(lx*np.sin(np.pi/2 - np.deg2rad(dec_max))))
-    k = np.sin(np.pi/2 - np.deg2rad(dec_min))
+    m1 = int(np.floor(lx * np.sin(np.pi / 2 - np.deg2rad(dec_max))))
+    k = np.sin(np.pi / 2 - np.deg2rad(dec_min))
     return lx, m1, k
 
 
 def write_cl(fname, cl, header=None):
-    """ Write cl into text file."""
+    """Write cl into text file."""
     cl = np.atleast_2d(cl)
     lmax = cl.shape[1] - 1
     out = [np.arange(lmax + 1)]
@@ -720,10 +752,10 @@ def write_cl(fname, cl, header=None):
         fmt.append('%12.5E')
         out.append(cl[i])
 
-    if header is None and cl.shape[0]==6:
+    if header is None and cl.shape[0] == 6:
         header = ' ell'
         for _ in ['TT', 'EE', 'BB', 'TE', 'EB', 'TB']:
-            header += ' '*11 + _
+            header += ' ' * 11 + _
     np.savetxt(fname, np.array(out).T, fmt=fmt, header=header)
 
 

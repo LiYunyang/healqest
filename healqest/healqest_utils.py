@@ -13,6 +13,7 @@ from typing import Union
 import subprocess
 import hashlib
 import string
+
 logger = lg.getLogger(__name__)
 
 np.seterr(divide="ignore", invalid="ignore")
@@ -26,6 +27,7 @@ class EvalFormatter(string.Formatter):
     >>> template_string = "original_{A}_and_lower_{B.lower()}"
     >>> EvalFormatter().format(template_string, A='A', B='B')
     """
+
     def get_field(self, field_name, args, kwargs):
         try:
             val = eval(field_name, {}, kwargs)
@@ -38,9 +40,9 @@ def recursive_merge(main_data, included_data):
     """Recursively merge two dictionaries, with values in main_data taking precedence."""
     for key, value in included_data.items():
         if (
-            isinstance(value, dict)
-            and key in main_data
-            and isinstance(main_data[key], dict)
+                isinstance(value, dict)
+                and key in main_data
+                and isinstance(main_data[key], dict)
         ):
             # If both main_data and included_data have a dictionary at this key, merge recursively
             recursive_merge(main_data[key], value)
@@ -74,7 +76,7 @@ def load_yaml(file_path):
 
 
 def setup_logger(savelog=False, file_log="test.log"):
-    if savelog == False:
+    if savelog==False:
         print("printing to stdout")
         lg.basicConfig(level=lg.WARNING)
         formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
@@ -82,7 +84,7 @@ def setup_logger(savelog=False, file_log="test.log"):
     else:
         dir_log = str(Path(file_log).parent)
         Path(dir_log).mkdir(parents=True, exist_ok=True)
-        print("saving log to: %s" % dir_log)
+        print("saving log to: %s"%dir_log)
         lg.basicConfig(filename=file_log, filemode="w+", level=lg.WARNING)
         formatter = RelativeSeconds("[%(relativeCreated)s]  %(message)s")
         lg.root.handlers[0].setFormatter(formatter)
@@ -109,9 +111,9 @@ def rebincl(ell, cl, bb, return_ell=False):
     retl = np.zeros(Nbins)
     err = np.zeros(Nbins)
     for i in range(0, Nbins):
-        ret[i] = np.mean(cl[ll[i] : uu[i]])
-        retl[i] = np.mean(ell[ll[i] : uu[i]])
-        err[i] = np.std(cl[ll[i] : uu[i]])
+        ret[i] = np.mean(cl[ll[i]: uu[i]])
+        retl[i] = np.mean(ell[ll[i]: uu[i]])
+        err[i] = np.std(cl[ll[i]: uu[i]])
     if return_ell:
         return retl, ret
     else:
@@ -120,7 +122,7 @@ def rebincl(ell, cl, bb, return_ell=False):
 
 def extract_patch(mask, patch):
     nside = hp.npix2nside(mask.shape[0])
-    pix0 = np.where(mask > 0.0)[0]
+    pix0 = np.where(mask>0.0)[0]
 
     pixs = {}
     pixs[1] = pix0
@@ -132,12 +134,12 @@ def extract_patch(mask, patch):
 
     # 750-1000
     ra, dec = tp2rd(tht, phi)
-    tht3, phi3 = rd2tp(ra, -1 * dec)
+    tht3, phi3 = rd2tp(ra, -1*dec)
     pixs[4] = hp.ang2pix(nside, tht3, phi3)
 
     # 250-500
     ra, dec = tp2rd(tht2, phi2)
-    tht4, phi4 = rd2tp(ra, -1 * dec)
+    tht4, phi4 = rd2tp(ra, -1*dec)
     pixs[2] = hp.ang2pix(nside, tht4, phi4)
 
     pidx = pixs[patch]
@@ -149,8 +151,8 @@ def rd2tp(ra, dec):
     """
     Convert ra,dec -> tht,phi
     """
-    tht = (-dec + 90.0) / 180.0 * np.pi
-    phi = ra / 180.0 * np.pi
+    tht = (-dec + 90.0)/180.0*np.pi
+    phi = ra/180.0*np.pi
     return tht, phi
 
 
@@ -158,17 +160,17 @@ def tp2rd(tht, phi):
     """
     Convert tht,phi -> ra,dec
     """
-    ra = phi / np.pi * 180.0
-    dec = -1 * (tht / np.pi * 180.0 - 90.0)
+    ra = phi/np.pi*180.0
+    dec = -1*(tht/np.pi*180.0 - 90.0)
     return ra, dec
 
 
 def get_mmask(lmax, mmin, verbose=True):
     if verbose:
-        print("max=%d mmin=%d" % (lmax, mmin))
+        print("max=%d mmin=%d"%(lmax, mmin))
     ell, emm = hp.Alm.getlm(lmax)
     mm = np.ones_like(ell, dtype=np.complex_)
-    mm[emm < mmin] = 0
+    mm[emm<mmin] = 0
     return mm
 
 
@@ -185,7 +187,7 @@ def parse_yaml(file_yaml):
     """
     import git
 
-    print("Loading lensing config: %s" % file_yaml)
+    print("Loading lensing config: %s"%file_yaml)
     # Read the yaml file
     dict = load_yaml(file_yaml)
 
@@ -193,11 +195,11 @@ def parse_yaml(file_yaml):
     repo = git.Repo(dict["base"]["dir_healqest"], search_parent_directories=True)
     sha = repo.head.object.hexsha
 
-    print("healqest commit: %s" % sha)
+    print("healqest commit: %s"%sha)
 
     # Check reconstruction type and return maps and qe needed.
     rectype = dict["lensrec"]["rectype"]
-    print("Reconstruction type: %s" % rectype)
+    print("Reconstruction type: %s"%rectype)
 
     recdict = {
         "sqe": {
@@ -250,7 +252,7 @@ def parse_yaml(file_yaml):
     dict["dir_out"] = dict["lensrec"]["dir_out"]
 
     # Read Cls from specified files
-    dict["lensrec"]["lmax"] = dict["lensrec"]["Lmax"]#  max(dict["lensrec"]["lmaxT"], dict["lensrec"]["lmaxP"])
+    dict["lensrec"]["lmax"] = dict["lensrec"]["Lmax"]  # max(dict["lensrec"]["lmaxT"], dict["lensrec"]["lmaxP"])
 
     if "cls" in dict:
         if "file_lcmb" in dict["cls"]:
@@ -258,9 +260,9 @@ def parse_yaml(file_yaml):
                 f = dict["cls"]["file_lcmb"]
                 print(f)
                 ell = np.loadtxt(f, usecols=[0])
-                dd = ell * (ell + 1) / 2 / np.pi
+                dd = ell*(ell + 1)/2/np.pi
                 dict["cls"]["lcmb"] = {
-                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1])/dd)[
                         : dict["lensrec"]["lmax"] + 1
                     ]
                     for c, n in enumerate(["tt", "ee", "bb", "te"])
@@ -273,23 +275,23 @@ def parse_yaml(file_yaml):
             try:
                 f = dict["cls"]["file_ucmb"]
                 ell = np.loadtxt(f, usecols=[0])
-                dd = ell * (ell + 1) / 2 / np.pi
-                vv = (ell * (ell + 1)) ** 2 / 2 / np.pi
-                qq = (ell * (ell + 1)) ** (1.5) / 2 / np.pi
+                dd = ell*(ell + 1)/2/np.pi
+                vv = (ell*(ell + 1))**2/2/np.pi
+                qq = (ell*(ell + 1))**(1.5)/2/np.pi
                 dict["cls"]["ucmb"] = {
-                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1])/dd)[
                         : dict["lensrec"]["lmax"] + 1
                     ]
                     for c, n in enumerate(["tt", "ee", "bb", "te"])
                 }
                 dict["cls"]["ucmb"]["pp"] = zeropad(
-                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[5]) / vv
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[5])/vv
                 )[: dict["lensrec"]["lmax"] + 1]
                 dict["cls"]["ucmb"]["tp"] = zeropad(
-                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[6]) / qq
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[6])/qq
                 )[: dict["lensrec"]["lmax"] + 1]
                 dict["cls"]["ucmb"]["ep"] = zeropad(
-                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[7]) / qq
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[7])/qq
                 )[: dict["lensrec"]["lmax"] + 1]
                 # print("Setting CMB unlensed cls")
             except:
@@ -300,9 +302,9 @@ def parse_yaml(file_yaml):
                 # TODO: This will change if we use a different file! Currently configured for Abhi's file
                 f = dict["cls"]["file_gcmb"]
                 ell = np.loadtxt(f, usecols=[0])
-                dd = ell * (ell + 1) / 2 / np.pi
+                dd = ell*(ell + 1)/2/np.pi
                 dict["cls"]["gcmb"] = {
-                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1])/dd)[
                         : dict["lensrec"]["lmax"] + 1
                     ]
                     for c, n in enumerate(["tt", "ee", "bb", "te"])
@@ -323,9 +325,9 @@ def load_cambfiles_dict(dict):
                 f = dict["cls"]["file_lcmb"]
                 print(f)
                 ell = np.loadtxt(f, usecols=[0])
-                dd = ell * (ell + 1) / 2 / np.pi
+                dd = ell*(ell + 1)/2/np.pi
                 dict["cls"]["lcmb"] = {
-                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1])/dd)[
                         : dict["lensrec"]["lmax"] + 1
                     ]
                     for c, n in enumerate(["tt", "ee", "bb", "te"])
@@ -338,23 +340,23 @@ def load_cambfiles_dict(dict):
             try:
                 f = dict["cls"]["file_ucmb"]
                 ell = np.loadtxt(f, usecols=[0])
-                dd = ell * (ell + 1) / 2 / np.pi
-                vv = (ell * (ell + 1)) ** 2 / 2 / np.pi
-                qq = (ell * (ell + 1)) ** (1.5) / 2 / np.pi
+                dd = ell*(ell + 1)/2/np.pi
+                vv = (ell*(ell + 1))**2/2/np.pi
+                qq = (ell*(ell + 1))**(1.5)/2/np.pi
                 dict["cls"]["ucmb"] = {
-                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1])/dd)[
                         : dict["lensrec"]["lmax"] + 1
                     ]
                     for c, n in enumerate(["tt", "ee", "bb", "te"])
                 }
                 dict["cls"]["ucmb"]["pp"] = zeropad(
-                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[5]) / vv
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[5])/vv
                 )[: dict["lensrec"]["lmax"] + 1]
                 dict["cls"]["ucmb"]["tp"] = zeropad(
-                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[6]) / qq
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[6])/qq
                 )[: dict["lensrec"]["lmax"] + 1]
                 dict["cls"]["ucmb"]["ep"] = zeropad(
-                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[7]) / qq
+                    np.loadtxt(dict["cls"]["file_ucmb"], usecols=[7])/qq
                 )[: dict["lensrec"]["lmax"] + 1]
                 # print("Setting CMB unlensed cls")
             except:
@@ -365,9 +367,9 @@ def load_cambfiles_dict(dict):
                 # TODO: This will change if we use a different file! Currently configured for Abhi's file
                 f = dict["cls"]["file_gcmb"]
                 ell = np.loadtxt(f, usecols=[0])
-                dd = ell * (ell + 1) / 2 / np.pi
+                dd = ell*(ell + 1)/2/np.pi
                 dict["cls"]["gcmb"] = {
-                    n: zeropad(np.loadtxt(f, usecols=[c + 1]) / dd)[
+                    n: zeropad(np.loadtxt(f, usecols=[c + 1])/dd)[
                         : dict["lensrec"]["lmax"] + 1
                     ]
                     for c, n in enumerate(["tt", "ee", "bb", "te"])
@@ -381,10 +383,10 @@ def load_cambfiles_dict(dict):
 
 class RelativeSeconds(lg.Formatter):
     def format(self, record):
-        nhrs = record.relativeCreated // (1000 * 60 * 60)
-        nmins = record.relativeCreated // (1000 * 60) - nhrs * 60
-        nsecs = record.relativeCreated // (1000) - nmins * 60
-        record.relativeCreated = "%02d:%02d:%02d" % (
+        nhrs = record.relativeCreated//(1000*60*60)
+        nmins = record.relativeCreated//(1000*60) - nhrs*60
+        nsecs = record.relativeCreated//(1000) - nmins*60
+        record.relativeCreated = "%02d:%02d:%02d"%(
             nhrs,
             nmins,
             nsecs,
@@ -430,15 +432,15 @@ def load_cambcls(file, lmax=2000, dict=False, dls=False):
     d = np.loadtxt(file)
     ell, sltt, slee, slbb, slte = d[:, (0, 1, 2, 3, 4)].T
 
-    if dls == False:
+    if dls==False:
         # Removing the ell factors and padding with zeros (since the file starts with l=2)
-        sltt = sltt / ell / (ell + 1) * 2 * np.pi
+        sltt = sltt/ell/(ell + 1)*2*np.pi
         sltt = zeropad(sltt)
-        slee = slee / ell / (ell + 1) * 2 * np.pi
+        slee = slee/ell/(ell + 1)*2*np.pi
         slee = zeropad(slee)
-        slte = slte / ell / (ell + 1) * 2 * np.pi
+        slte = slte/ell/(ell + 1)*2*np.pi
         slte = zeropad(slte)
-        slbb = slbb / ell / (ell + 1) * 2 * np.pi
+        slbb = slbb/ell/(ell + 1)*2*np.pi
         slbb = zeropad(slbb)
         ell = np.insert(ell, 0, 1)
         ell = np.insert(ell, 0, 0)
@@ -448,7 +450,7 @@ def load_cambcls(file, lmax=2000, dict=False, dls=False):
         slbb = slbb[: lmax + 1]
         slte = slte[: lmax + 1]
 
-    if dict == False:
+    if dict==False:
         return ell, sltt, slee, slbb, slte
     else:
         d = {}
@@ -462,13 +464,13 @@ def load_cambcls(file, lmax=2000, dict=False, dls=False):
 def get_lensedcls(file, lmax=2000, dict=False):
     ell, sltt, slee, slbb, slte = np.loadtxt(file, unpack=True)
     # Removing the ell factors and padding with zeros (since the file starts with l=2)
-    sltt = sltt / ell / (ell + 1) * 2 * np.pi
+    sltt = sltt/ell/(ell + 1)*2*np.pi
     sltt = zeropad(sltt)
-    slee = slee / ell / (ell + 1) * 2 * np.pi
+    slee = slee/ell/(ell + 1)*2*np.pi
     slee = zeropad(slee)
-    slte = slte / ell / (ell + 1) * 2 * np.pi
+    slte = slte/ell/(ell + 1)*2*np.pi
     slte = zeropad(slte)
-    slbb = slbb / ell / (ell + 1) * 2 * np.pi
+    slbb = slbb/ell/(ell + 1)*2*np.pi
     slbb = zeropad(slbb)
     ell = np.insert(ell, 0, 1)
     ell = np.insert(ell, 0, 0)
@@ -477,7 +479,7 @@ def get_lensedcls(file, lmax=2000, dict=False):
     slee = slee[: lmax + 1]
     slbb = slbb[: lmax + 1]
     slte = slte[: lmax + 1]
-    if dict == False:
+    if dict==False:
         return ell, sltt, slee, slbb, slte
     else:
         d = {}
@@ -491,19 +493,19 @@ def get_lensedcls(file, lmax=2000, dict=False):
 def get_unlensedcls(file, lmax=2000):
     ell, sltt, slee, slbb, slte, slpp, sltp, slep = np.loadtxt(file, unpack=True)
     # Removing the ell factors and padding with zeros (since the file starts with l=2)
-    sltt = sltt / ell / (ell + 1) * 2 * np.pi
+    sltt = sltt/ell/(ell + 1)*2*np.pi
     sltt = zeropad(sltt)
-    slee = slee / ell / (ell + 1) * 2 * np.pi
+    slee = slee/ell/(ell + 1)*2*np.pi
     slee = zeropad(slee)
-    slbb = slbb / ell / (ell + 1) * 2 * np.pi
+    slbb = slbb/ell/(ell + 1)*2*np.pi
     slbb = zeropad(slbb)
-    slte = slte / ell / (ell + 1) * 2 * np.pi
+    slte = slte/ell/(ell + 1)*2*np.pi
     slte = zeropad(slte)
-    slpp = slpp / ell / ell / (ell + 1) / (ell + 1) * 2 * np.pi
+    slpp = slpp/ell/ell/(ell + 1)/(ell + 1)*2*np.pi
     slpp = zeropad(slpp)
-    sltp = sltp / (ell * (ell + 1)) ** (1.5) * 2 * np.pi
+    sltp = sltp/(ell*(ell + 1))**(1.5)*2*np.pi
     sltp = zeropad(sltp)
-    slep = slep / (ell * (ell + 1)) ** (1.5) * 2 * np.pi
+    slep = slep/(ell*(ell + 1))**(1.5)*2*np.pi
     slep = zeropad(slep)
     ell = np.insert(ell, 0, 1)
     ell = np.insert(ell, 0, 0)
@@ -595,10 +597,10 @@ def get_totalcls(cls, lmaxT, lmaxP, lmaxTP, lminT, lminP):
     totalcls["bb"] = cls["lcmb"]["bb"][: lmaxTP + 1] + cls["res"]["bb"][: lmaxTP + 1]
 
     bignumber = 1e10
-    totalcls["tt"][lmaxT + 1 :] = bignumber
-    totalcls["te"][lmaxT + 1 :] = bignumber
-    totalcls["ee"][lmaxP + 1 :] = bignumber
-    totalcls["bb"][lmaxP + 1 :] = bignumber
+    totalcls["tt"][lmaxT + 1:] = bignumber
+    totalcls["te"][lmaxT + 1:] = bignumber
+    totalcls["ee"][lmaxP + 1:] = bignumber
+    totalcls["bb"][lmaxP + 1:] = bignumber
 
     totalcls["tt"][:lminT] = bignumber
     totalcls["te"][:lminT] = bignumber
@@ -618,25 +620,25 @@ def get_aresp_tot(aresp_fname, arespss_fname, arespse_fname, estname):
     arespse_fname: filename of the analytic src-phi response file
     """
     if "GMV" in estname:
-        print("loading %s response" % estname)
+        print("loading %s response"%estname)
         dic = {"GMVTTEETE": 1, "GMVTBEB": 2, "GMV": 3}
-        assert estname != "GMVTBEB", "zero response to TBEB"
+        assert estname!="GMVTBEB", "zero response to TBEB"
 
         resp1 = np.load(aresp_fname)[:, dic[estname]]
         resp2 = np.load(arespss_fname)[:, 1]  # [:,1] == [:,3]  and [:,2]==0
         resp12 = np.load(arespse_fname)[:, 1]  # [:,1] == [:,3]  and [:,2]==0
     else:
-        print("loading SQE %s response" % estname)
-        assert estname == "TT", "not hardening non-TT SQE phi"
+        print("loading SQE %s response"%estname)
+        assert estname=="TT", "not hardening non-TT SQE phi"
 
         resp1 = np.load(aresp_fname)
         resp2 = np.load(arespss_fname)
         resp12 = np.load(arespse_fname)
 
-    resp2[resp2 == 0] = np.inf  # prevent NaNs
+    resp2[resp2==0] = np.inf  # prevent NaNs
 
-    weight = -1 * resp12 / resp2
-    resp_tot = resp1 + weight * resp12
+    weight = -1*resp12/resp2
+    resp_tot = resp1 + weight*resp12
 
     return resp_tot, weight
 
@@ -645,11 +647,11 @@ def harden_est(plm_e, plm_s, weight):
     # return hardened, unnormalized estimator
     Lmax = hp.Alm.getlmax(len(plm_s))
     resplmax = len(weight) - 1
-    if Lmax > resplmax:
+    if Lmax>resplmax:
         weight_l = np.zeros(Lmax + 1)
         weight_l[: resplmax + 1] = weight
         weight = weight_l.copy()
-        print("resp lmax: %i; src-lm Lmax: %i" % (resplmax, Lmax))
+        print("resp lmax: %i; src-lm Lmax: %i"%(resplmax, Lmax))
         print("zero-pad weight to match src-lm lmax")
 
     return plm_e + hp.almxfl(plm_s, weight)
@@ -659,22 +661,22 @@ def get_fl(config, mtype, use_unlCls=False):
     sdict = {"T": "tt", "E": "ee", "B": "bb"}
 
     lmaxTP = config["lmaxTP"]
-    lmax = config["lmax%s" % ("T" if mtype == "T" else "P")]
+    lmax = config["lmax%s"%("T" if mtype=="T" else "P")]
     lmin = config["lmin"]
 
     if use_unlCls:
-        fl = 1.0 / (
-            config["cls"]["ucmb"][sdict[mtype]][: lmaxTP + 1]
-            + config["cls"]["totres"][sdict[mtype]][: lmaxTP + 1]
+        fl = 1.0/(
+                config["cls"]["ucmb"][sdict[mtype]][: lmaxTP + 1]
+                + config["cls"]["totres"][sdict[mtype]][: lmaxTP + 1]
         )
     else:
-        fl = 1.0 / (
-            config["cls"]["lcmb"][sdict[mtype]][: lmaxTP + 1]
-            + config["cls"]["totres"][sdict[mtype]][: lmaxTP + 1]
+        fl = 1.0/(
+                config["cls"]["lcmb"][sdict[mtype]][: lmaxTP + 1]
+                + config["cls"]["totres"][sdict[mtype]][: lmaxTP + 1]
         )
     fl[:lmin] = 0
-    if lmax < lmaxTP:
-        fl[lmax + 1 :] = 0
+    if lmax<lmaxTP:
+        fl[lmax + 1:] = 0
 
     return fl
 
@@ -704,17 +706,17 @@ def load_beam():
 
 
 def load_tf(
-    d="/lcrc/project/SPT3G/users/ac.yomori/projects/spt3g_lensing_20192020/tf/",
-    fill_value=0,
-    include_beam=True,
+        d="/lcrc/project/SPT3G/users/ac.yomori/projects/spt3g_lensing_20192020/tf/",
+        fill_value=0,
+        include_beam=True,
 ):
     if include_beam:
         print("Including beam in the transfer function")
         bl = load_beam()
 
     for freqi in (90, 150, 220):
-        print("Loading TF from %s" % d)
-        y = np.load(d + "tf2d_%d.npz" % freqi)["tf2d"].real
+        print("Loading TF from %s"%d)
+        y = np.load(d + "tf2d_%d.npz"%freqi)["tf2d"].real
         y[np.isnan(y)] = fill_value
         y = reduce_lmax(y, lmax=lmax)
         if include_beam:
@@ -728,9 +730,9 @@ def make_almmask(alm_lmax, mmin=0, lmin=0, lmax=6000):
     """Generate a 2d almspace mask"""
     ell, emm = hp.Alm.getlm(alm_lmax)
     w = np.ones_like(ell, dtype=np.complex128)
-    w[emm < mmin] = 0
-    w[ell < lmin] = 0
-    w[ell > lmax] = 0
+    w[emm<mmin] = 0
+    w[ell<lmin] = 0
+    w[ell>lmax] = 0
     return w
 
 
@@ -790,27 +792,27 @@ def get_qes(qeset):
 
 
 def get_dvec(
-    dir,
-    bine,
-    nsims,
-    qe,
-    N0,
-    N1,
-    RDN0=None,
-    SAN0=None,
-    ellfac=1,
-    ratio=False,
-    curl=False,
-    bpwf=None,
-    didx=0,
-    theory=None,
-    R=1,
-    dd=None,
-    startidx=1,
-    unl=False,
-    lmax=4000,
-    use_cache=False,
-    verbose=True
+        dir,
+        bine,
+        nsims,
+        qe,
+        N0,
+        N1,
+        RDN0=None,
+        SAN0=None,
+        ellfac=1,
+        ratio=False,
+        curl=False,
+        bpwf=None,
+        didx=0,
+        theory=None,
+        R=1,
+        dd=None,
+        startidx=1,
+        unl=False,
+        lmax=4000,
+        use_cache=False,
+        verbose=True
 ):
     """
     Returns data vector and covariance.
@@ -876,7 +878,7 @@ def get_dvec(
         'rdl_corr' : array_like
             Sim mean correct data Cl.
     """
-    #sys.stdout = open(os.devnull, 'w')
+    # sys.stdout = open(os.devnull, 'w')
 
     spec = "ww" if curl else "kk"
 
@@ -891,16 +893,16 @@ def get_dvec(
 
     if theory is not None:
         print("Using provided cls")
-        assert len(theory) >= lmax + 1, "Length of theory must be >= lmax+1"
+        assert len(theory)>=lmax + 1, "Length of theory must be >= lmax+1"
         tlkk = theory[: lmax + 1]
 
     l = np.arange(lmax + 1)
-    t = lambda l: (l * (l + 1)) ** 2 / 4
-    v = (0.5 * l[: lmax + 1] * (l[: lmax + 1] + 1)) ** 2
+    t = lambda l: (l*(l + 1))**2/4
+    v = (0.5*l[: lmax + 1]*(l[: lmax + 1] + 1))**2
     v[:2] = np.inf
 
     rl = rebincl(l, l, bine)
-    
+
     # ----------Simulation part--------------
     if use_cache:
         if unl:
@@ -935,7 +937,7 @@ def get_dvec(
             N0 = SAN0[:, i - startidx]
 
         # Debiased spectra
-        debiased = (x[: lmax + 1] - N0[: lmax + 1] - N1[: lmax + 1]) * R
+        debiased = (x[: lmax + 1] - N0[: lmax + 1] - N1[: lmax + 1])*R
 
         # Array of residuals
         farr[:, i - startidx] = debiased - tlkk[: lmax + 1]
@@ -948,38 +950,38 @@ def get_dvec(
 
             if bpwf is None:
                 rl, rcl = rebincl(
-                    l[: lmax + 1], debiased / tlkk[: lmax + 1], bine, return_ell=True
+                    l[: lmax + 1], debiased/tlkk[: lmax + 1], bine, return_ell=True
                 )
                 corr = np.zeros_like(rl)
             else:
-                rcl = (debiased / tlkk[: lmax + 1]) @ bpwf
+                rcl = (debiased/tlkk[: lmax + 1])@bpwf
                 corr = np.zeros_like(rl)
-            #print('ratio')
+            # print('ratio')
         else:
             # Fiducial case when we want the actual spectra
-            #print('not ratio')
+            # print('not ratio')
             tlkk0 = np.copy(tlkk)
             tlkk0[:2] = 0
 
             if bpwf is None:
-                if ellfac >= 0:
+                if ellfac>=0:
                     rl, rcl = rebincl(
                         l[: lmax + 1],
-                        l[: lmax + 1] ** (ellfac) * debiased,
+                        l[: lmax + 1]**(ellfac)*debiased,
                         bine,
                         return_ell=True,
                     )
-                    #print(ellfac)
+                    # print(ellfac)
                 else:
                     rl, rcl = rebincl(
-                        l[: lmax + 1], debiased / v, bine, return_ell=True
+                        l[: lmax + 1], debiased/v, bine, return_ell=True
                     )
             else:
-                if ellfac >= 0:
-                    rcl = (l[: lmax + 1] ** (ellfac) * debiased)[: lmax + 1] @ bpwf
-                    #print(ellfac)
-                if ellfac < 0:
-                    rcl = ((debiased)[: lmax + 1] / v) @ bpwf
+                if ellfac>=0:
+                    rcl = (l[: lmax + 1]**(ellfac)*debiased)[: lmax + 1]@bpwf
+                    # print(ellfac)
+                if ellfac<0:
+                    rcl = ((debiased)[: lmax + 1]/v)@bpwf
 
         arr[:, c] = rcl
         c += 1
@@ -999,79 +1001,79 @@ def get_dvec(
         else:
             print(
                 dir
-                + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx)
+                + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, didx, didx, didx, didx)
             )
             x = np.load(
                 dir
-                + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx)
+                + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, didx, didx, didx, didx)
             )["cls"][:, 1]
 
-    debiased = (x[: lmax + 1] - RDN0[: lmax + 1] - N1[: lmax + 1]) * R
+    debiased = (x[: lmax + 1] - RDN0[: lmax + 1] - N1[: lmax + 1])*R
 
     if ratio:
         # Ratio against fiducial theory, no correction is applied
         if bpwf is None:
             rl, rdl = rebincl(
-                l[: lmax + 1], debiased / tlkk[: lmax + 1], bine, return_ell=True
+                l[: lmax + 1], debiased/tlkk[: lmax + 1], bine, return_ell=True
             )
             rdl_corr = np.copy(rdl)
         else:
             rl = (
-                np.repeat(
-                    np.arange(lmax + 1, dtype=np.float64)[:, np.newaxis],
-                    len(bine) - 1,
-                    axis=1,
-                ).T
-                @ bpwf
+                    np.repeat(
+                        np.arange(lmax + 1, dtype=np.float64)[:, np.newaxis],
+                        len(bine) - 1,
+                        axis=1,
+                    ).T
+                    @bpwf
             )[0]
-            rdl = (debiased / tlkk[: lmax + 1]) @ bpwf
+            rdl = (debiased/tlkk[: lmax + 1])@bpwf
             rdl_corr = np.copy(rdl)
-            #print(debiased / tlkk[: lmax + 1])
+            # print(debiased / tlkk[: lmax + 1])
     else:
         # Measured power spectra
         if bpwf is None:
-            if ellfac >= 0:
+            if ellfac>=0:
                 rl, rdl = rebincl(
                     l[: lmax + 1],
-                    l[: lmax + 1] ** (ellfac) * (debiased),
+                    l[: lmax + 1]**(ellfac)*(debiased),
                     bine,
                     return_ell=True,
                 )
                 _, rdl_corr = rebincl(
                     l[: lmax + 1],
-                    l[: lmax + 1] ** (ellfac) * (debiased - sim_mean),
+                    l[: lmax + 1]**(ellfac)*(debiased - sim_mean),
                     bine,
                     return_ell=True,
                 )
-                #print(ellfac)
+                # print(ellfac)
 
             else:
-                rl, rdl = rebincl(l[: lmax + 1], (debiased) / v, bine, return_ell=True)
+                rl, rdl = rebincl(l[: lmax + 1], (debiased)/v, bine, return_ell=True)
                 _, rdl_corr = rebincl(
-                    l[: lmax + 1], (debiased - sim_mean) / v, bine, return_ell=True
+                    l[: lmax + 1], (debiased - sim_mean)/v, bine, return_ell=True
                 )
 
         else:
             rl = (
-                np.repeat(
-                    np.arange(lmax + 1, dtype=np.float64)[:, np.newaxis],
-                    len(bine) - 1,
-                    axis=1,
-                ).T
-                @ bpwf
+                    np.repeat(
+                        np.arange(lmax + 1, dtype=np.float64)[:, np.newaxis],
+                        len(bine) - 1,
+                        axis=1,
+                    ).T
+                    @bpwf
             )[0]
-            if ellfac >= 0:
-                rdl = (l[: lmax + 1] ** (ellfac) * (debiased))[: lmax + 1] @ bpwf
-                rdl_corr = (l[: lmax + 1] ** (ellfac) * (debiased - sim_mean))[
-                    : lmax + 1
-                ] @ bpwf
-                #print(ellfac)
+            if ellfac>=0:
+                rdl = (l[: lmax + 1]**(ellfac)*(debiased))[: lmax + 1]@bpwf
+                rdl_corr = (l[: lmax + 1]**(ellfac)*(debiased - sim_mean))[
+                               : lmax + 1
+                           ]@bpwf
+                # print(ellfac)
             else:
-                rdl_corr = ((debiased - np.mean(farr, axis=1))[: lmax + 1] / v) @ bpwf
-                rdl = ((debiased - 0 * np.mean(farr, axis=1))[: lmax + 1] / v) @ bpwf
+                rdl_corr = ((debiased - np.mean(farr, axis=1))[: lmax + 1]/v)@bpwf
+                rdl = ((debiased - 0*np.mean(farr, axis=1))[: lmax + 1]/v)@bpwf
 
-    #if verbose==False: sys.stdout = sys.stdout
-    
+    # if verbose==False: sys.stdout = sys.stdout
+
     # return rl, rdl, np.mean(arr, axis=1), np.std(arr, axis=1), arr, rdl_corr
     return {
         "rl": rl,
@@ -1084,23 +1086,23 @@ def get_dvec(
 
 
 def loadcls(
-    dir,
-    nsims,
-    qe,
-    cltype,
-    N0=None,
-    Lmin=0,
-    Lmax=4000,
-    curl=False,
-    R=1,
-    #SAN0tf=None,
-    lmax=4000,
-    didx=0,
-    startidx=1,
-    use_cache=False,
-    verbose=True
-):    
-    #if verbose==False: sys.stdout = open(os.devnull, 'w')
+        dir,
+        nsims,
+        qe,
+        cltype,
+        N0=None,
+        Lmin=0,
+        Lmax=4000,
+        curl=False,
+        R=1,
+        # SAN0tf=None,
+        lmax=4000,
+        didx=0,
+        startidx=1,
+        use_cache=False,
+        verbose=True
+):
+    # if verbose==False: sys.stdout = open(os.devnull, 'w')
 
     if curl:
         spec = "ww"
@@ -1109,7 +1111,7 @@ def loadcls(
 
     Lmin, Lmax = np.int32(Lmin), np.int32(Lmax)
 
-    if cltype == "dd":
+    if cltype=="dd":
         print("Loading dd", end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_dddd_didx{didx}.npy"
@@ -1120,14 +1122,15 @@ def loadcls(
             return np.load(f1)
         else:
             print('not loading')
-            return np.load(dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, didx, didx, didx))["cls"][: lmax + 1, 1]
+            return np.load(dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, didx, didx, didx, didx))["cls"][
+                : lmax + 1, 1]
 
 
-    elif cltype == "xx":
-        print("Loading xx   [%d->%d] " % (startidx, nsims + startidx - 1), end=" " )
+    elif cltype=="xx":
+        print("Loading xx   [%d->%d] "%(startidx, nsims + startidx - 1), end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_xxxx.npy"
-        #print(f1)
+        # print(f1)
         if use_cache and os.path.exists(f1):
             print("\033[31mWARNING: Using cached file\033[0m")
             xx = np.mean(np.load(f1), axis=1)
@@ -1137,15 +1140,15 @@ def loadcls(
             xx = 0
             for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 xx += np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i, i, i)
+                    dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
-            xx = xx / nsims
+            xx = xx/nsims
 
         return xx
 
-    elif cltype == "uu":
+    elif cltype=="uu":
         startidx = 3001
-        print("Loading uu   [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
+        print("Loading uu   [%d->%d] "%(startidx, nsims + startidx - 1), end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_uuuu.npy"
 
@@ -1157,14 +1160,14 @@ def loadcls(
             xx = 0
             for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 xx += np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i, i, i)
+                    dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
-            xx = xx / nsims
+            xx = xx/nsims
 
         return xx
 
-    elif cltype == "N0":
-        print("Loading N0   [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
+    elif cltype=="N0":
+        print("Loading N0   [%d->%d] "%(startidx, nsims + startidx - 1), end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_xyxy.npy"
         f2 = dir + f"all_cl{spec}_{qe}_xyyx.npy"
@@ -1180,19 +1183,19 @@ def loadcls(
             for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 a = np.load(
                     dir
-                    + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
+                    + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, i + 1, i, i + 1)
                 )["cls"][: lmax + 1, 1]
                 b = np.load(
                     dir
-                    + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i + 1, i)
+                    + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, i + 1, i + 1, i)
                 )["cls"][: lmax + 1, 1]
                 N0 += a + b
-            N0 = N0 / nsims
+            N0 = N0/nsims
 
         return N0
 
-    elif cltype == "N1":
-        print("Loading N1   [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
+    elif cltype=="N1":
+        print("Loading N1   [%d->%d] "%(startidx, nsims + startidx - 1), end=" ")
         f1 = dir + f"all_cl{spec}_{qe}_abab.npy"
         f2 = dir + f"all_cl{spec}_{qe}_abba.npy"
 
@@ -1208,18 +1211,18 @@ def loadcls(
             N1 = 0
             for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 abab = np.load(
-                    dir + "cl%s_k%s_%da_%db_%da_%db.npz" % (spec, qe, i, i, i, i)
+                    dir + "cl%s_k%s_%da_%db_%da_%db.npz"%(spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
                 abba = np.load(
-                    dir + "cl%s_k%s_%da_%db_%db_%da.npz" % (spec, qe, i, i, i, i)
+                    dir + "cl%s_k%s_%da_%db_%db_%da.npz"%(spec, qe, i, i, i, i)
                 )["cls"][: lmax + 1, 1]
                 N1 += (abab + abba) - N0
-            N1 = N1 / nsims
+            N1 = N1/nsims
             np.save(dir + f"N1_{qe}_nsims{nsims}.npy", N1)
         return N1
 
-    elif cltype == "RDN0":
-        print("Loading RDN0 [%d->%d] " % (startidx, nsims + startidx - 1), end=" ")
+    elif cltype=="RDN0":
+        print("Loading RDN0 [%d->%d] "%(startidx, nsims + startidx - 1), end=" ")
 
         f1 = dir + f"all_cl{spec}_{qe}_xdxd_didx{didx}.npy"
         f2 = dir + f"all_cl{spec}_{qe}_xddx_didx{didx}.npy"
@@ -1227,11 +1230,11 @@ def loadcls(
         f4 = dir + f"all_cl{spec}_{qe}_dxxd_didx{didx}.npy"
 
         if (
-            use_cache
-            and os.path.exists(f1)
-            and os.path.exists(f2)
-            and os.path.exists(f3)
-            and os.path.exists(f4)
+                use_cache
+                and os.path.exists(f1)
+                and os.path.exists(f2)
+                and os.path.exists(f3)
+                and os.path.exists(f4)
         ):
             assert N0 is not None
             print("\033[31mWARNING: Using cached file\033[0m")
@@ -1246,39 +1249,39 @@ def loadcls(
             RDN0 = 0
             for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
                 xdxd = np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, didx, i, didx)
+                    dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, didx, i, didx)
                 )["cls"][: lmax + 1, 1]
                 xddx = np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, didx, didx, i)
+                    dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, didx, didx, i)
                 )["cls"][: lmax + 1, 1]
                 dxdx = np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, i, didx, i)
+                    dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, didx, i, didx, i)
                 )["cls"][: lmax + 1, 1]
                 dxxd = np.load(
-                    dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, didx, i, i, didx)
+                    dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, didx, i, i, didx)
                 )["cls"][: lmax + 1, 1]
                 RDN0 += (xdxd + xddx + dxdx + dxxd) - N0
-            RDN0 = RDN0 / nsims
+            RDN0 = RDN0/nsims
 
-        #if verbose==False: sys.stdout = sys.stdout
+        # if verbose==False: sys.stdout = sys.stdout
 
         return RDN0
 
 
 def loadcls_unlcov(
-    dir,
-    nsims,
-    cltype,
-    N0=None,
-    Lmin=0,
-    Lmax=4000,
-    curl=False,
-    R=1,
-    qe="gmv",
-    SAN0tf=None,
-    lmax=4000,
-    didx=0,
-    startidx=1,
+        dir,
+        nsims,
+        cltype,
+        N0=None,
+        Lmin=0,
+        Lmax=4000,
+        curl=False,
+        R=1,
+        qe="gmv",
+        SAN0tf=None,
+        lmax=4000,
+        didx=0,
+        startidx=1,
 ):
     print(f"starting from index {startidx}")
     if curl:
@@ -1288,14 +1291,14 @@ def loadcls_unlcov(
 
     Lmin, Lmax = np.int32(Lmin), np.int32(Lmax)
 
-    if cltype == "N0":
+    if cltype=="N0":
         N0 = np.zeros((lmax + 1, nsims))
         for i in tqdm(range(startidx, nsims + startidx), disable=not verbose):
             a = np.load(
-                dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i, i + 1)
+                dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, i + 1, i, i + 1)
             )["cls"][: lmax + 1, 1]
             b = np.load(
-                dir + "cl%s_k%s_%da_%da_%da_%da.npz" % (spec, qe, i, i + 1, i + 1, i)
+                dir + "cl%s_k%s_%da_%da_%da_%da.npz"%(spec, qe, i, i + 1, i + 1, i)
             )["cls"][: lmax + 1, 1]
             N0[:, i - startidx] = a + b
         return N0
@@ -1320,7 +1323,7 @@ def get_SAN0(dir, qe, nsims, N0=None, lmax=4000, mode="grad"):
     qe = qe.upper()
 
     l = np.arange(lmax + 1)
-    v = 1 #(0.5 * l * (l + 1)) ** 2 #SAN0 now in Nlkk units
+    v = 1  # (0.5 * l * (l + 1)) ** 2 #SAN0 now in Nlkk units
 
     if N0 is None:
         # No renormalization, just return ones
@@ -1332,32 +1335,32 @@ def get_SAN0(dir, qe, nsims, N0=None, lmax=4000, mode="grad"):
         c = 0
         SAN0 = 0
         for i in range(1, nsims + 1):
-            SAN0 += v * np.load(dir + f"/clqq_{qe}_{mode}_{i}.npy")[: lmax + 1]
+            SAN0 += v*np.load(dir + f"/clqq_{qe}_{mode}_{i}.npy")[: lmax + 1]
             c += 1
         SAN0 /= c
-        TF = N0 / SAN0
+        TF = N0/SAN0
 
     SAN0arr = np.zeros((lmax + 1, nsims))
     for i in range(1, nsims + 1):
         SAN0arr[:, i - 1] = (
-            TF * v * np.load(dir + f"/clqq_{qe}_{mode}_{i}.npy")[: lmax + 1]
+                TF*v*np.load(dir + f"/clqq_{qe}_{mode}_{i}.npy")[: lmax + 1]
         )
 
     return np.nan_to_num(SAN0arr, nan=0), TF
 
 
 def get_bpwf(
-    dir_cls,
-    bine,
-    nsims,
-    qe,
-    N0,
-    N1,
-    ellfac=1,
-    curl=False,
-    lmax=4000,
-    use_cache=False,
-    verbose=True
+        dir_cls,
+        bine,
+        nsims,
+        qe,
+        N0,
+        N1,
+        ellfac=1,
+        curl=False,
+        lmax=4000,
+        use_cache=False,
+        verbose=True
 ):
     """
     Return band power window function, based on the scatter measured
@@ -1381,7 +1384,7 @@ def get_bpwf(
     spec = "ww" if curl else "kk"
 
     l = np.arange(lmax + 1)
-    v = (0.5 * l * (l + 1)) ** 2
+    v = (0.5*l*(l + 1))**2
     v[0] = np.inf
 
     # Compute variance for every ell, over nsims
@@ -1392,22 +1395,22 @@ def get_bpwf(
     if use_cache and os.path.exists(f1):
         xx = np.load(f1)
         for i in tqdm(range(1, nsims + 1), disable=not verbose):
-            if ellfac >= 0:
-                arr[:, i - 1] = l ** (ellfac) * (
-                    xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1]
+            if ellfac>=0:
+                arr[:, i - 1] = l**(ellfac)*(
+                        xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1]
                 )
             else:
-                arr[:, i - 1] = (xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1]) / v
+                arr[:, i - 1] = (xx[:, i - 1] - N0[: lmax + 1] - N1[: lmax + 1])/v
 
     else:
         for i in tqdm(range(1, nsims + 1), disable=not verbose):
             x = np.load(dir_cls + f"cl{spec}_k{qe}_{i}a_{i}a_{i}a_{i}a.npz")["cls"][
                 : lmax + 1, 1
             ]
-            if ellfac >= 0:
-                arr[:, i - 1] = l ** (ellfac) * (x - N0[: lmax + 1] - N1[: lmax + 1])
+            if ellfac>=0:
+                arr[:, i - 1] = l**(ellfac)*(x - N0[: lmax + 1] - N1[: lmax + 1])
             else:
-                arr[:, i - 1] = (x - N0[: lmax + 1] - N1[: lmax + 1]) / v
+                arr[:, i - 1] = (x - N0[: lmax + 1] - N1[: lmax + 1])/v
 
     # Compute bandpower window function
     vv = np.std(arr, axis=1)
@@ -1416,8 +1419,8 @@ def get_bpwf(
     for i in range(len(bine) - 1):
         bi = np.int32(bine[i])
         bf = np.int32(bine[i + 1])
-        vbin = np.sum(1 / vv[bi:bf] ** 2)
-        bpwf[bi:bf, i] = (1 / vv[bi:bf] ** 2) / (vbin)
+        vbin = np.sum(1/vv[bi:bf]**2)
+        bpwf[bi:bf, i] = (1/vv[bi:bf]**2)/(vbin)
 
     return bpwf
 
@@ -1430,12 +1433,12 @@ def kspice(m1: Union[np.ndarray, str, list],
            lmax=-1,
            apodizetype=1,
            apodizesigma: Union[float, str] = "NO",
-           thetamax:float = 180,
-           tolerance:float = 5e-8,
-           subav:bool = False,
-           subdipole:bool = False,
+           thetamax: float = 180,
+           tolerance: float = 5e-8,
+           subav: bool = False,
+           subdipole: bool = False,
            script=False,
-           cl_out: str = None, spice:str = None, kernel=False):
+           cl_out: str = None, spice: str = None, kernel=False):
     """
     A python wrapper for PolSpice for temperature (kappa) file only.
 
@@ -1546,7 +1549,7 @@ def kspice(m1: Union[np.ndarray, str, list],
         m2 = m1
     with tf.TemporaryDirectory(prefix='spice', ) as tmp:
         for item, name in zip([m1, weight1, m2, weight2],
-                          ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']):
+                              ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']):
             if item is not None:
                 if isinstance(item, str):
                     fname = item
@@ -1600,7 +1603,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
                    m2: Union[np.ndarray, str, list] = None,
                    mask1: Union[np.ndarray, str] = None,
                    mask2: Union[np.ndarray, str] = None,
-                   mask_alm=True, g=None, anafast=True, nside=None, cl_out:str = None, **kwargs):
+                   mask_alm=True, g=None, anafast=True, nside=None, cl_out: str = None, **kwargs):
     """
     General power spectrum estimator
 
@@ -1625,6 +1628,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
     kwargs: dict
         kspice keyword arguments.
     """
+
     def _alm2alm(obj, mask_obj):
         if isinstance(mask_obj, str):
             mask = hp.read_map(mask_obj)
@@ -1688,7 +1692,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
 
 
-def read_map(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=False):
+def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=False):
     """A wrapper to read the partial maps, as fits or npy files.
 
     Parameters
@@ -1708,15 +1712,15 @@ def read_map(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=False)
     if isinstance(field, (str, int)):
         field = [field]
 
-    def _allocate(nside,):
+    def _allocate(nside, ):
         return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
 
     try:
-        if os.path.splitext(fname)[1] == '.npy':
+        if os.path.splitext(fname)[1]=='.npy':
             """load npy partial maps with index stored in parent directories"""
             idx_dir = fname
             c = 3
-            while c > 0:
+            while c>0:
                 idx_dir = os.path.dirname(idx_dir)
                 try:
                     loaded = np.load(os.path.join(idx_dir, 'index.npz'))
@@ -1741,7 +1745,7 @@ def read_map(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=False)
         raise e from IOError(f"Error reading file: {fname}")
 
 
-def read_map_fits(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=False):
+def read_map_fits(fname, field=(0,), dtype=float, hdu=1, h=False, return_cosmo=True):  # noqa: C901
     """Read healpy maps.
 
     Parameters
@@ -1755,7 +1759,7 @@ def read_map_fits(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=F
         the header number to look at (start at 0)
     h : bool, optional
         If True, return also the header. Default: False.
-    return_cosmo: bool=False
+    return_cosmo: bool=True
         If True, make sure the return polarization map is in COSMO format (flipping U sign if needed).
     """
     from astropy.io import fits
@@ -1763,9 +1767,10 @@ def read_map_fits(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=F
     if isinstance(field, (str, int)):
         field = [field]
 
-    def _allocate(nside,):
+    def _allocate(nside):
         return np.zeros((len(field), hp.nside2npix(nside)), dtype=dtype)
 
+    basename = os.path.basename(fname)
     with fits.open(fname, memmap=True) as hdul:
         names = hdul[hdu].columns.names.copy()
         try:
@@ -1790,30 +1795,46 @@ def read_map_fits(fname, field=(0, ), dtype=None, hdu=1, h=False, return_cosmo=F
             else:
                 raise TypeError(f"field {c} ({type(c)})?")
 
+        nside = int(hdul[hdu].header.get("NSIDE"))
+        ordering = hdul[hdu].header.get("ORDERING", "UNDEF").strip().lower()
+        if ordering=="undef":
+            ordering = 'ring'
+            logger.info(f"ORDERING undefined, assume RING: {basename}")
+        assert ordering in ["nested", "ring"]
+
+        if ordering in ["nested"]:
+            logger.info(f"NESTED->RING: {basename}")
+
         iau2cosmo = False
-        polconv = hdul[hdu].header.get('POLCCONV', None)
+        polconv = hdul[hdu].header.get('POLCCONV', "UNDEF").strip().lower()
+        if polconv=="undef":
+            polconv = 'cosmo'
+            logger.info(f"POLCONV undefined, assume COSMO: {basename}")
+        assert polconv in ["cosmo", 'iau', 'healpix']
         if return_cosmo:
-            if polconv in ['HEALPIX', "COSMO"]:
+            if polconv in ['healpix', "cosmo"]:
                 pass
-            elif polconv in ['IAU']:
+            elif polconv in ['iau']:
                 iau2cosmo = True
             else:
-                logger.warning(f"Request to return COSMO format, but POLCONV={polconv} is unrecogonized. "
-                               f"Assuming COSMO and do nothing.")
+                logger.warning(f"Unrecogonized POLCONV={polconv}, assume COSMO: {basename}")
 
-        out = _allocate(nside=int(dict(hdul[hdu].header)['NSIDE']))
+        out = _allocate(nside=nside)
         partial = 'PIXEL' in hdul[hdu].columns.names
         for j, name in enumerate(fields_name):
-            if iau2cosmo and (fields_num[j] == 2 or name == 'U_POLARISATION'):
-                logger.warning(f"Converting the {fields_num[j]}th map {name} from {polconv} to COSMO")
+            if iau2cosmo and (fields_num[j]==2 or name=='U_POLARISATION'):
+                logger.warning(f"{polconv} to COSMO: {fields_num[j]}th map {name} of {basename}")
                 fac = -1
             else:
                 fac = 1
             if partial:
-                out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]*fac
+                out[j, hdul[hdu].data['PIXEL']] = hdul[hdu].data[name]
             else:
-                # out[j, :] = hdul[hdu].data[name]*fac
-                out[j, :] = hdul[hdu].data.field(name).astype(dtype, copy=False).ravel()*fac
+                out[j, :] = hdul[hdu].data.field(name).astype(dtype, copy=False).ravel()
+            out[j] *= fac
+            if ordering=="nested":
+                idx = hp.ring2nest(nside, np.arange(out[j].size, dtype=np.int32))
+                out[j] = out[j][idx]
         if h:
             return np.squeeze(out), hdul[hdu].header
         else:
@@ -1921,9 +1942,9 @@ def load_module(module_name, file_path):
 def get_diag_almbar(s, alms, config, cls, nlres):
     ss = f"{s.lower()}{s.lower()}"
     assert ss in ['tt', 'ee', 'bb']
-    lmax = config.lmaxT if ss == 'tt' else config.lmaxP
+    lmax = config.lmaxT if ss=='tt' else config.lmaxP
     lmin = config.lminT if ss=='tt' else config.lminP
-    fl = 1.0 / (cls[ss][:config.lmax + 1] + nlres[ss][:config.lmax + 1])
+    fl = 1.0/(cls[ss][:config.lmax + 1] + nlres[ss][:config.lmax + 1])
     fl[:lmin] = 0
     fl[lmax + 1:] = 0
     if alms is None:
@@ -1962,10 +1983,10 @@ def dec2tf2d(lx, dec1, dec2):
     # assert 0>dec2>dec1, "dec1 and dec2 should be negative for SPT fields!"
     dec_min = min(abs(dec1), abs(dec2))
     dec_max = min(abs(dec1), abs(dec2))
-    if np.sign(dec1) != np.sign(dec2):
+    if np.sign(dec1)!=np.sign(dec2):
         dec_min = 0
-    m1 = int(np.floor(lx * np.sin(np.pi / 2 - np.deg2rad(dec_max))))
-    k = np.sin(np.pi / 2 - np.deg2rad(dec_min))
+    m1 = int(np.floor(lx*np.sin(np.pi/2 - np.deg2rad(dec_max))))
+    k = np.sin(np.pi/2 - np.deg2rad(dec_min))
     return lx, m1, k
 
 
@@ -1989,7 +2010,7 @@ def write_cl(fname, cl, header=None):
 def verify_fits(fname, nhdu=1):
     for i in range(nhdu):
         try:
-            fits.open(fname, checksum=True, verify='exception')[i+1].data
+            fits.open(fname, checksum=True, verify='exception')[i + 1].data
         except Exception as e:
             raise e from FileExistsError(f"{fname} is not a valid FITS file or has a corrupted header/data.")
     return True

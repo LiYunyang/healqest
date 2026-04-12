@@ -26,3 +26,12 @@ If you want to install the package, you can do it by running::
     pip install [-e] ./
 
 Currently, ``build_ext`` is not working with ``pip``, so one has to compile it manually before installation.
+
+Development
+------------
+
+After cloning, install the pre-commit hooks::
+
+    pre-commit install
+
+This runs ``ruff`` (lint + format) and basic file checks on every commit.

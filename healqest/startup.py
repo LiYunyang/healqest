@@ -25,7 +25,7 @@ import healpy as hp
 import yaml
 from git import Repo, InvalidGitRepositoryError
 
-from healqest import utils, healqest_utils as hq
+from healqest import healqest_utils as hq
 
 try:
     from mpi4py import MPI
@@ -428,13 +428,10 @@ class Config:
         def dat2dict(ell, dat):
             assert ell[0]==0
             assert ell[-1]==self.cinv_lmax
-            return dict(tt=dat[0],
-                        ee=dat[1],
-                        bb=dat[2],
-                        te=dat[3])
+            return dict(tt=dat[0], ee=dat[1], bb=dat[2], te=dat[3])
 
         file_cmb = str(resources.files('healqest')/'data/camb'/self.file_cambcmb)
-        ell, *dat = utils.get_lensedcls(file_cmb, lmax=self.cinv_lmax)
+        ell, *dat = hq.get_lensedcls(file_cmb, lmax=self.cinv_lmax)
         out['cmb'] = dat2dict(ell, dat)
 
         if hasattr(self, 'file_noisefg'):
@@ -448,10 +445,10 @@ class Config:
     def cmbcl(self):
         cambcls = str(resources.files('healqest')/'data/camb'/self.file_cmb)
         try:
-            ell, sltt, slee, slbb, slte = utils.get_lensedcls(cambcls, lmax=self.lmax)
+            ell, sltt, slee, slbb, slte = hq.get_lensedcls(cambcls, lmax=self.lmax)
         except ValueError:
             logger.warning(f"loading UNLENSED cls from {cambcls}")
-            ell, sltt, slee, slbb, slte = utils.get_unlensedcls(cambcls, lmax=self.lmax)[:5]
+            ell, sltt, slee, slbb, slte = hq.get_unlensedcls(cambcls, lmax=self.lmax)[:5]
         return dict(tt=sltt, ee=slee, bb=slbb, te=slte)
 
     @cached_property

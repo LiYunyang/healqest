@@ -1,0 +1,44 @@
+[tool.pytest.ini_options]
+addopts = "-vs -q --tb=short -rsS -W ignore::DeprecationWarning"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+  "ignore::DeprecationWarning:scipy.sparse.sputils",
+  "ignore:.*sputils.*:DeprecationWarning"
+]
+
+markers = [
+    "benchonly: mark test as benchmark-only, skipped unless --benchmark-only is used"
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+exclude = [".git", "versioneer.py", "src/bkspt/_version.py", "local/"]
+output-format = "pylint" # important for editors like pycharm (https://github.com/astral-sh/ruff/issues/19983)
+extend-exclude = ["*.ipynb"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes errors
+    "W",   # pycodestyle warnings
+    "C90", # McCabe complexity (flake8-mccabe)
+    "D",   # pydocstyle (docstring convention)
+]
+ignore = [
+    "E203", "E228", "E226","E227", "E231", "E261", "E741", # pycodestyle
+    "F401", "F405", "F541", "F841", # flake8
+    "D100", "D101", "D102", "D103", "D104", "D105", "D204", "D401", # docstrings
+    "W293",
+]
+
+[tool.ruff.format]
+quote-style = "preserve"
+skip-magic-trailing-comma = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F403"]

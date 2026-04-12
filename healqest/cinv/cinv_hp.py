@@ -6,6 +6,7 @@ https://github.com/SouthPoleTelescope/spt3g_software/blob/curvlens/lensing/pytho
 but with additional cleaning/formatting and commenting.
 """
 
+import abc
 import healpy as hp
 import numpy as np
 import logging
@@ -17,7 +18,7 @@ from .opfilt_hp import SkyInverseFilterJoint, SkyInverseFilter, NoiseInverseFilt
 logger = logging.getLogger(__name__)
 
 
-class cinv(object):
+class cinv(abc.ABC):
     lmax: int
 
     def __init__(self, lmax, nside, cl, nl_res, eps_min, ellscale, tf, g=None):
@@ -37,10 +38,6 @@ class cinv(object):
         tf: TFObj
             Transfer function object
         g: Geometry=None
-            The `ducc` wrapper object used to speed up spherical harmonic transforms. If specified, the SHT will
-            only be applied on relevant rings, i.e., an implicit binary mask is applied.  If None, a full-sky
-            Geometry object of `nside` will be used. This should give identical results as healpy but still a 2x
-            speed-up.
         """
         assert lmax >= 1024
         assert nside >= 512
@@ -118,6 +115,7 @@ class cinv(object):
         self.eps = monitor.eps
         opfilt_hp.calc_fini(soltn, self.s_inv_filt)
 
+    @abc.abstractmethod
     def get_fl(self, pol, lmax):
         raise NotImplementedError("get_fl method must be implemented in subclass")
 
@@ -531,3 +529,109 @@ class library_cinv_jTP:
         if self.cinv_tp is not None:
             out += list(self.cinv_tp.eps)
         return np.array(out)
+
+
+class MapsBase(abc.ABC):
+    """Base class for maps, used for testing and as a base for Maps class."""
+
+    def __init__(self, nside):
+        pass
+
+    @abc.abstractmethod
+    def get_tmap(self, seed, cmbset, bundle, add_noise=True, apply_tf=False, g=None):
+        """Get T map for the given seed and cmbset.
+
+        Parameters
+        ----------
+        seed: int
+            Seed for the map. "0" is reserved for data maps.
+        cmbset: str
+            cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
+        bundle: int
+            integer number from 0--`config.nbundle`-1.
+        add_noise: bool=False
+            For simulations, this controls whether to add noise to the map.
+        apply_tf: bool=False
+            Whether to apply transfer function to the signal map.
+        g: Geometry=None
+            If provided, use the ducc_sht.Geometry to speed up SHT operations (recommended).
+
+        Returns
+        -------
+        np.ndarray
+            T map for the given seed and cmbset, shape (npix, ).
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_pmap(self, seed, cmbset, bundle, add_noise=True, apply_tf=False, g=None):
+        """Get Q/U map for the given seed and cmbset.
+
+        Parameters
+        ----------
+        seed: int
+            Seed for the map. "0" is reserved for data maps.
+        cmbset: str
+            cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
+        bundle: int
+            integer number from 0--`config.nbundle`-1.
+        add_noise: bool=False
+            For simulations, this controls whether to add noise to the map.
+        apply_tf: bool=False
+            Whether to apply transfer function to the signal map.
+        g: Geometry=None
+            If provided, use the ducc_sht.Geometry to speed up SHT operations (recommended).
+
+        Returns
+        -------
+        np.ndarray
+            Q/U map for the given seed and cmbset, shape (2, npix).
+        """
+        pass
+
+    @abc.abstractmethod
+    def get_nlres(self, cinv=False):
+        raise NotImplementedError("get_nlres method must be implemented in subclass")
+
+    def load_sim_alm(self, config, seed, cmbset, bundle, add_noise):
+        """Prepare the input alms for naive cinv-filtering."""
+        t = self.get_tmap(cmbset=cmbset, seed=seed, bundle=bundle, add_noise=add_noise, g=config.g)
+        q, u = self.get_pmap(cmbset=cmbset, seed=seed, bundle=bundle, add_noise=add_noise, g=config.g)
+        t *= config.mask_cinv['t']
+        q *= config.mask_cinv['p']
+        u *= config.mask_cinv['p']
+        maps = np.array([t, q, u])
+        alm = config.g.map2alm(maps, lmax=config.cinv_lmax, check=False).astype(np.complex128)
+        if config.tf2d:
+            alm[0] *= cinv_utils.cli(config.tfbl_2d('t'))
+            alm[1] *= cinv_utils.cli(config.tfbl_2d('p'))
+            alm[2] *= cinv_utils.cli(config.tfbl_2d('p'))
+        else:
+            hp.almxfl(alm[0], cinv_utils.cli(config.tfbl_1d('t')), inplace=True)
+            hp.almxfl(alm[1], cinv_utils.cli(config.tfbl_1d('p')), inplace=True)
+            hp.almxfl(alm[2], cinv_utils.cli(config.tfbl_1d('p')), inplace=True)
+        return alm
+
+    def naive_cinv(self, config, seed, cmbset, bundle, add_noise):
+        """Return naively cinv-filtered alms (and fls) as arrays."""
+        from healqest.ducc_sht import reduce_lmax
+
+        nlres = self.get_nlres(cinv=False)
+        alms = self.load_sim_alm(config, seed=seed, cmbset=cmbset, bundle=bundle, add_noise=add_noise)
+        almbars = np.zeros((3, hp.Alm.getsize(config.lmax)), dtype=np.complex128)
+        flms = np.zeros((4, config.lmax + 1)).astype(float)
+        cls = config.cinv_cls['cmb']
+
+        for j, s in enumerate('teb'):
+            ss = f"{s.lower()}{s.lower()}"
+            assert ss in ['tt', 'ee', 'bb']
+            lmax = config.lmaxT if s == 't' else config.lmaxP
+            lmin = config.lminT if s == 't' else config.lminP
+            fl = cinv_utils.cli(cls[ss][: config.lmax + 1] + nlres[ss][: config.lmax + 1])
+            fl[:lmin] = 0
+            fl[lmax + 1 :] = 0
+            # if alms is None:
+            #     return fl
+            alm = hp.almxfl(reduce_lmax(alms[j], config.lmax), fl)
+            almbars[j], flms[j] = alm, fl
+        return almbars, flms

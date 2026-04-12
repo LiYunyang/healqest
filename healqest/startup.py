@@ -118,9 +118,7 @@ class Config:
     file_nlm: str = None  # path to noise alm files for std/N0-type sims.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
     file_nlm_N1: str = None  # path to noise alm files for N1-type sims.
-    add_noise: bool = True  # whether to add noise in simulations (either through file_nlm or customized noise generation functions)
-    nlev_t: float = None  # NET value, if not specified, nlev_t = nlev_p / sqrt(2)
-    nlev_p: float = None  # NEQ/U values, if not specified, nlev_p = nlev_t * sqrt(2)
+    add_noise: bool = True  # whether to add noise in simulations.
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
     cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
     fmask_cinv: Union[str, list[str]] = None  # path(s) to mask used for cinv
@@ -234,8 +232,7 @@ class Config:
         for key in unexpected_keys:
             warnings.warn(f"Unexpected config parameter: '{key}'. ", UserWarning, stacklevel=2)
 
-    def _set_defaults(self):
-        # set default lmax/lmax
+    def _set_defaults(self):  # noqa: C901
         self.lmaxT = getattr(self, 'lmaxT', self.lmax)
         self.lmaxP = getattr(self, 'lmaxP', self.lmax)
         self.lminT = getattr(self, 'lminT', self.lmin)
@@ -278,12 +275,6 @@ class Config:
                     self.spice_kwargs[key] = max(self.dec_range) - min(self.dec_range)
                 elif isinstance(self.spice_kwargs[key], dict):
                     self.spice_kwargs[key] = self.spice_kwargs[key][self.field]
-
-        # cinv settings:
-        if self.nlev_p is None and self.nlev_t is not None:
-            self.nlev_p = self.nlev_t * np.sqrt(2)
-        if self.nlev_t is None and self.nlev_p is not None:
-            self.nlev_t = self.nlev_p / np.sqrt(2)
 
         # mvtypes has to be a list
         self.mvtypes = list(self.mvtypes)
@@ -333,9 +324,9 @@ class Config:
             raise NotImplementedError(f"turning {type(x)} into list is not implemented")
 
     @staticmethod
-    def ktype2ij(ktype, i, j=None, cmbset='a') -> Tuple[int, int, str, str]:
+    def ktype2ij(ktype, i, j=None, cmbset='a') -> Tuple[int, int, str, str]:  # noqa: C901
         """Convert the 2-letter ktype to seed and cmbset of the two maps used for reconstruction."""
-        if j is None and len(set(ktype)) == 2:
+        if j is None and len(set(ktype)) == 2:  # noqa: C901  # noqa: C901
             # default `seed2` is `seed1 + 1`
             j = i + 1
         if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
@@ -595,6 +586,20 @@ class Config:
 
         return Geometry.from_dec(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
 
+    @property
+    def flT(self):
+        """QE lmin and lmax selection cut for T."""
+        fl = np.zeros((self.lmax + 1)).astype(float)
+        fl[self.lminT : self.lmaxT + 1] = 1
+        return fl
+
+    @property
+    def flP(self):
+        """QE lmin and lmax selection cut for P."""
+        fl = np.zeros((self.lmax + 1)).astype(float)
+        fl[self.lminP : self.lmaxP + 1] = 1
+        return fl
+
     # === setup masks ===
     def _load_mask(self, item, field=0):
         mask = None
@@ -643,7 +648,7 @@ class Config:
 
     @cached_property
     def mask_boundary(self):
-        """boundary mask used to save plm as partial maps."""
+        """Boundary mask used to save plm as partial maps."""
         return self._load_mask(self.fmask_qe, field=2) != 0
 
     @staticmethod
@@ -757,10 +762,9 @@ class Config:
 
         Parameters
         ----------
-
         coadd: bool=False
-            special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing reconstruction
-            map is coadded before taking spectra.
+            special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensrec maps are
+            coadded before taking spectra.
         """
         subdir = 'cls'
         if SAN0:
@@ -786,14 +790,14 @@ class Config:
         return out
 
     def p_resp(self, tag, bundle=None):
-        """paths to response functions."""
+        """Paths to response functions."""
         bundle_str = self.bundle2str(bundle)
         bundle_tag = f'_{bundle_str}' if bundle_str else ''
         return self.path(self.outdir, f"respavg_{tag}{bundle_tag}.npz")
 
     @property
     def p_index(self):
-        """path the the parital map index array"""
+        """Path the the parital map index array."""
         return self.path(self.recdir, 'index.npz')
 
     @staticmethod
@@ -826,17 +830,19 @@ class Config:
         bundle: int=None
         curl: bool=False
         """
-
         bundle_tag = f'_{Config.bundle2str(bundle)}' if bundle is not None else ''
         N1_tag = '_N1' if N1 else ''
         prefix = 'kmap_grad' if not curl else 'kmap_curl'
-        return f"{prefix}_{tag}{bundle_tag}_{seed1}{cmbset1}_{seed2}{cmbset2}_mfgroup{mf_group}_{ktype}{N1_tag}.tmp"
+        return (
+            f"{prefix}_{tag}{bundle_tag}_{seed1}{cmbset1}_{seed2}{cmbset2}"
+            f"_mfgroup{mf_group}_{ktype}{N1_tag}.tmp"
+        )
 
     def unpack(self, dir='cls'):
         import tarfile
 
-        for suffix in ['tar.gz', 'tar']:
-            fname = self.path(self.outdir, f"{dir}.{suffix}")
+        for ext in ['tar.gz', 'tar']:
+            fname = self.path(self.outdir, f"{dir}.{ext}")
             if os.path.exists(fname):
                 logger.info(f"unpack the tarball: {fname}")
                 with tarfile.open(fname, "r") as tar:
@@ -845,65 +851,6 @@ class Config:
                 logger.info(f"Removing the tarball: {fname}")
         else:
             logger.info(f"tarball not found!")
-
-
-class MapsBase(abc.ABC):
-    """Base class for maps, used for testing and as a base for Maps class."""
-
-    def __init__(self, nside):
-        pass
-
-    @abc.abstractmethod
-    def get_tmap(self, seed, cmbset, bundle, add_noise=True, apply_tf=False, g=None):
-        """Get T map for the given seed and cmbset.
-
-        Parameters
-        ----------
-        seed: int
-            Seed for the map. "0" is reserved for data maps.
-        cmbset: str
-            cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
-        bundle: int
-            integer number from 0--`config.nbundle`-1.
-        add_noise: bool=False
-            For simulations, this controls whether to add noise to the map.
-        apply_tf: bool=False
-            Whether to apply transfer function to the signal map.
-        g: Geometry=None
-            If provided, use the ducc_sht.Geometry to speed up SHT operations (recommended).
-
-        Returns
-        -------
-        np.ndarray
-            T map for the given seed and cmbset, shape (npix, ).
-        """
-        pass
-
-    @abc.abstractmethod
-    def get_pmap(self, seed, cmbset, bundle, add_noise=True, apply_tf=False, g=None):
-        """Get Q/U map for the given seed and cmbset.
-
-        Parameters
-        ----------
-        seed: int
-            Seed for the map. "0" is reserved for data maps.
-        cmbset: str
-            cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
-        bundle: int
-            integer number from 0--`config.nbundle`-1.
-        add_noise: bool=False
-            For simulations, this controls whether to add noise to the map.
-        apply_tf: bool=False
-            Whether to apply transfer function to the signal map.
-        g: Geometry=None
-            If provided, use the ducc_sht.Geometry to speed up SHT operations (recommended).
-
-        Returns
-        -------
-        np.ndarray
-            Q/U map for the given seed and cmbset, shape (2, npix).
-        """
-        pass
 
 
 def parser():

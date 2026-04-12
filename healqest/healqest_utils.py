@@ -412,7 +412,7 @@ def kappa_spectrum(m1: Union[np.ndarray, str, list],
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
 
 
-def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=False):
+def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
     """A wrapper to read the partial maps, as fits or npy files.
 
     Parameters

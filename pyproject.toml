@@ -42,3 +42,4 @@ convention = "numpy"
 
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
+"scripts/compute_cls.py" = ["E501"]

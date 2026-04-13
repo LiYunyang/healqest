@@ -98,7 +98,7 @@ def compute_ps(
         If True, use N1-type simulations.
     file_mask: str
         Path to the power spectrum mask.
-    mf_pair: list or tuple=(0, 0)
+    mf_pair: list or tuple.
         The mean field groups to use for the two maps.
     spice_kwargs: dict
         Keyword parameters for polspice(`kspice`).
@@ -430,7 +430,7 @@ def main(i, cmbset):
         if args.std:
             main_std(i, cmbset, kw_ps=kw)
         elif args.rdn0:
-            assert i != 0
+            main_rdn0(i, cmbset, kw_ps=kw)
         elif args.n1:
             main_n1(i, kw_ps=kw)
 

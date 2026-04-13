@@ -324,16 +324,27 @@ class Config:
             raise NotImplementedError(f"turning {type(x)} into list is not implemented")
 
     @staticmethod
-    def ktype2ij(ktype, i, j=None, cmbset='a') -> Tuple[int, int, str, str]:  # noqa: C901
-        """Convert the 2-letter ktype to seed and cmbset of the two maps used for reconstruction."""
-        if j is None and len(set(ktype)) == 2:  # noqa: C901  # noqa: C901
-            # default `seed2` is `seed1 + 1`
-            j = i + 1
+    def ktype2ij(ktype, i, j=None, cmbset='a') -> Tuple[int, int, str, str]:
+        """Decode the 2-letter `ktype` to the index/cmbset of the two legs of reconstruction.
+
+        Parameters
+        ----------
+        ktype: str
+            The 2-letter code for the type of reconstruction, e.g., xx/xy/yx/x0/0x/aa/bb/ab/ba.
+        i: int
+            The index of `ktype`, this will be used to figure out the seeds for both legs (j=i+1)
+        j: int=None
+            The index of the second leg, if it is different from the default (i, or i+1).
+        cmbset: str='a'
+            'a' for standard N0/N1-type. In special cases where the two leges belong to different sets
+            (e.g., xy/XY vs yx/Yx), this can be used to specify the set for the first leg.
+        """
         if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
-            # there are special cases for 'xY'/'Xy'/'yX'/'Yx'
+            # N0 and RDN0-type combinations.
             if len(cmbset) == 1:
                 cmbset1, cmbset2 = cmbset, cmbset
             else:
+                # there are special cases for xY/Xy/yX/Yx, where xy/XY belone to different sets
                 assert len(cmbset) == 2
                 assert ktype in ['xy', 'yx']
                 if ktype == 'xy':
@@ -342,19 +353,12 @@ class Config:
                     cmbset2, cmbset1 = cmbset
                 else:
                     raise AssertionError
-            if ktype == 'xx':
-                seed1, seed2 = i, i
-            elif ktype == 'xy':
-                seed1, seed2 = i, j
-            elif ktype == 'yx':
-                seed1, seed2 = j, i
-            elif ktype == 'x0':
-                seed1, seed2 = i, 0
-            elif ktype == '0x':
-                seed1, seed2 = 0, i
-            else:
-                raise AssertionError
+            match = {'0': 0, 'x': i, 'y': j if j is None else i + 1}
+            seed1 = match[ktype[0]]
+            seed2 = match[ktype[1]]
         elif ktype in ['ab', 'ba', 'aa', 'bb']:
+            # N1-type combinations.
+            assert cmbset == 'a'
             cmbset1, cmbset2 = ktype
             seed1, seed2 = i, i
         else:

@@ -41,23 +41,11 @@ def main(seed, cmbset, N1, ilc_type):
         mmin=config.cinv_mmin,
     )
     if config.rectype == 'sqe':
-        cinv_t = cinv.cinv_t(
-            ninv=[ninv_t],
-            tf1d=config.tfbl_1d('t'),
-            tf2d=config.tfbl_2d('t'),
-            bl=config.bl['t'],
-            eps_min=config.eps_t,
-            **common_kw,
-        )
+        cinv_t = cinv.cinv_t(ninv=[ninv_t], tf1d=config.tfbl_1d('t'), tf2d=config.tfbl_2d('t'), bl=config.bl['t'],
+                             eps_min=config.eps_t, **common_kw)
 
-        cinv_p = cinv.cinv_p(
-            ninv=[ninv_p, ninv_p],
-            tf1d=config.tfbl_1d('p'),
-            bl=config.bl['p'],
-            tf2d=config.tfbl_2d('p'),
-            eps_min=config.eps_p,
-            **common_kw,
-        )
+        cinv_p = cinv.cinv_p(ninv=[ninv_p, ninv_p], tf1d=config.tfbl_1d('p'), bl=config.bl['p'],
+                             tf2d=config.tfbl_2d('p'), eps_min=config.eps_p, **common_kw)
 
         ivfs = cinv.library_cinv_sTP(sims, cinvt=cinv_t, cinvp=cinv_p, add_noise=add_noise)
 
@@ -79,7 +67,7 @@ def main(seed, cmbset, N1, ilc_type):
     else:
         raise NotImplementedError(f"cinv for {config.rectype} is not implemented")
     mapbar = np.atleast_2d(config.g.alm2map(almbar, lmax=config.cinv_lmax))
-    mapbar[:, config.mask_boundary == 0] = hp.UNSEEN
+    mapbar[:, config.mask_boundary == 0] =hp.UNSEEN
     fl = np.array([ivfs.get_fl('t'), ivfs.get_fl('e'), ivfs.get_fl('b'), ivfs.get_fl('te')])
     hq.cinv_io(fname, mapbar, fl=fl, eps=ivfs.get_eps())
 
@@ -111,7 +99,7 @@ if __name__ == "__main__":
         "--module_path",
         required=True,
         help="Path to the data module script (e.g., data.ilc.py) that can prepare data/sims and "
-        "auxiliary files (nlres, ninv) for filtering inputs.",
+             "auxiliary files (nlres, ninv) for filtering inputs.",
     )
     args = parser.parse_args()
     dm = hq.load_module("healqest.data_module", args.module_path)
@@ -128,5 +116,5 @@ if __name__ == "__main__":
     else:
         # do cmbset as requested ('a' by default)
         loop = list(product(seed_loop, [args.set], config.ilcs))
-    for i, _cmbset, ilc in loop[comm.rank :: comm.size]:
+    for i, _cmbset, ilc in loop[comm.rank:: comm.size]:
         main(seed=i, cmbset=_cmbset, N1=args.n1, ilc_type=ilc)

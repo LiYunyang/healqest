@@ -12,7 +12,7 @@ markers = [
 ]
 
 [tool.ruff]
-line-length = 120
+line-length = 110
 target-version = "py312"
 exclude = [".git", "versioneer.py", "src/bkspt/_version.py", "local/"]
 output-format = "pylint" # important for editors like pycharm (https://github.com/astral-sh/ruff/issues/19983)

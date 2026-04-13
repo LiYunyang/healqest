@@ -47,7 +47,7 @@ def reduce_lmax(alm, lmax=4000):
     for i in range(0, lmax + 1):
         oldf = oldi + lmaxin + 1 - i
         newf = newi + lmax + 1 - i
-        almout[..., newi:newf] = alm[..., oldi: oldf - dl]
+        almout[..., newi:newf] = alm[..., oldi : oldf - dl]
         oldi = oldf
         newi = newf
     return almout
@@ -80,7 +80,7 @@ def get_unlensedcls(file, lmax=2000):
     fac = ell * (ell + 1) / 2 / np.pi
     fac_p = np.sqrt(ell * (ell + 1))
     cls = dls / fac
-    cls[4] /= fac_p ** 2
+    cls[4] /= fac_p**2
     cls[5:] /= fac_p
 
     ell = np.concatenate([[0, 1], ell])[: lmax + 1]
@@ -154,22 +154,22 @@ def get_qes(qeset):
 
 
 def kspice(  # noqa: C901
-        m1: Union[np.ndarray, str, list],
-        m2: Union[np.ndarray, str, list] = None,
-        weight1: Union[np.ndarray, str] = None,
-        weight2: Union[np.ndarray, str] = None,
-        *,
-        lmax=-1,
-        apodizetype=1,
-        apodizesigma: Union[float, str] = "NO",
-        thetamax: float = 180,
-        tolerance: float = 5e-8,
-        subav: bool = False,
-        subdipole: bool = False,
-        script=False,
-        cl_out: str = None,
-        spice: str = None,
-        kernel=False,
+    m1: Union[np.ndarray, str, list],
+    m2: Union[np.ndarray, str, list] = None,
+    weight1: Union[np.ndarray, str] = None,
+    weight2: Union[np.ndarray, str] = None,
+    *,
+    lmax=-1,
+    apodizetype=1,
+    apodizesigma: Union[float, str] = "NO",
+    thetamax: float = 180,
+    tolerance: float = 5e-8,
+    subav: bool = False,
+    subdipole: bool = False,
+    script=False,
+    cl_out: str = None,
+    spice: str = None,
+    kernel=False,
 ):
     """
     A python wrapper for PolSpice for temperature (kappa) file only.
@@ -274,20 +274,26 @@ def kspice(  # noqa: C901
         "-subdipole", "NO" if not subdipole else "YES",
         "-corfile", "NO",
         # "-verbosity", "2",
-    ]
+    ]  # fmt: off
     if m2 is None and weight2 is not None:
         # normally we don't want to do this
         m2 = m1
     with tf.TemporaryDirectory(prefix='spice') as tmp:
-        for item, name in zip([m1, weight1, m2, weight2],
-                              ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']):
+        for item, name in zip(
+            [m1, weight1, m2, weight2], ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']
+        ):
             if item is not None:
                 if isinstance(item, str):
                     fname = item
                 else:
                     fname = os.path.join(tmp, f"{name}.fits")
-                    hp.write_map(fname, item, overwrite=True, dtype=dtype,
-                                 partial=True if name.startswith("mapfile") else False)
+                    hp.write_map(
+                        fname,
+                        item,
+                        overwrite=True,
+                        dtype=dtype,
+                        partial=True if name.startswith("mapfile") else False,
+                    )
                 command += [f"-{name}", fname]
         if cl_out is None:
             cl_out = os.path.join(tmp, f"cls.dat")
@@ -329,16 +335,16 @@ def map_or_alm(m):
 
 
 def kappa_spectrum(  # noqa: C901
-        m1: Union[np.ndarray, str, list],
-        m2: Union[np.ndarray, str, list] = None,
-        mask1: Union[np.ndarray, str] = None,
-        mask2: Union[np.ndarray, str] = None,
-        mask_alm=True,
-        g=None,
-        anafast=True,
-        nside=None,
-        cl_out: str = None,
-        **kwargs,
+    m1: Union[np.ndarray, str, list],
+    m2: Union[np.ndarray, str, list] = None,
+    mask1: Union[np.ndarray, str] = None,
+    mask2: Union[np.ndarray, str] = None,
+    mask_alm=True,
+    g=None,
+    anafast=True,
+    nside=None,
+    cl_out: str = None,
+    **kwargs,
 ):
     """
     General power spectrum estimator.
@@ -622,8 +628,9 @@ def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
     else:
         assert len(maps) in (1, 3)
         assert len(fl) in (1, 4)
-        hp.write_map(fname, maps, overwrite=True, dtype=np.float64, partial=True,
-                     extra_header=[('POLCCONV', 'COSMO')])
+        hp.write_map(
+            fname, maps, overwrite=True, dtype=np.float64, partial=True, extra_header=[('POLCCONV', 'COSMO')]
+        )
         with fits.open(fname, mode='update') as hdul:
             colnames = ['flT', 'flE', 'flB', 'flTE']
             hdul.append(

@@ -22,6 +22,7 @@ def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
     return_error: bool=False
         If True, return the error.
     verbose: bool=True
+
     Returns
     -------
     ellb: np.ndarray(nbin)
@@ -42,7 +43,7 @@ def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
         fac = np.ones_like(ell)
     _Cls = np.einsum('ijk,j->ijk', _Cls, fac)
 
-    bin_idx = np.digitize(ell, bins, right=False, )
+    bin_idx = np.digitize(ell, bins, right=False)
     bin_norm = np.bincount(bin_idx, weights=fac)
 
     ellb = np.bincount(bin_idx, ell * fac) / bin_norm
@@ -50,9 +51,11 @@ def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
     slc = slice(1, len(bins))
     if return_error:
         Clb_expand = Clb[:, bin_idx].reshape(nstoke, nell, 1) * fac[None, :, None]
-        Clb_err = np.sqrt(
-            np.array([np.bincount(bin_idx, np.sum(_ ** 2, axis=-1)) for _ in
-                      _Cls - Clb_expand])) / bin_norm / nspec
+        Clb_err = (
+            np.sqrt(np.array([np.bincount(bin_idx, np.sum(_**2, axis=-1)) for _ in _Cls - Clb_expand]))
+            / bin_norm
+            / nspec
+        )
         return ellb[slc], np.squeeze(Clb[:, slc]), np.squeeze(Clb_err[:, slc])
     else:
         return ellb[slc], np.squeeze(Clb[:, slc])
@@ -75,9 +78,11 @@ def bin_Cls(Cls, bins):
 
 def load_Cls(i, config, mvtype, cross=False, average=True, coadd=False, cmbset='a', curl=False):
     """Load the data (xx-type) Cls."""
-    Cls = np.loadtxt(
-        config.p_cls(tag=mvtype, seed1=i, seed2=None, ktype1='xx', ktype2=None if cross else 'xx',
-                     coadd=coadd, cmbset=cmbset, curl=curl))
+    ktype2 = None if cross else 'xx'
+    fname = config.p_cls(
+        tag=mvtype, seed1=i, seed2=None, ktype1='xx', ktype2=ktype2, coadd=coadd, cmbset=cmbset, curl=curl
+    )
+    Cls = np.loadtxt(fname)
     if average:
         return np.mean(Cls[:, 1:], axis=-1)
     else:
@@ -139,8 +144,23 @@ def load_N1(i, config, mvtype, average=True, coadd=False, curl=False):
 
 
 class LensingSpectra:
-    def __init__(self, config, N, mvtype, Lmax=None, resp_type='auto', average=True, N_N1=None, coadd=False,
-                 resp_smooth=None, cmbset='a', do_SAN0=False, do_RDN0=False, do_data=False, curl=False):
+    def __init__(
+        self,
+        config,
+        N,
+        mvtype,
+        Lmax=None,
+        resp_type='auto',
+        average=True,
+        N_N1=None,
+        coadd=False,
+        resp_smooth=None,
+        cmbset='a',
+        do_SAN0=False,
+        do_RDN0=False,
+        do_data=False,
+        curl=False,
+    ):
         """Lensing spectra object.
 
         Parameters
@@ -211,11 +231,11 @@ class LensingSpectra:
 
     @property
     def fsky(self):
-        return np.mean(self.config.mask_ps ** 2)
+        return np.mean(self.config.mask_ps**2)
 
     @property
     def clkk(self):
-        return np.loadtxt(self.config.path(self.config.clkk_in))[:self.Lmax + 1]
+        return np.loadtxt(self.config.path(self.config.clkk_in))[: self.Lmax + 1]
 
     @property
     def N0(self):
@@ -231,11 +251,16 @@ class LensingSpectra:
     def load_resp(self, resp_smooth=None):
         if self.resp_type == 'auto':
             if self.N_N1 > 0:
-                _f = partial(load_Cls_ab, config=self.config, mvtype=self.mvtype, average=self.average,
-                             coadd=self.coadd)
-                Cls_ab = np.array(list(map(_f, range(1, self.N_N1 + 1))))[:, :self.Lmax + 1]
-                self.resp2_cls = Cls_ab / self.clkk[:self.Lmax + 1]
-                self.resp2 = np.mean(Cls_ab / self.clkk[:self.Lmax + 1], axis=0)
+                _f = partial(
+                    load_Cls_ab,
+                    config=self.config,
+                    mvtype=self.mvtype,
+                    average=self.average,
+                    coadd=self.coadd,
+                )
+                Cls_ab = np.array(list(map(_f, range(1, self.N_N1 + 1))))[:, : self.Lmax + 1]
+                self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
+                self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
             else:
                 logging.warning("not loading resp function due to no N1 sims")
                 self.resp2 = np.ones(self.Lmax + 1)
@@ -252,10 +277,10 @@ class LensingSpectra:
                     self.resp2 += loaded['resp'] ** 2
                 elif self.resp_type == 'cross2':
                     self.resp2 += loaded['resp2']
-            self.resp2 = self.resp2[:self.Lmax + 1] / len(bundle_loop)
+            self.resp2 = self.resp2[: self.Lmax + 1] / len(bundle_loop)
 
             if self.resp_type == 'cross':
-                self.resp2 *= loaded['Cl_bias'][:self.Lmax + 1]
+                self.resp2 *= loaded['Cl_bias'][: self.Lmax + 1]
                 # which bundle doesn't matter
         else:
             logging.warning("disable resp function")
@@ -282,58 +307,93 @@ class LensingSpectra:
             map = p.map
             if self.N_N1 > 0:
                 loop = range(1, self.N_N1 + 1)
-                _f = partial(load_N1, config=self.config, mvtype=self.mvtype, average=self.average,
-                             coadd=self.coadd, curl=self.curl)
+                _f = partial(
+                    load_N1,
+                    config=self.config,
+                    mvtype=self.mvtype,
+                    average=self.average,
+                    coadd=self.coadd,
+                    curl=self.curl,
+                )
                 N1s, N1N0s = np.transpose(np.array(list(map(_f, loop))), (1, 0, 2))
 
             loop = range(1, self.N + 1)
-            _f = partial(load_N0, config=self.config, mvtype=self.mvtype, average=self.average, SAN0=False,
-                         coadd=self.coadd, cmbset=self.cmbset, curl=self.curl)
+            _f = partial(
+                load_N0,
+                config=self.config,
+                mvtype=self.mvtype,
+                average=self.average,
+                SAN0=False,
+                coadd=self.coadd,
+                cmbset=self.cmbset,
+                curl=self.curl,
+            )
             N0s = np.array(list(map(_f, loop)))
 
             if self.do_SAN0:
-                _f = partial(load_N0, config=self.config, mvtype=self.mvtype, average=self.average, SAN0=True,
-                             coadd=self.coadd, cmbset=self.cmbset, curl=self.curl)
+                _f = partial(
+                    load_N0,
+                    config=self.config,
+                    mvtype=self.mvtype,
+                    average=self.average,
+                    SAN0=True,
+                    coadd=self.coadd,
+                    cmbset=self.cmbset,
+                    curl=self.curl,
+                )
                 SAN0s = np.array(list(map(_f, loop)))
 
             if self.do_RDN0:
-                _f = partial(load_RDN0, config=self.config, mvtype=self.mvtype, average=self.average,
-                             coadd=self.coadd, cmbset=self.cmbset, curl=self.curl)
+                _f = partial(
+                    load_RDN0,
+                    config=self.config,
+                    mvtype=self.mvtype,
+                    average=self.average,
+                    coadd=self.coadd,
+                    cmbset=self.cmbset,
+                    curl=self.curl,
+                )
                 RDN0s = np.array(list(map(_f, loop))) - N0s
 
-            _f = partial(load_Cls, config=self.config, mvtype=self.mvtype, average=self.average,
-                         coadd=self.coadd,
-                         cmbset=self.cmbset, curl=self.curl)
+            _f = partial(
+                load_Cls,
+                config=self.config,
+                mvtype=self.mvtype,
+                average=self.average,
+                coadd=self.coadd,
+                cmbset=self.cmbset,
+                curl=self.curl,
+            )
             Cls_hat = np.array(list(map(_f, loop)))
 
             if self.do_data:
                 Cl0 = _f(0)
 
-        self.N0s = N0s[:, :self.Lmax + 1] / self.resp2
+        self.N0s = N0s[:, : self.Lmax + 1] / self.resp2
 
         if self.N_N1 > 0:
-            self.N1s = N1s[:, :self.Lmax + 1] / self.resp2
+            self.N1s = N1s[:, : self.Lmax + 1] / self.resp2
         else:
             self.N1s = None
 
-        self.Cls = Cls_hat[:, :self.Lmax + 1] / self.resp2 - self.N0 - self.N1
+        self.Cls = Cls_hat[:, : self.Lmax + 1] / self.resp2 - self.N0 - self.N1
 
         if self.do_RDN0:
-            self.RDN0 = np.mean(RDN0s[:, :self.Lmax + 1] / self.resp2, axis=0)
+            self.RDN0 = np.mean(RDN0s[:, : self.Lmax + 1] / self.resp2, axis=0)
 
         if self.do_data:
-            self.Cl0 = Cl0[:self.Lmax + 1] / self.resp2
+            self.Cl0 = Cl0[: self.Lmax + 1] / self.resp2
             if self.do_RDN0:
                 self.Cl0 -= self.RDN0 + self.N1
             else:
                 self.Cl0 -= self.N0 + self.N1
 
         if self.do_SAN0:
-            self.SAN0s = SAN0s[:, :self.Lmax + 1] / self.resp2
+            self.SAN0s = SAN0s[:, : self.Lmax + 1] / self.resp2
 
     def bin_spec(self, bins, norm_cl=None, resp_err=False):
         if norm_cl is not None:
-            fac = 1 / norm_cl[:self.Lmax + 1]
+            fac = 1 / norm_cl[: self.Lmax + 1]
         else:
             fac = 1
         self.x = (bins[1:] + bins[:-1]) / 2

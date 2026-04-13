@@ -29,22 +29,22 @@ def get_kfile(i, ktype, cmbset, dir_tmp, mvtype, N1, mf_group, bundle):
 
 
 def compute_ps_single(
-        config,
-        bundle1,
-        bundle2,
-        i,
-        mvtype,
-        mvtype2,
-        dir_tmp,
-        ktype1,
-        ktype2,
-        mf_group1,
-        mf_group2,
-        N1,
-        klm2,
-        mask2,
-        cmbset,
-        spice_kwargs=None,
+    config,
+    bundle1,
+    bundle2,
+    i,
+    mvtype,
+    mvtype2,
+    dir_tmp,
+    ktype1,
+    ktype2,
+    mf_group1,
+    mf_group2,
+    N1,
+    klm2,
+    mask2,
+    cmbset,
+    spice_kwargs=None,
 ):
     file1 = get_kfile(i, ktype1, cmbset, dir_tmp, mvtype=mvtype, N1=N1, mf_group=mf_group1, bundle=bundle1)
     file2 = get_kfile(i, ktype2, cmbset, dir_tmp, mvtype=mvtype2, N1=N1, mf_group=mf_group2, bundle=bundle2)
@@ -65,18 +65,18 @@ def compute_ps_single(
 
 
 def compute_ps(
-        mvtype,
-        i,
-        ktype,
-        dir_tmp,
-        mvtype2=None,
-        N1=False,
-        file_mask=None,
-        mf_pair=(0, 0),
-        spice_kwargs=None,
-        klm2=None,
-        do_bundle=False,
-        cmbset=None,
+    mvtype,
+    i,
+    ktype,
+    dir_tmp,
+    mvtype2=None,
+    N1=False,
+    file_mask=None,
+    mf_pair=(0, 0),
+    spice_kwargs=None,
+    klm2=None,
+    do_bundle=False,
+    cmbset=None,
 ):
     """
     Compute power spectrum of kappa map (stored in tmp dir).
@@ -126,15 +126,24 @@ def compute_ps(
     if klm2 is None:
         ktype2 = ktype[2:]
         mask2 = file_mask
-        mask_bias = np.mean(fsky_qe2 ** 2 * config.mask_ps ** 2) / np.mean(config.mask_ps ** 2)
+        mask_bias = np.mean(fsky_qe2**2 * config.mask_ps**2) / np.mean(config.mask_ps**2)
     else:
         # cross spectrum
         ktype2 = None
         mask2 = None
         mask_bias = np.mean(fsky_qe2 * config.mask_ps) / np.mean(config.mask_ps)
 
-    cl_out = config.p_cls(tag=name, seed1=i, seed2=None, ktype1=ktype1, ktype2=ktype2, N1=N1, ext='dat',
-                          cmbset=cmbset, curl=args.curl)
+    cl_out = config.p_cls(
+        tag=name,
+        seed1=i,
+        seed2=None,
+        ktype1=ktype1,
+        ktype2=ktype2,
+        N1=N1,
+        ext='dat',
+        cmbset=cmbset,
+        curl=args.curl,
+    )
     if args.skip and os.path.exists(cl_out):
         logger.warning(f"Skipping {cl_out}")
         return
@@ -195,8 +204,9 @@ def get_mf(i, tag, ktype, y=None, N1=False, group=0, bundle=None, cmbset=None):
         field = gctag if group == 0 else f"{gctag}{group}"
         mf, h = hq.read_map(file_mf, h=True, field=field, dtype=np.float64)
         h = dict(h)
-        assert h['NSIM'] == (
-            i2 - i1 + 1), f"loaded MF ({h['NSIM']}) is inconsistent with configuration settings!"
+        assert h['NSIM'] == (i2 - i1 + 1), (
+            f"loaded MF ({h['NSIM']}) is inconsistent with configuration settings!"
+        )
         nsim = h[f'NSIM'] if group == 0 else h[f'NSIM{group}']
         split_i = h['SPLITIDX']
     else:
@@ -271,16 +281,8 @@ def get_kmap(i, ktype='xx', mvtype='TT', dir_tmp='/tmp', N1=False, mf_group=0, d
                     tag=qe, seed1=s1, seed2=s2, cmbset1=cmbset1, cmbset2=cmbset2, N1=N1, bundle=bundle_pair
                 )
                 y = np.load(file_plm)['glm' if not args.curl else 'clm']
-                mf = get_mf(
-                    i,
-                    tag=qe,
-                    ktype=ktype,
-                    N1=N1,
-                    group=mf_group,
-                    y=y,
-                    bundle=bundle_pair,
-                    cmbset=cmbset if len(cmbset) == 1 else 'a',
-                )
+                mf = get_mf(i, tag=qe, ktype=ktype, N1=N1, group=mf_group, y=y, bundle=bundle_pair,
+                            cmbset=cmbset if len(cmbset) == 1 else 'a')  # fmt: off
                 y = y - mf
 
                 # Response
@@ -368,12 +370,25 @@ def main_std(i, cmbset, kw_ps):
     with tempfile.TemporaryDirectory(prefix='lens_std', dir=tmpdir) as tmp:
         for ktype in ['xy', 'yx', 'xx']:
             for g in set(mf_pair):
-                get_kmap(i, ktype=ktype, mvtype=args.mvtype, dir_tmp=tmp, mf_group=g, do_bundle=do_bundle,
-                         cmbset=cmbset)
+                get_kmap(
+                    i,
+                    ktype=ktype,
+                    mvtype=args.mvtype,
+                    dir_tmp=tmp,
+                    mf_group=g,
+                    do_bundle=do_bundle,
+                    cmbset=cmbset,
+                )
         for ktype in ['xxxx', 'xyyx', 'xyxy']:
             compute_ps(
-                args.mvtype, i, ktype=ktype, **kw_ps, dir_tmp=tmp, mf_pair=mf_pair, do_bundle=do_bundle,
-                cmbset=cmbset
+                args.mvtype,
+                i,
+                ktype=ktype,
+                **kw_ps,
+                dir_tmp=tmp,
+                mf_pair=mf_pair,
+                do_bundle=do_bundle,
+                cmbset=cmbset,
             )
         if args.cross:
             get_kmap(i, ktype='xx', mvtype=args.mvtype, dir_tmp=tmp, mf_group=0)
@@ -389,8 +404,9 @@ def main_n1(i, kw_ps):
             for g in set(mf_pair):
                 get_kmap(i, ktype=ktype, mvtype=args.mvtype, N1=True, dir_tmp=tmp, mf_group=g, cmbset='a')
         for ktype in ['abba', 'abab', 'xyxy', 'xyyx', 'aabb']:
-            compute_ps(args.mvtype, i, ktype=ktype, N1=True, **kw_ps,
-                       dir_tmp=tmp, mf_pair=mf_pair, cmbset='a')
+            compute_ps(
+                args.mvtype, i, ktype=ktype, N1=True, **kw_ps, dir_tmp=tmp, mf_pair=mf_pair, cmbset='a'
+            )
         if args.cross:
             get_kmap(i, ktype='aa', mvtype=args.mvtype, N1=True, dir_tmp=tmp, mf_group=0, cmbset='a')
             compute_ps(
@@ -414,10 +430,10 @@ def main_rdn0(i, cmbset, kw_ps):
         for ktype in ['xx'] if i == 0 else ['x0', '0x']:
             for g in set(mf_pair):
                 get_kmap(i, ktype=ktype, mvtype=args.mvtype, dir_tmp=tmp, mf_group=g, cmbset=cmbset,
-                         do_bundle=do_bundle)
+                         do_bundle=do_bundle)  # fmt: off
         for ktype in ['xxxx'] if i == 0 else ['x0x0', 'x00x', '0xx0', '0x0x']:
             compute_ps(args.mvtype, i, ktype=ktype, **kw_ps, dir_tmp=tmp, mf_pair=mf_pair, cmbset=cmbset,
-                       do_bundle=do_bundle)
+                       do_bundle=do_bundle)  # fmt: off
 
 
 def main(i, cmbset):
@@ -474,7 +490,7 @@ if __name__ == "__main__":
     comm.barrier()
 
     loop = np.arange(args.i1, args.i2 + 1)
-    for _i in loop[comm.rank:: comm.size]:
+    for _i in loop[comm.rank :: comm.size]:
         main(_i, cmbset=args.set)
     comm.barrier()
     if comm.rank == 0:

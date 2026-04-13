@@ -105,7 +105,7 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA
             for tl1 in range(tl1min, tl1max + 1):
                 # print(tl1)
                 # print(qeXY.w[i][0][tl1])
-                cl1[tl1] = qeXY.w[i][0][tl1] * cfunc_ZA(qeZA.w[j][i1_ZA][tl1]) * (2. * tl1 + 1.) * fX[tl1]
+                cl1[tl1] = qeXY.w[i][0][tl1] * cfunc_ZA(qeZA.w[j][i1_ZA][tl1]) * (2.0 * tl1 + 1.0) * fX[tl1]
 
             # l2 part
             tl2min = max(abs(qeXY.s[i][1]), abs(qeZA.s[j][i2_ZA]))
@@ -113,21 +113,22 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA
             cl2 = np.zeros(tl2max + 1, dtype=np.complex128)
 
             for tl2 in range(tl2min, tl2max + 1):
-                cl2[tl2] = qeXY.w[i][1][tl2] * cfunc_ZA(qeZA.w[j][i2_ZA][tl2]) * (2. * tl2 + 1.) * fY[tl2]
+                cl2[tl2] = qeXY.w[i][1][tl2] * cfunc_ZA(qeZA.w[j][i2_ZA][tl2]) * (2.0 * tl2 + 1.0) * fY[tl2]
 
             # glq  = scipy.special.roots_legendre()
             # transform l1 and l2 parts to position space
-            gp1 = glq.cf_from_cl(qeXY.s[i][0], -(-1) ** (conj_ZA) * qeZA.s[j][i1_ZA], cl1)
-            gp2 = glq.cf_from_cl(qeXY.s[i][1], -(-1) ** (conj_ZA) * qeZA.s[j][i2_ZA], cl2)
+            gp1 = glq.cf_from_cl(qeXY.s[i][0], -((-1) ** (conj_ZA)) * qeZA.s[j][i1_ZA], cl1)
+            gp2 = glq.cf_from_cl(qeXY.s[i][1], -((-1) ** (conj_ZA)) * qeZA.s[j][i2_ZA], cl2)
 
             # multiply and return to cl space
-            clL = glq.cl_from_cf(lmax, qeXY.s[i][2], -(-1) ** (conj_ZA) * qeZA.s[j][2], gp1 * gp2)
+            clL = glq.cl_from_cf(lmax, qeXY.s[i][2], -((-1) ** (conj_ZA)) * qeZA.s[j][2], gp1 * gp2)
             parity = np.abs(
-                np.sum(list(qeXY.s[i].values())) + (-1) ** (conj_ZA) * np.sum(list(qeZA.s[j].values())))
+                np.sum(list(qeXY.s[i].values())) + (-1) ** (conj_ZA) * np.sum(list(qeZA.s[j].values()))
+            )
             if fast:
                 assert parity % 2 == 0, parity  # the parity is always even given the lensing symmetry
             for L in range(0, lmax + 1):
-                y = clL[L] * qeXY.w[i][2][L] * cfunc_ZA(qeZA.w[j][2][L]) / (32. * np.pi)
+                y = clL[L] * qeXY.w[i][2][L] * cfunc_ZA(qeZA.w[j][2][L]) / (32.0 * np.pi)
                 ret[L] += y
                 if fast:
                     ret[L] += np.conj(y) * (-1) ** parity

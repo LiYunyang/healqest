@@ -1,4 +1,5 @@
 """Wrapper of the ducc.sht."""
+
 from functools import cached_property
 import os
 import warnings
@@ -11,7 +12,8 @@ from packaging import version
 if version.parse(ducc0.__version__) < version.parse('0.36.0'):
     warnings.warn(
         f"ducc0 version {ducc0.__version__} is lower than the required version 0.36.0. "
-        f"The promised performance gain is not guaranteed.", UserWarning,
+        f"The promised performance gain is not guaranteed.",
+        UserWarning,
     )
 
 import logging
@@ -68,7 +70,7 @@ def unfold_weights(nside, ring=True):
         for i in range(1, n4):
             it = i if i < (n4 - i) else n4 - i
             npix = 4 * (it if it < nside else nside)
-            out[j: j + npix] = w[it - 1]
+            out[j : j + npix] = w[it - 1]
             j += npix
     else:
         npix = hp.nside2npix(nside)
@@ -247,8 +249,21 @@ class Geometry:
                 maps[mask] = 0
         return maps
 
-    def map2alm(self, maps, lmax=None, mmax=None, iter=0, pol=True, use_weights=False,
-                use_pixel_weights=False, nthreads=None, rtol=1e-5, check=True, alms=None, **kwargs):
+    def map2alm(
+        self,
+        maps,
+        lmax=None,
+        mmax=None,
+        iter=0,
+        pol=True,
+        use_weights=False,
+        use_pixel_weights=False,
+        nthreads=None,
+        rtol=1e-5,
+        check=True,
+        alms=None,
+        **kwargs,
+    ):
         """
         Computes the alm of a Healpix map. The input maps must all be in ring ordering.
 
@@ -284,13 +299,15 @@ class Geometry:
             The output alms buffer.
         """
         assert hp.get_nside(maps) == self.nside
-        maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights,
-                                check=check)
+        maps = self.format_maps(
+            maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check
+        )
         nmaps = maps.shape[0]
         kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
         if alms is None:
-            alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])),
-                            dtype=ctype[maps.dtype])
+            alms = np.zeros(
+                (nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype]
+            )
         else:
             if alms.ndim == 1:
                 alms = alms[np.newaxis, :]
@@ -362,25 +379,50 @@ class Geometry:
                 func(map=maps[:1], spin=0, alm=alms[:1], **kw, **kwargs)
         return np.squeeze(maps)
 
-    def map2alm_spin(self, maps, spin, lmax=None, mmax=None, *, iter=0, use_weights=False,
-                     use_pixel_weights=False,
-                     nthreads=None, rtol=1e-5, check=True, **kwargs):
+    def map2alm_spin(
+        self,
+        maps,
+        spin,
+        lmax=None,
+        mmax=None,
+        *,
+        iter=0,
+        use_weights=False,
+        use_pixel_weights=False,
+        nthreads=None,
+        rtol=1e-5,
+        check=True,
+        **kwargs,
+    ):
         if spin == 0:
             return list(
-                -self.map2alm(maps, lmax=lmax, mmax=mmax, pol=False, iter=iter, use_weights=use_weights,
-                              use_pixel_weights=use_pixel_weights, nthreads=nthreads, rtol=rtol,
-                              check=check, **kwargs))
+                -self.map2alm(
+                    maps,
+                    lmax=lmax,
+                    mmax=mmax,
+                    pol=False,
+                    iter=iter,
+                    use_weights=use_weights,
+                    use_pixel_weights=use_pixel_weights,
+                    nthreads=nthreads,
+                    rtol=rtol,
+                    check=check,
+                    **kwargs,
+                )
+            )
         else:
             assert hp.get_nside(maps) == self.nside
-            maps = self.format_maps(maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights,
-                                    check=check)
+            maps = self.format_maps(
+                maps, use_weights=use_weights, use_pixel_weights=use_pixel_weights, check=check
+            )
             nmaps = maps.shape[0]
             assert nmaps == 2, "spin function only accepts 2 maps"
 
             kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
             func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
-            alms = np.zeros((nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])),
-                            dtype=ctype[maps.dtype])
+            alms = np.zeros(
+                (nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype]
+            )
             func(map=maps, spin=np.abs(spin), alm=alms, **kw, **kwargs)
             if not iter:
                 alms *= self.pixelarea
@@ -389,7 +431,8 @@ class Geometry:
     def alm2map_spin(self, alms, spin, lmax=None, mmax=None, *, nthreads=None, maps=None, **kwargs):
         if spin == 0:
             out = list(
-                -self.alm2map(alms, lmax=lmax, mmax=mmax, pol=False, nthreads=nthreads, maps=maps, **kwargs))
+                -self.alm2map(alms, lmax=lmax, mmax=mmax, pol=False, nthreads=nthreads, maps=maps, **kwargs)
+            )
             if maps is not None:
                 # inplace mutation if maps is sent in as a buffer.
                 maps *= -1
@@ -409,16 +452,38 @@ class Geometry:
             func(map=maps, spin=np.abs(spin), alm=alms, **kw, **kwargs)
             return list(maps)
 
-    def smoothing(self, maps_in, fwhm=0.0, sigma=None, beam_window=None, pol=True, iter=0, lmax=None,
-                  mmax=None,
-                  use_weights=False, use_pixel_weights=False, nthreads=None, check=False):
+    def smoothing(
+        self,
+        maps_in,
+        fwhm=0.0,
+        sigma=None,
+        beam_window=None,
+        pol=True,
+        iter=0,
+        lmax=None,
+        mmax=None,
+        use_weights=False,
+        use_pixel_weights=False,
+        nthreads=None,
+        check=False,
+    ):
         if check:
             masks = hp.mask_bad(maps_in)
             maps_in[masks] = 0
-        alms = self.map2alm(maps_in, pol=pol, lmax=lmax, mmax=mmax, iter=iter, use_weights=use_weights,
-                            use_pixel_weights=use_pixel_weights, nthreads=nthreads, check=False)
-        alms = hp.smoothalm(alms, fwhm=fwhm, sigma=sigma, beam_window=beam_window, pol=pol, mmax=mmax,
-                            inplace=True)
+        alms = self.map2alm(
+            maps_in,
+            pol=pol,
+            lmax=lmax,
+            mmax=mmax,
+            iter=iter,
+            use_weights=use_weights,
+            use_pixel_weights=use_pixel_weights,
+            nthreads=nthreads,
+            check=False,
+        )
+        alms = hp.smoothalm(
+            alms, fwhm=fwhm, sigma=sigma, beam_window=beam_window, pol=pol, mmax=mmax, inplace=True
+        )
         maps_out = self.alm2map(alms, pol=pol, nthreads=nthreads)
         if check:
             maps_out[masks] = hp.UNSEEN
@@ -716,12 +781,10 @@ def alm2lens(alms, plm, nside, g=None, **kwargs):
 
     if alms.shape[0] == 3:
         al2p = -np.sqrt((ell - 2) * (ell + 3) / 2)
-        Zp = alm2map_spin([hp.almxfl(alms[1], al2p),
-                           hp.almxfl(alms[2], al2p)], spin=3, lmax=lmax, **kwargs)
+        Zp = alm2map_spin([hp.almxfl(alms[1], al2p), hp.almxfl(alms[2], al2p)], spin=3, lmax=lmax, **kwargs)
 
         al2m = -np.sqrt((ell + 2) * (ell - 1) / 2)
-        Zm = alm2map_spin([hp.almxfl(alms[1], al2m),
-                           hp.almxfl(alms[2], al2m)], spin=1, lmax=lmax, **kwargs)
+        Zm = alm2map_spin([hp.almxfl(alms[1], al2m), hp.almxfl(alms[2], al2m)], spin=1, lmax=lmax, **kwargs)
 
         out[1] = (p[1] * Zm[1] - p[0] * Zm[0]) + (p[0] * Zp[0] + p[1] * Zp[1])
         out[2] = -(p[0] * Zm[1] + p[1] * Zm[0]) + (p[0] * Zp[1] - p[1] * Zp[0])
@@ -763,7 +826,7 @@ def reduce_lmax(alm, lmax=4000):
     for i in range(0, lmax + 1):
         oldf = oldi + lmaxin + 1 - i
         newf = newi + lmax + 1 - i
-        almout[..., newi:newf] = alm[..., oldi:oldf - dl]
+        almout[..., newi:newf] = alm[..., oldi : oldf - dl]
         oldi = oldf
         newi = newf
     return almout
@@ -776,7 +839,7 @@ def alm2mat(alm, lmax=None):
     idx = 0
     for m in range(lmax + 1):
         n = lmax + 1 - m
-        out[m, m: m + n] = alm[idx: idx + n]
+        out[m, m : m + n] = alm[idx : idx + n]
         idx += n
     return out
 
@@ -803,12 +866,14 @@ def get_almvar(wl0, lmax, Lmax=30):
         The variance per alm mode up to lmax.
     """
     from importlib import resources
+
     fname = str(resources.files('healqest') / 'data' / 'w3jllmm.npy')
     try:
         load = np.load(fname, mmap_mode='r')
     except FileNotFoundError:
         raise FileNotFoundError(
-            "Could not find the precomputed w3jllmm.npy file.  Please generate from scripts.")
+            "Could not find the precomputed w3jllmm.npy file.  Please generate from scripts."
+        )
     _lmax = hp.Alm.getlmax(load.shape[0])
     _Lmax = load.shape[1] - 1
     if lmax > _lmax:

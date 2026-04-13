@@ -8,7 +8,8 @@ import operator
 
 def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
     """
-    The returned error is the "error of the mean"
+    The returned error is the "error of the mean".
+
     Parameters
     ----------
     Cls: np.ndarray(nspec, nstokes, nell) or
@@ -26,7 +27,7 @@ def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
     ellb: np.ndarray(nbin)
     Clsb: np.ndarray(nstokes, nbin)
     """
-    if np.array(Cls).ndim==3:
+    if np.array(Cls).ndim == 3:
         _Cls = np.transpose(Cls, (1, 2, 0))
     else:
         _Cls = np.atleast_3d(Cls)
@@ -36,7 +37,7 @@ def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
 
     ell = np.arange(nell)
     if weight:
-        fac = 2*ell + 1
+        fac = 2 * ell + 1
     else:
         fac = np.ones_like(ell)
     _Cls = np.einsum('ijk,j->ijk', _Cls, fac)
@@ -44,35 +45,39 @@ def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
     bin_idx = np.digitize(ell, bins, right=False, )
     bin_norm = np.bincount(bin_idx, weights=fac)
 
-    ellb = np.bincount(bin_idx, ell*fac)/bin_norm
-    Clb = np.array([np.bincount(bin_idx, np.mean(_, axis=-1)) for _ in _Cls])/bin_norm
+    ellb = np.bincount(bin_idx, ell * fac) / bin_norm
+    Clb = np.array([np.bincount(bin_idx, np.mean(_, axis=-1)) for _ in _Cls]) / bin_norm
     slc = slice(1, len(bins))
     if return_error:
-        Clb_expand = Clb[:, bin_idx].reshape(nstoke, nell, 1)*fac[None, :, None]
+        Clb_expand = Clb[:, bin_idx].reshape(nstoke, nell, 1) * fac[None, :, None]
         Clb_err = np.sqrt(
-            np.array([np.bincount(bin_idx, np.sum(_**2, axis=-1)) for _ in _Cls - Clb_expand]))/bin_norm/nspec
+            np.array([np.bincount(bin_idx, np.sum(_ ** 2, axis=-1)) for _ in
+                      _Cls - Clb_expand])) / bin_norm / nspec
         return ellb[slc], np.squeeze(Clb[:, slc]), np.squeeze(Clb_err[:, slc])
     else:
         return ellb[slc], np.squeeze(Clb[:, slc])
 
 
 def bin_Cls(Cls, bins):
-    """Return bin center, bined Cls, error on the mean and cov
+    """Return bin center, bined Cls, error on the mean and cov.
 
+    Parameters
+    ----------
     Cls: np.ndarray
         shape (nspec, nell) or (nell, )
     """
-    x = (bins[1:] + bins[:-1])/2
+    x = (bins[1:] + bins[:-1]) / 2
     Cbs = np.array([bin_spectrum(_, bins=bins, verbose=False)[1] for _ in np.atleast_2d(Cls)])
     cov = np.cov(Cbs, rowvar=False)
-    err = np.std(Cbs, axis=0)/np.sqrt(Cls.shape[0])
+    err = np.std(Cbs, axis=0) / np.sqrt(Cls.shape[0])
     return x, np.mean(Cbs, axis=0), err, cov
 
 
 def load_Cls(i, config, mvtype, cross=False, average=True, coadd=False, cmbset='a', curl=False):
-    """load the data (xx-type) Cls"""
-    Cls = np.loadtxt(config.p_cls(tag=mvtype, seed1=i, seed2=None, ktype1='xx', ktype2=None if cross else 'xx',
-                                  coadd=coadd, cmbset=cmbset, curl=curl))
+    """Load the data (xx-type) Cls."""
+    Cls = np.loadtxt(
+        config.p_cls(tag=mvtype, seed1=i, seed2=None, ktype1='xx', ktype2=None if cross else 'xx',
+                     coadd=coadd, cmbset=cmbset, curl=curl))
     if average:
         return np.mean(Cls[:, 1:], axis=-1)
     else:
@@ -103,7 +108,6 @@ def load_N0(i, config, mvtype, average=True, SAN0=False, coadd=False, cmbset='a'
 
 
 def load_RDN0(i, config, mvtype, average=True, coadd=False, cmbset='a', curl=False):
-
     def load(fname):
         dat = np.loadtxt(fname)
         if average:
@@ -111,7 +115,7 @@ def load_RDN0(i, config, mvtype, average=True, coadd=False, cmbset='a', curl=Fal
         else:
             return dat[:, -1]
 
-    tot =  load(config.p_cls(mvtype, i, None, 'x0', 'x0', coadd=coadd, cmbset=cmbset, curl=curl))
+    tot = load(config.p_cls(mvtype, i, None, 'x0', 'x0', coadd=coadd, cmbset=cmbset, curl=curl))
     tot += load(config.p_cls(mvtype, i, None, 'x0', '0x', coadd=coadd, cmbset=cmbset, curl=curl))
     tot += load(config.p_cls(mvtype, i, None, '0x', '0x', coadd=coadd, cmbset=cmbset, curl=curl))
     tot += load(config.p_cls(mvtype, i, None, '0x', 'x0', coadd=coadd, cmbset=cmbset, curl=curl))
@@ -135,10 +139,10 @@ def load_N1(i, config, mvtype, average=True, coadd=False, curl=False):
 
 
 class LensingSpectra:
-    def __init__(self, config, N, mvtype, Lmax=None, resp_type='auto',
-                 average=True, N_N1=None, coadd=False, resp_smooth=None, cmbset='a',
-                 do_SAN0=False, do_RDN0=False, do_data=False, curl=False):
-        """
+    def __init__(self, config, N, mvtype, Lmax=None, resp_type='auto', average=True, N_N1=None, coadd=False,
+                 resp_smooth=None, cmbset='a', do_SAN0=False, do_RDN0=False, do_data=False, curl=False):
+        """Lensing spectra object.
+
         Parameters
         ----------
         N: int
@@ -155,8 +159,8 @@ class LensingSpectra:
             If True, average all spectra in the file, otherwise return the last
             column.
         coadd: bool
-            special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing reconstruction
-            map is coadded before taking spectra.
+            Special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing
+            reconstruction map is coadded before taking spectra.
         """
         self.config = config
         self.cmbset = cmbset
@@ -222,19 +226,19 @@ class LensingSpectra:
         if self.N1s is not None:
             return np.mean(self.N1s, axis=0)
         else:
-            return np.zeros(self.Lmax+1)
+            return np.zeros(self.Lmax + 1)
 
     def load_resp(self, resp_smooth=None):
-        if self.resp_type=='auto':
+        if self.resp_type == 'auto':
             if self.N_N1 > 0:
                 _f = partial(load_Cls_ab, config=self.config, mvtype=self.mvtype, average=self.average,
                              coadd=self.coadd)
                 Cls_ab = np.array(list(map(_f, range(1, self.N_N1 + 1))))[:, :self.Lmax + 1]
-                self.resp2_cls = Cls_ab/self.clkk[:self.Lmax + 1]
-                self.resp2 = np.mean(Cls_ab/self.clkk[:self.Lmax + 1], axis=0)
+                self.resp2_cls = Cls_ab / self.clkk[:self.Lmax + 1]
+                self.resp2 = np.mean(Cls_ab / self.clkk[:self.Lmax + 1], axis=0)
             else:
                 logging.warning("not loading resp function due to no N1 sims")
-                self.resp2 = np.ones(self.Lmax+1)
+                self.resp2 = np.ones(self.Lmax + 1)
                 return
         elif self.resp_type in ['cross', 'cross2']:
             if self.config.nbundle is None:
@@ -244,13 +248,13 @@ class LensingSpectra:
             self.resp2 = 0
             for b in bundle_loop:
                 loaded = np.load(self.config.p_resp(self.mvtype, bundle=b))
-                if self.resp_type=='cross':
+                if self.resp_type == 'cross':
                     self.resp2 += loaded['resp'] ** 2
-                elif self.resp_type=='cross2':
+                elif self.resp_type == 'cross2':
                     self.resp2 += loaded['resp2']
-            self.resp2 = self.resp2[:self.Lmax + 1]/len(bundle_loop)
+            self.resp2 = self.resp2[:self.Lmax + 1] / len(bundle_loop)
 
-            if self.resp_type=='cross':
+            if self.resp_type == 'cross':
                 self.resp2 *= loaded['Cl_bias'][:self.Lmax + 1]
                 # which bundle doesn't matter
         else:
@@ -267,16 +271,16 @@ class LensingSpectra:
 
     @property
     def snr(self):
-        hartlap = self.N/(self.N - self.cov.shape[0] - 1)
+        hartlap = self.N / (self.N - self.cov.shape[0] - 1)
         # hartlap = 1
-        snr = np.sqrt(np.sum(np.linalg.inv(self.cov)/hartlap))
+        snr = np.sqrt(np.sum(np.linalg.inv(self.cov) / hartlap))
         return snr
 
     def load(self):
         self.offload()
         with multiprocessing.Pool(10) as p:
             map = p.map
-            if self.N_N1>0:
+            if self.N_N1 > 0:
                 loop = range(1, self.N_N1 + 1)
                 _f = partial(load_N1, config=self.config, mvtype=self.mvtype, average=self.average,
                              coadd=self.coadd, curl=self.curl)
@@ -297,76 +301,77 @@ class LensingSpectra:
                              coadd=self.coadd, cmbset=self.cmbset, curl=self.curl)
                 RDN0s = np.array(list(map(_f, loop))) - N0s
 
-            _f = partial(load_Cls, config=self.config, mvtype=self.mvtype, average=self.average, coadd=self.coadd,
+            _f = partial(load_Cls, config=self.config, mvtype=self.mvtype, average=self.average,
+                         coadd=self.coadd,
                          cmbset=self.cmbset, curl=self.curl)
             Cls_hat = np.array(list(map(_f, loop)))
 
             if self.do_data:
                 Cl0 = _f(0)
 
-        self.N0s = N0s[:, :self.Lmax + 1]/self.resp2
+        self.N0s = N0s[:, :self.Lmax + 1] / self.resp2
 
         if self.N_N1 > 0:
-            self.N1s = N1s[:, :self.Lmax + 1]/self.resp2
+            self.N1s = N1s[:, :self.Lmax + 1] / self.resp2
         else:
             self.N1s = None
 
-        self.Cls = Cls_hat[:, :self.Lmax + 1]/self.resp2 - self.N0 - self.N1
+        self.Cls = Cls_hat[:, :self.Lmax + 1] / self.resp2 - self.N0 - self.N1
 
         if self.do_RDN0:
-            self.RDN0 = np.mean(RDN0s[:, :self.Lmax + 1]/self.resp2, axis=0)
+            self.RDN0 = np.mean(RDN0s[:, :self.Lmax + 1] / self.resp2, axis=0)
 
         if self.do_data:
-            self.Cl0 = Cl0[:self.Lmax + 1]/self.resp2
+            self.Cl0 = Cl0[:self.Lmax + 1] / self.resp2
             if self.do_RDN0:
                 self.Cl0 -= self.RDN0 + self.N1
             else:
                 self.Cl0 -= self.N0 + self.N1
 
         if self.do_SAN0:
-            self.SAN0s = SAN0s[:, :self.Lmax + 1]/self.resp2
+            self.SAN0s = SAN0s[:, :self.Lmax + 1] / self.resp2
 
     def bin_spec(self, bins, norm_cl=None, resp_err=False):
         if norm_cl is not None:
-            fac = 1/norm_cl[:self.Lmax + 1]
+            fac = 1 / norm_cl[:self.Lmax + 1]
         else:
             fac = 1
-        self.x = (bins[1:] + bins[:-1])/2
-        N0cov = bin_Cls(self.N0s*fac, bins)[3]
-        if self.N_N1 >0:
-            N1cov = bin_Cls(self.N1s*fac, bins)[3]
+        self.x = (bins[1:] + bins[:-1]) / 2
+        N0cov = bin_Cls(self.N0s * fac, bins)[3]
+        if self.N_N1 > 0:
+            N1cov = bin_Cls(self.N1s * fac, bins)[3]
         else:
             N1cov = np.diag(np.zeros(len(self.x)))
 
         if self.do_data:
-            self.y0 = bin_Cls(self.Cl0*fac, bins=bins)[1]
-        self.y, _, self.cov = bin_Cls(self.Cls*fac, bins=bins)[1:]
+            self.y0 = bin_Cls(self.Cl0 * fac, bins=bins)[1]
+        self.y, _, self.cov = bin_Cls(self.Cls * fac, bins=bins)[1:]
         if self.do_SAN0:
             cls = self.Cls + self.N0 - self.SAN0s  # replace N0 with the per-realization SAN0
-            self.cov = bin_Cls(cls*fac, bins=bins)[-1]
-        self.cov_sys = N0cov/self.N + N1cov/self.N_N1  # systematic err from subtracting N0/N1
+            self.cov = bin_Cls(cls * fac, bins=bins)[-1]
+        self.cov_sys = N0cov / self.N + N1cov / self.N_N1  # systematic err from subtracting N0/N1
 
         if resp_err:
             resp_bin, *_, resp_cov = bin_Cls(self.resp2_cls, bins=bins)[1:]
-            k = self.y/resp_bin
-            resp_cov = np.einsum('ij,i,j->ij', resp_cov/self.N_N1, k, k)
+            k = self.y / resp_bin
+            resp_cov = np.einsum('ij,i,j->ij', resp_cov / self.N_N1, k, k)
             self.cov_sys += resp_cov
 
         self.cov = self.cov + self.cov_sys
         self.yerr = np.sqrt(np.diag(self.cov))
-        self.yerr_mean = np.sqrt(np.diag(self.cov-self.cov_sys)/self.N + np.diag(self.cov_sys))
+        self.yerr_mean = np.sqrt(np.diag(self.cov - self.cov_sys) / self.N + np.diag(self.cov_sys))
 
     def _add_or_sub(self, other, op):
         new = LensingSpectra.__new__(LensingSpectra)
 
         for key in ['N', 'N_N1', 'do_data', 'do_SAN0', 'Lmax']:
-            assert getattr(self, key)==getattr(other, key)
+            assert getattr(self, key) == getattr(other, key)
             setattr(new, key, getattr(self, key))
 
         new.config = self.config
         new.N0s = op(self.N0s, other.N0s)
         new.Cls = op(self.Cls, other.Cls)
-        if self.N_N1 >0:
+        if self.N_N1 > 0:
             new.N1s = op(self.N1s, other.N1s)
         if self.do_data:
             new.Cl0 = op(self.Cl0, other.Cl0)

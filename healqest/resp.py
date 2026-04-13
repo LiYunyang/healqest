@@ -3,13 +3,14 @@
 import numpy as np
 from healqest import wignerd
 import logging
+
 logger = logging.getLogger(__name__)
 
 
 def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY, fast=False):
-    """ compute the response of this estimator to the stats anisotropy encapsulated by a second estimator qeZA,
-        
-        R(L) = 1/2 \int{d^2 l_X} \int{d_2 l_Y} W^{XY} W^{ZA} fX(l_X) fY(l_Y).
+    r"""Compute the response of this estimator to the stats anisotropy in the second estimator qeZA.
+
+    R(L) = 1/2 \int{d^2 l_X} \int{d_2 l_Y} W^{XY} W^{ZA} fX(l_X) fY(l_Y).
     with l_X+l_Y=L and fX(l_X) fY(l_y) represent filters which are
     diagonal in Fourier space applied to the X and Y fields.
     dividing the output of self.eval() by this response gives a properly
@@ -22,7 +23,8 @@ def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY, fast=False):
 
 
 def fill_clqq_fullsky(qeXY, ret, fXX, fXY, fYY):
-    """ compute the ensemble-averaged auto-power < |q^{XY}(L)[\bar{X}, \bar{Y}]|^2 >,
+    r"""Compute the ensemble-averaged auto-power < |q^{XY}(L)[\bar{X}, \bar{Y}]|^2 >.
+
     given estimates of the auto- and cross-spectra of \bar{X} and \bar{Y}.
     Convinient for calculating single-estimator analytic or semi-analytic N0.
 
@@ -39,7 +41,8 @@ def fill_clqq_fullsky(qeXY, ret, fXX, fXY, fYY):
 
 
 def fill_clq1q2_fullsky(qeXY, qeZA, ret, fXZ, fYA, fXA, fYZ, fast=False):
-    """ same as fill_clqq_fullsky but for cross-estimator pairs qeXY and qeZA;
+    r"""Same as fill_clqq_fullsky but for cross-estimator pairs qeXY and qeZA.
+
     X,Y,Z,A denote the input map (e.g. T,E,B).
     Needed for multi-pair estimator analytic or semi-analytic N0
          * ret             = complex numpy array whose length (lmax+1) defines the maximum multipole
@@ -56,22 +59,27 @@ def fill_clq1q2_fullsky(qeXY, qeZA, ret, fXZ, fYA, fXA, fYZ, fast=False):
 
 
 def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA=False, fast=False):
-    """ a full-sky version of qe_cov_fill_helper_flatsky.
-    Parameters:
+    """A full-sky version of qe_cov_fill_helper_flatsky.
+
+    Parameters
+    ----------
     qeXY, qeZA:
         first/second estimators.
     ret:
-        complex array in which to store results (the length of this array, lmax+1, defines the maximum multipole).
-    fX, fY = 1D real arrays representing the filter functions for the X and Y fields.
+        complex array in which to store results (the length of this array, lmax+1, defines the maximum
+        multipole).
+    fX, fY: array
+        1D real arrays representing the filter functions for the X and Y fields.
     switch_ZA: bool=False
         change W_{ZA}^{j}(l_X, l_Y, L) -> W_{ZA}^{j, ZA}(l_Y, l_X, L) .
     conj_ZA: bool=False
         take the complex conjugate of the W_{ZA} weight function. W_{ZA}^{j} -> W^{ZA}^{* j}.
     fast: bool=False
-        If True, save the computing by 2x. This leverage the ordering of the weights from `weights_plus`. This works
-        because the weights in `weights_plus` are grouped such that the second half has `w->conj(w) (-1)^s` and
-        `s->-s` wtr to the first half. Given the symmetry of the Wigner d matrix (djmm' = (-1)^(m-m') dj-m -m'),
-        half of the computation can be omitted by applying the correct parity factors based on the spins.
+        If True, save the computing by 2x. This leverage the ordering of the weights from `weights_plus`.
+        This works because the weights in `weights_plus` are grouped such that the second half has
+        `w->conj(w) (-1)^s` and `s->-s` wtr to the first half. Given the symmetry of the Wigner d matrix
+        (djmm' = (-1)^(m-m') dj-m -m'), half of the computation can be omitted by applying the correct parity
+        factors based on the spins.
     """
     if fast:
         logger.warning("Fast mode resp calc -- make sure `weights_plus` is used!")
@@ -86,9 +94,9 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA
     tl1max = min([qeXY.lmax, qeZA.lmax, lmax_fX])
     tl2max = min([qeXY.lmax, qeZA.lmax, lmax_fY])
 
-    glq = wignerd.gauss_legendre_quadrature((tl1max + tl2max + lmax)/2 + 1)
+    glq = wignerd.gauss_legendre_quadrature((tl1max + tl2max + lmax) / 2 + 1)
     for i in range(0, qeXY.ntrm):
-        for j in range(0, qeZA.ntrm if not fast else qeZA.ntrm//2):
+        for j in range(0, qeZA.ntrm if not fast else qeZA.ntrm // 2):
             # l1 part
             tl1min = max(abs(qeXY.s[i][0]), abs(qeZA.s[j][i1_ZA]))
 
@@ -97,7 +105,7 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA
             for tl1 in range(tl1min, tl1max + 1):
                 # print(tl1)
                 # print(qeXY.w[i][0][tl1])
-                cl1[tl1] = qeXY.w[i][0][tl1]*cfunc_ZA(qeZA.w[j][i1_ZA][tl1])*(2.*tl1 + 1.)*fX[tl1]
+                cl1[tl1] = qeXY.w[i][0][tl1] * cfunc_ZA(qeZA.w[j][i1_ZA][tl1]) * (2. * tl1 + 1.) * fX[tl1]
 
             # l2 part
             tl2min = max(abs(qeXY.s[i][1]), abs(qeZA.s[j][i2_ZA]))
@@ -105,26 +113,28 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, ret, fX, fY, switch_ZA=False, conj_ZA
             cl2 = np.zeros(tl2max + 1, dtype=np.complex128)
 
             for tl2 in range(tl2min, tl2max + 1):
-                cl2[tl2] = qeXY.w[i][1][tl2]*cfunc_ZA(qeZA.w[j][i2_ZA][tl2])*(2.*tl2 + 1.)*fY[tl2]
+                cl2[tl2] = qeXY.w[i][1][tl2] * cfunc_ZA(qeZA.w[j][i2_ZA][tl2]) * (2. * tl2 + 1.) * fY[tl2]
 
             # glq  = scipy.special.roots_legendre()
             # transform l1 and l2 parts to position space
-            gp1 = glq.cf_from_cl(qeXY.s[i][0], -(-1)**(conj_ZA)*qeZA.s[j][i1_ZA], cl1)
-            gp2 = glq.cf_from_cl(qeXY.s[i][1], -(-1)**(conj_ZA)*qeZA.s[j][i2_ZA], cl2)
+            gp1 = glq.cf_from_cl(qeXY.s[i][0], -(-1) ** (conj_ZA) * qeZA.s[j][i1_ZA], cl1)
+            gp2 = glq.cf_from_cl(qeXY.s[i][1], -(-1) ** (conj_ZA) * qeZA.s[j][i2_ZA], cl2)
 
             # multiply and return to cl space
-            clL = glq.cl_from_cf(lmax, qeXY.s[i][2], -(-1)**(conj_ZA)*qeZA.s[j][2], gp1*gp2)
-            parity = np.abs(np.sum(list(qeXY.s[i].values()))+(-1)**(conj_ZA)*np.sum(list(qeZA.s[j].values())))
+            clL = glq.cl_from_cf(lmax, qeXY.s[i][2], -(-1) ** (conj_ZA) * qeZA.s[j][2], gp1 * gp2)
+            parity = np.abs(
+                np.sum(list(qeXY.s[i].values())) + (-1) ** (conj_ZA) * np.sum(list(qeZA.s[j].values())))
             if fast:
-                assert parity %2 ==0, parity  # the parity is always even given the lensing symmetry
+                assert parity % 2 == 0, parity  # the parity is always even given the lensing symmetry
             for L in range(0, lmax + 1):
-                y = clL[L]*qeXY.w[i][2][L]*cfunc_ZA(qeZA.w[j][2][L])/(32.*np.pi)
+                y = clL[L] * qeXY.w[i][2][L] * cfunc_ZA(qeZA.w[j][2][L]) / (32. * np.pi)
                 ret[L] += y
                 if fast:
-                    ret[L] += np.conj(y) * (-1)**parity
+                    ret[L] += np.conj(y) * (-1) ** parity
     # return ret
 
 
 def fill_resp(qeXY, ret, fX, fY, qeZA=None):
-    if qeZA==None: qeZA = qeXY
+    if qeZA is None:
+        qeZA = qeXY
     return fill_resp_fullsky(qeXY, qeZA, ret, fX, fY)

@@ -594,14 +594,14 @@ class Config:
     def flT(self):
         """QE lmin and lmax selection cut for T."""
         fl = np.zeros((self.lmax + 1)).astype(float)
-        fl[self.lminT : self.lmaxT + 1] = 1
+        fl[self.lminT: self.lmaxT + 1] = 1
         return fl
 
     @property
     def flP(self):
         """QE lmin and lmax selection cut for P."""
         fl = np.zeros((self.lmax + 1)).astype(float)
-        fl[self.lminP : self.lmaxP + 1] = 1
+        fl[self.lminP: self.lmaxP + 1] = 1
         return fl
 
     # === setup masks ===
@@ -696,16 +696,16 @@ class Config:
         return self.path(self.cinvdir, subdir, fname)
 
     def p_plm(
-        self,
-        tag=None,
-        seed1=None,
-        seed2=None,
-        cmbset1=None,
-        cmbset2=None,
-        N1=False,
-        stack_type=None,
-        bundle=None,
-        cmbset=None,
+            self,
+            tag=None,
+            seed1=None,
+            seed2=None,
+            cmbset1=None,
+            cmbset2=None,
+            N1=False,
+            stack_type=None,
+            bundle=None,
+            cmbset=None,
     ):
         """
         Return paths to plm(stacked) files.
@@ -748,20 +748,8 @@ class Config:
         out = self.path(self.recdir, subdir, fname)
         return out
 
-    def p_cls(
-        self,
-        tag,
-        seed1,
-        seed2,
-        ktype1,
-        ktype2,
-        N1=False,
-        SAN0=False,
-        ext='dat',
-        coadd=False,
-        cmbset='a',
-        curl=False,
-    ):
+    def p_cls(self, tag, seed1, seed2, ktype1, ktype2, N1=False, SAN0=False, ext='dat', coadd=False,
+              cmbset='a', curl=False):
         """Paths to power spectra files.
 
         Parameters
@@ -806,16 +794,16 @@ class Config:
 
     @staticmethod
     def f_tmp(
-        tag,
-        seed1=None,
-        seed2=None,
-        cmbset1=None,
-        cmbset2=None,
-        ktype=None,
-        N1=False,
-        mf_group=0,
-        bundle=None,
-        curl=False,
+            tag,
+            seed1=None,
+            seed2=None,
+            cmbset1=None,
+            cmbset2=None,
+            ktype=None,
+            N1=False,
+            mf_group=0,
+            bundle=None,
+            curl=False,
     ):
         """
         Return file name of a temprary file for kappa maps.

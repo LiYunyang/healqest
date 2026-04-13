@@ -47,7 +47,7 @@ def reduce_lmax(alm, lmax=4000):
     for i in range(0, lmax + 1):
         oldf = oldi + lmaxin + 1 - i
         newf = newi + lmax + 1 - i
-        almout[..., newi:newf] = alm[..., oldi : oldf - dl]
+        almout[..., newi:newf] = alm[..., oldi: oldf - dl]
         oldi = oldf
         newi = newf
     return almout
@@ -80,7 +80,7 @@ def get_unlensedcls(file, lmax=2000):
     fac = ell * (ell + 1) / 2 / np.pi
     fac_p = np.sqrt(ell * (ell + 1))
     cls = dls / fac
-    cls[4] /= fac_p**2
+    cls[4] /= fac_p ** 2
     cls[5:] /= fac_p
 
     ell = np.concatenate([[0, 1], ell])[: lmax + 1]
@@ -154,22 +154,22 @@ def get_qes(qeset):
 
 
 def kspice(  # noqa: C901
-    m1: Union[np.ndarray, str, list],
-    m2: Union[np.ndarray, str, list] = None,
-    weight1: Union[np.ndarray, str] = None,
-    weight2: Union[np.ndarray, str] = None,
-    *,
-    lmax=-1,
-    apodizetype=1,
-    apodizesigma: Union[float, str] = "NO",
-    thetamax: float = 180,
-    tolerance: float = 5e-8,
-    subav: bool = False,
-    subdipole: bool = False,
-    script=False,
-    cl_out: str = None,
-    spice: str = None,
-    kernel=False,
+        m1: Union[np.ndarray, str, list],
+        m2: Union[np.ndarray, str, list] = None,
+        weight1: Union[np.ndarray, str] = None,
+        weight2: Union[np.ndarray, str] = None,
+        *,
+        lmax=-1,
+        apodizetype=1,
+        apodizesigma: Union[float, str] = "NO",
+        thetamax: float = 180,
+        tolerance: float = 5e-8,
+        subav: bool = False,
+        subdipole: bool = False,
+        script=False,
+        cl_out: str = None,
+        spice: str = None,
+        kernel=False,
 ):
     """
     A python wrapper for PolSpice for temperature (kappa) file only.
@@ -258,57 +258,36 @@ def kspice(  # noqa: C901
 
     command = [
         spice,
-        "-verbosity",
-        "0",
-        "-nlmax",
-        str(lmax),
-        "-overwrite",
-        "YES",
-        "-polarization",
-        "NO",
-        "-pixelfile",
-        "NO",
-        "-pixelfile2",
-        "NO",
-        "-decouple",
-        "YES",
-        "-symmetric_cl",
-        "NO",
-        "-tolerance",
-        str(tolerance),
-        "-apodizetype",
-        str(apodizetype),
-        "-apodizesigma",
-        str(apodizesigma),
-        "-thetamax",
-        str(thetamax),
-        "-subav",
-        "NO" if not subav else "YES",
-        "-subdipole",
-        "NO" if not subdipole else "YES",
-        "-corfile",
-        "NO",
+        "-verbosity", "0",
+        "-nlmax", str(lmax),
+        "-overwrite", "YES",
+        "-polarization", "NO",
+        "-pixelfile", "NO",
+        "-pixelfile2", "NO",
+        "-decouple", "YES",
+        "-symmetric_cl", "NO",
+        "-tolerance", str(tolerance),
+        "-apodizetype", str(apodizetype),
+        "-apodizesigma", str(apodizesigma),
+        "-thetamax", str(thetamax),
+        "-subav", "NO" if not subav else "YES",
+        "-subdipole", "NO" if not subdipole else "YES",
+        "-corfile", "NO",
         # "-verbosity", "2",
     ]
     if m2 is None and weight2 is not None:
         # normally we don't want to do this
         m2 = m1
     with tf.TemporaryDirectory(prefix='spice') as tmp:
-        for item, name in zip(
-            [m1, weight1, m2, weight2], ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']
-        ):
+        for item, name in zip([m1, weight1, m2, weight2],
+                              ['mapfile', 'weightfile', 'mapfile2', 'weightfile2']):
             if item is not None:
                 if isinstance(item, str):
                     fname = item
                 else:
                     fname = os.path.join(tmp, f"{name}.fits")
-                    hp.write_map(
-                        fname,
-                        item,
-                        overwrite=True,
-                        dtype=dtype,
-                        partial=True if name.startswith("mapfile") else False,
-                    )
+                    hp.write_map(fname, item, overwrite=True, dtype=dtype,
+                                 partial=True if name.startswith("mapfile") else False)
                 command += [f"-{name}", fname]
         if cl_out is None:
             cl_out = os.path.join(tmp, f"cls.dat")
@@ -350,16 +329,16 @@ def map_or_alm(m):
 
 
 def kappa_spectrum(  # noqa: C901
-    m1: Union[np.ndarray, str, list],
-    m2: Union[np.ndarray, str, list] = None,
-    mask1: Union[np.ndarray, str] = None,
-    mask2: Union[np.ndarray, str] = None,
-    mask_alm=True,
-    g=None,
-    anafast=True,
-    nside=None,
-    cl_out: str = None,
-    **kwargs,
+        m1: Union[np.ndarray, str, list],
+        m2: Union[np.ndarray, str, list] = None,
+        mask1: Union[np.ndarray, str] = None,
+        mask2: Union[np.ndarray, str] = None,
+        mask_alm=True,
+        g=None,
+        anafast=True,
+        nside=None,
+        cl_out: str = None,
+        **kwargs,
 ):
     """
     General power spectrum estimator.
@@ -450,6 +429,20 @@ def kappa_spectrum(  # noqa: C901
         return kspice(m1=data['m1'], m2=data['m2'], weight1=mask1, weight2=mask2, cl_out=cl_out, **kwargs)
 
 
+def find_index_file(fname, max_depth=3):
+    idx_dir = fname
+    c = max_depth
+    while c > 0:
+        idx_dir = os.path.dirname(idx_dir)
+        try:
+            loaded = np.load(os.path.join(idx_dir, 'index.npz'))
+            return loaded
+        except FileNotFoundError:
+            c -= 1
+    else:
+        raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
+
+
 def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
     """A wrapper to read the partial maps, as fits or npy files.
 
@@ -476,22 +469,12 @@ def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
     try:
         if os.path.splitext(fname)[1] == '.npy':
             """load npy partial maps with index stored in parent directories"""
-            idx_dir = fname
-            c = 3
-            while c > 0:
-                idx_dir = os.path.dirname(idx_dir)
-                try:
-                    loaded = np.load(os.path.join(idx_dir, 'index.npz'))
-                    break
-                except FileNotFoundError:
-                    c -= 1
-            else:
-                raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
-            index = loaded['index']
+            index_file = find_index_file(fname)
+            index = index_file['index']
             m = np.load(fname, mmap_mode='r')
             if field is None:
                 field = np.arange(m.shape[0])
-            out = _allocate(nside=loaded['nside'])
+            out = _allocate(nside=index_file['nside'])
 
             for idx, j in enumerate(field):
                 out[idx, index] = m[j]
@@ -639,9 +622,8 @@ def cinv_io(fname, maps=None, fl=None, eps=None, return_eps=False):
     else:
         assert len(maps) in (1, 3)
         assert len(fl) in (1, 4)
-        hp.write_map(
-            fname, maps, overwrite=True, dtype=np.float64, partial=True, extra_header=[('POLCCONV', 'COSMO')]
-        )
+        hp.write_map(fname, maps, overwrite=True, dtype=np.float64, partial=True,
+                     extra_header=[('POLCCONV', 'COSMO')])
         with fits.open(fname, mode='update') as hdul:
             colnames = ['flT', 'flE', 'flB', 'flTE']
             hdul.append(

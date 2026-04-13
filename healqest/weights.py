@@ -240,7 +240,8 @@ class weights_plus:
         Parameters
         ----------
         est: str
-        sl: dictionary with keys 'tt','te','ee' ('bb')
+        sl: dict
+            with keys 'tt','te','ee' ('bb')
         swap: bool=False
             swap the weights for map1 and map2, so TE -> ET
         curl: bool=False

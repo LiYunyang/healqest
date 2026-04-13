@@ -248,7 +248,7 @@ class Qest:
         if self.gmv:
             assert np.any(clte > 0)
         inv = fls[0, : self.lmax + 1] * fls[1, : self.lmax + 1]
-        inv = inv * cli(1 - inv * clte**2)
+        inv = inv * cli(1 - inv * clte ** 2)
 
         fl = dict()
         fl['BB'] = fls[2, : self.lmax + 1]
@@ -465,13 +465,11 @@ class Qest:
             if not self.gmv:
                 assert _qe == 'TT', f"We only harden for 'TT' for SQE, got: {qe}"
             slm = self.eval('TT', almbars1[0], almbars2[0], u=u, g=g, distortion='prf')[0]
-            w_g, se_g = self.get_harden_weights(
-                _qe, fls, u, curl=False, fast=fast, type1=type1, type2='prf', fls2=fls2
-            )
+            w_g, se_g = self.get_harden_weights(_qe, fls, u, curl=False, fast=fast, type1=type1,
+                                                type2='prf', fls2=fls2)
             if type1 == 'lens':
-                w_c, se_c = self.get_harden_weights(
-                    _qe, fls, u, curl=True, fast=fast, type1=type1, type2='prf', fls2=fls2
-                )
+                w_c, se_c = self.get_harden_weights(_qe, fls, u, curl=True, fast=fast, type1=type1,
+                                                    type2='prf', fls2=fls2)
             else:
                 w_c = np.zeros_like(w_g)
                 se_c = np.zeros_like(se_g)

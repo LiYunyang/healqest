@@ -702,6 +702,7 @@ class Config:
         seed2=None,
         cmbset1=None,
         cmbset2=None,
+        ktype=None,
         N1=False,
         stack_type=None,
         bundle=None,
@@ -723,7 +724,8 @@ class Config:
             Indicate the stacking type for mean-field calculations.
         bundle: int, tuple of ints =None
         cmbset: str
-            cmbset for MF, e.g. 'a'/'b'. For cases when the stack type is in ['xy', 'yx', 'x0', '0x', 'xx'].
+            cmbset for MF, e.g. 'a'/'b'. For cases when the stack type is in ['xy', 'yx', 'x0', '0x', 'xx'],
+            or for the case when `ktype` is specified.
         """
         subdir = 'lensrec_N1' if N1 else 'lensrec'
         if bundle is not None and not N1:  # MF and N1 don't do bundle
@@ -732,6 +734,10 @@ class Config:
             suffix = 'npy' if not stack_type else 'fits'
         else:
             suffix = 'npz'
+        if ktype is not None:
+            assert seed2 is None
+            assert cmbset2 is None
+            seed1, seed2, cmbset1, cmbset2 = self.ktype2ij(ktype, seed1, seed2, cmbset=cmbset)
         if not stack_type:
             if self.save_as_map:
                 fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
@@ -740,6 +746,7 @@ class Config:
         else:
             subdir = f"{subdir}/stack"
             if stack_type in ['xx', 'xy', 'yx', 'x0', '0x']:
+                assert cmbset is not None, "cmbset has to be specified for stack types: ['xx', 'xy', 'yx']"
                 # specify the actual cmbset if using the "xy" notation.
                 fname = f'plmstack_{tag}_{stack_type}_{cmbset}.{suffix}'
             else:

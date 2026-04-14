@@ -773,9 +773,26 @@ class Config:
 
         Parameters
         ----------
+        tag: str
+            name of a QE or a MVtype (for auto spectra).
+        seed1, seed2: int
+            the seed number for the 1st map and the 2nd map. Almost in all cases, the two should be the same,
+            i.e., we never want to cross correlate between two lensrec from two seeds. In the future, this
+            might be refactored to just take one seed number. TODO (YL): merge seed1 and seed2!
+        ktype1, ktype2: str
+            2-letter string indicating the type of the two maps to be cross-correlated. For example, 'xy'/'aa'
+        N1: bool=False
+            Indicator for N1-type spectra, which will be saved in a separate directory.
+        SAN0: bool=False
+            Indicator for the special case of SAN0-type spectra, which will be saved in a separate directory.
+        ext: str='dat'
         coadd: bool=False
             special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensrec maps are
             coadded before taking spectra.
+        cmbset: str='a'
+            auxiliary variable to decode `ktype`. In most cases, just keep it as the default 'a'.
+        curl: bool=False
+            Indicator for curl spectra, which will have a different tag.
         """
         subdir = 'cls'
         if SAN0:
@@ -787,12 +804,21 @@ class Config:
             subdir = 'cls/lensrec_N1'
         if coadd:
             subdir = subdir.replace('cls', 'cls_coadd')
-        s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, seed2, cmbset=cmbset)
+        if seed2 is not None:
+            if seed2 != seed1:
+                raise ValueError("You should not end up here!")
+        else:
+            seed2 = seed1  # in almost all case,
+
+        s1, s2, c1, c2 = self.ktype2ij(ktype1, seed1, j=None, cmbset=cmbset)
         tag1 = f"{s1}{c1}_{s2}{c2}"
         gc_tag = 'k' if not curl else 'c'
         if ktype2 is not None:
             # assert set(ktype1) == set(ktype2)
-            s1, s2, c1, c2 = self.ktype2ij(ktype2, seed1, seed2, cmbset=cmbset)
+            assert seed2 is None
+            if seed2 is None:
+                seed2 = seed1
+            s1, s2, c1, c2 = self.ktype2ij(ktype2, seed2, j=None, cmbset=cmbset)
             tag2 = f"{s1}{c1}_{s2}{c2}"
             fname = f'clkk_{gc_tag}{tag}_{tag1}_{tag2}.{ext}'
         else:

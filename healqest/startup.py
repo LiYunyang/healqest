@@ -187,10 +187,10 @@ class Config:
             logger.info(f"lensrec IO directory (`recdir`): {obj.path(obj.recdir)}")
 
         # save a hard copy of the config file and current script
-        obj.copy_script(fname, dir_dst=obj.outdir, git_track=False)
-        obj.copy_script(script, dir_dst=obj.outdir, git_track=True)
+        obj.copy_script(fname, dir_dst=obj.path(obj.outdir), git_track=False)
+        obj.copy_script(script, dir_dst=obj.path(obj.outdir), git_track=True)
         if hasattr(args, 'module_path'):
-            obj.copy_script(args.module_path, dir_dst=obj.outdir, git_track=True)
+            obj.copy_script(args.module_path, dir_dst=obj.path(obj.outdir), git_track=True)
         return obj
 
     @staticmethod

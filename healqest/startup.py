@@ -353,7 +353,7 @@ class Config:
                     cmbset2, cmbset1 = cmbset
                 else:
                     raise AssertionError
-            match = {'0': 0, 'x': i, 'y': j if j is None else i + 1}
+            match = {'0': 0, 'x': i, 'y': j if j is not None else i + 1}
             seed1 = match[ktype[0]]
             seed2 = match[ktype[1]]
         elif ktype in ['ab', 'ba', 'aa', 'bb']:
@@ -737,7 +737,7 @@ class Config:
         if ktype is not None:
             assert seed2 is None
             assert cmbset2 is None
-            seed1, seed2, cmbset1, cmbset2 = self.ktype2ij(ktype, seed1, seed2, cmbset=cmbset)
+            seed1, seed2, cmbset1, cmbset2 = self.ktype2ij(ktype, i=seed1, j=None, cmbset=cmbset)
         if not stack_type:
             if self.save_as_map:
                 fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
@@ -814,10 +814,6 @@ class Config:
         tag1 = f"{s1}{c1}_{s2}{c2}"
         gc_tag = 'k' if not curl else 'c'
         if ktype2 is not None:
-            # assert set(ktype1) == set(ktype2)
-            assert seed2 is None
-            if seed2 is None:
-                seed2 = seed1
             s1, s2, c1, c2 = self.ktype2ij(ktype2, seed2, j=None, cmbset=cmbset)
             tag2 = f"{s1}{c1}_{s2}{c2}"
             fname = f'clkk_{gc_tag}{tag}_{tag1}_{tag2}.{ext}'

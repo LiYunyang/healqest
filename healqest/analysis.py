@@ -1,7 +1,6 @@
 from functools import partial
 import numpy as np
 import multiprocessing
-from scipy.signal import savgol_filter
 import logging
 import operator
 
@@ -224,6 +223,8 @@ class LensingSpectra:
 
     @staticmethod
     def smooth_resp(y, seq):
+        from scipy.signal import savgol_filter
+
         out = y.copy()
         for s in seq:
             out[s:] = savgol_filter(y, window_length=s, polyorder=3)[s:]

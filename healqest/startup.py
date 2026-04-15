@@ -612,9 +612,9 @@ class Config:
             return np.ones(hp.nside2npix(self.nside))
         for _ in self.as_list(item):
             try:
-                _mask = hq.read_map(self.path(_, field=self.field), field=field)
+                _mask = hq.read_map(self.path(_, field=self.field), field=field, return_cosmo=False)
             except IndexError:
-                _mask = hq.read_map(self.path(_, field=self.field), field=0)
+                _mask = hq.read_map(self.path(_, field=self.field), field=0, return_cosmo=False)
                 logger.warning(f"field {field} not found in mask file {self.path(_)}, using field 0 instead.")
             if mask is None:
                 mask = _mask

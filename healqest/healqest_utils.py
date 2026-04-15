@@ -554,17 +554,22 @@ def read_map_fits(fname, field=(0,), dtype=float, hdu=1, h=False, return_cosmo=T
 
         iau2cosmo = False
         polconv = hdul[hdu].header.get('POLCCONV', "UNDEF").strip().lower()
-        if polconv == "undef":
-            polconv = 'cosmo'
-            logger.info(f"POLCONV undefined, assume COSMO: {basename}")
-        assert polconv in ["cosmo", 'iau', 'healpix']
+
+        # only throw warning if u maps are returned.
+        return_u = 2 in fields_name or 'U_POLARISATION' in fields_name
+
         if return_cosmo:
             if polconv in ['healpix', "cosmo"]:
                 pass
             elif polconv in ['iau']:
                 iau2cosmo = True
+            elif polconv == "undef":
+                polconv = 'cosmo'
+                if return_u:
+                    logger.info(f"POLCONV undefined, assume COSMO: {basename}")
             else:
-                logger.warning(f"Unrecogonized POLCONV={polconv}, assume COSMO: {basename}")
+                if return_u:
+                    logger.warning(f"Unrecogonized POLCONV={polconv}, assume COSMO: {basename}")
 
         out = _allocate(nside=nside)
         partial = 'PIXEL' in hdul[hdu].columns.names

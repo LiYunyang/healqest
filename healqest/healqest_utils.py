@@ -445,3 +445,32 @@ def verify_fits(fname, nhdu=1):
         except Exception as e:
             raise e from FileExistsError(f"{fname} is not a valid FITS file or has a corrupted header/data.")
     return True
+
+
+def lowpass_tf(lmax, power=6, lc=6144):
+    """
+    Compute the low-pass transfer function, in field units, as a function of l.
+
+    Parameters
+    ----------
+    lmax: int
+        The maximum multipole to compute the transfer function for.
+    power:
+        The power of the low-pass filter. Higher power means a sharper cut-off.
+    lc:
+        The characteristic multipole of the low-pass filter.
+
+    Returns
+    -------
+    tf: array
+        The low-pass transfer function evaluated at multipoles from 0 to lmax.
+    """
+    from numpy.polynomial.legendre import leggauss
+
+    N = 30
+    t_nodes, weights = leggauss(N)
+    t = np.pi * (t_nodes + 1)
+    w = np.pi * weights
+    x = np.arange(lmax + 1)
+    integrand = np.exp(-((x[:, None] * np.sin(t)[None, :] / lc) ** power))
+    return integrand @ w / (2 * np.pi)

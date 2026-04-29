@@ -458,7 +458,7 @@ class Config:
             bl = np.ones(self.cinv_lmax + 1)
         elif isinstance(self.file_bl, str):
             beam_file = self.path(self.file_bl)
-            logger.warning("temporarily loading the 150 GHz beam file")
+            logger.warning("loading the beam file assuming 150 GHz.")
             bl = np.loadtxt(beam_file)[: self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
         elif isinstance(self.file_bl, (float, np.floating, int, np.integer)):
             bl = hp.gauss_beam(np.deg2rad(self.file_bl / 60), lmax=self.cinv_lmax)
@@ -484,14 +484,8 @@ class Config:
                 return dict(t=alm_mask.copy(), p=alm_mask.copy())
             else:
                 loaded = np.load(self.path(self.file_tf2d, field=self.field))
-                if 'tf2d_t' in loaded.files:
-                    return dict(
-                        t=self._regularize_tf2d(loaded['tf2d_t']), p=self._regularize_tf2d(loaded['tf2d_p'])
-                    )
-                else:
-                    return dict(
-                        t=self._regularize_tf2d(loaded['tf2d']), p=self._regularize_tf2d(loaded['tf2d'])
-                    )
+                tf2d = self._regularize_tf2d(loaded['tf2d'])
+                return dict(t=tf2d.copy(), p=tf2d.copy())
         else:
             logger.warning("No 2d TF given.")
             return None
@@ -499,14 +493,9 @@ class Config:
     def tfbl_1d(self, s) -> np.ndarray:
         """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`."""
         assert s in ['t', 'p']
-        if self.tf2d:
-            logger.info("computing 1d TFxbl from 2d TFxbl")
-            out = self._tf2d2tf1d(self.tfbl_2d(s), self.dec_range)
-        else:
-            out = self.bl[s].copy()
-            if self.tf1d is not None:
-                logger.info("computing 1d TFxbl from 1d bl and 1d tf")
-                out *= self.tf1d[s]
+        out = self.bl[s].copy()
+        if self.tf1d is not None:
+            out *= self.tf1d[s]
         return out
 
     def tfbl_2d(self, s) -> Union[np.ndarray, None]:
@@ -518,9 +507,17 @@ class Config:
             return np.array(hp.almxfl(self.tf2d[s], self.bl[s]))
 
     @staticmethod
-    def _tf2d2tf1d(tf2d, dec_range):
-        _, _, k = hq.dec2tf2d(0, *dec_range)
-        return np.sqrt(hp.alm2cl(tf2d.astype(complex)) / k)
+    def tf1dfromtf2d(file_tf2d, lmax=None):
+        """Get 1d TF from a 2d TF file (generated from mtheta)."""
+        loaded = np.load(file_tf2d)
+        tf2d_in = loaded['tf_in']
+        tf2d_out = loaded['tf_out']
+        if lmax:
+            tf2d_in = hq.reduce_lmax(tf2d_in, lmax=lmax)
+            tf2d_out = hq.reduce_lmax(tf2d_out, lmax=lmax)
+        tf1d = np.sqrt(hp.alm2cl(tf2d_out.astype(complex)) / hp.alm2cl(tf2d_in.astype(complex)))
+        assert np.all(tf1d <= 1) and np.all(tf1d >= 0)
+        return tf1d
 
     def _regularize_tf2d(self, tf):
         """Regularize the tf2d to be in [0, 1]."""
@@ -544,33 +541,21 @@ class Config:
         ----
         This is separate from `tfbl_1d` because when used for simulation, we might only want to apply this.
         """
-        if self.file_tf1d is None:
-            return None
-
-        if self.file_tf1d:
+        if self.file_tf2d is not None:
+            logger.info("computing TF1d from TF2d")
+            path = self.path(self.file_tf2d, field=self.field)
+            out = self.tf1dfromtf2d(file_tf2d=path, lmax=self.cinv_lmax)
+            return dict(t=out.copy(), p=out.copy())
+        elif self.file_tf1d:
             if isinstance(self.file_tf1d, int):
                 out = np.ones(self.cinv_lmax + 1)
                 out[: self.file_tf1d] = 0
                 return dict(t=out.copy(), p=out.copy())
-            elif isinstance(self.file_tf1d, str):
-                fname, ext = os.path.splitext(self.file_tf1d)
-                if ext == '.npz':
-                    loaded = np.load(self.path(self.file_tf1d, field=self.field))
-                    logger.warning("tf1d file is tf2d, converting to tf1d...")
-                    if 'tf2d_t' in loaded.files:
-                        tf_t = self._regularize_tf2d(loaded['tf2d_t'])
-                        tf_p = self._regularize_tf2d(loaded['tf2d_p'])
-                    else:
-                        tf_t = tf_p = self._regularize_tf2d(loaded['tf2d'])
-                    tf_t = self._tf2d2tf1d(tf_t, self.dec_range)
-                    tf_p = self._tf2d2tf1d(tf_p, self.dec_range)
-                    return dict(t=tf_t, p=tf_p)
-                elif ext == '.npy':
-                    raise NotImplementedError("npy tf1d is not supported yet, please use npz format.")
             else:
-                raise ValueError("file_tf1d must be either int or str")
-        else:
+                raise NotImplementedError("loading tf1d from file is not implemented yet.")
+        elif self.file_tf1d is None:
             return None
+        raise NotImplementedError("the functionality of tf1d should be replaced by tf2d.")
 
     @property
     def profile_u(self):

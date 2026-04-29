@@ -98,17 +98,11 @@ class Config:
     cinv_lmin: int = None  # minimum l for cinv
     cinv_mmin: int = None  # minimum m for cinv
     file_bl: Union[str, float]  # path to beam file or gaussian beam size in arcmin FWHM
-    file_tf1d: Union[str, int] = (
-        None  # path to tf1d file. If a tf2d file is given, it will compute tf1d from it.
-    )
+    file_tf1d: Union[str, int] = None  # path to tf1d file.
     # If a integer is given, this is interpreted as a l_cut.
-    file_tf2d: Union[str, list] = (
-        None  # path to tf2d file. If a list is given, it is interpreted as (lmin, mmin)
-    )
-    lx_cut: int = (
-        None  # the lx cut to be used for cinv filter (tf2d will be ignored in the cinv, but it will still
-    )
-    # be used for effective 1d beam)
+    file_tf2d: Union[str, list] = None  # path to tf2d file.
+    lx_cut: int = None  # the lx cut to be used for cinv filter.
+    # (tf2d will be ignored for cinv, but it will still# be used for effective 1d beam)
     lx_power: float = None  # the power of the lx filter. For wide+summer fields, use 6.
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)

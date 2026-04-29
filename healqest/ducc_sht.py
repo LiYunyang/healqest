@@ -717,7 +717,7 @@ class GeometryTF:
     @staticmethod
     def fm_power_law(power=6):
         def func(m, mc):
-            return np.exp(-((mc / m) ** power))
+            return np.exp(-((mc / np.maximum(m, 1)) ** power))
 
         return func
 

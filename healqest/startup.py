@@ -88,7 +88,6 @@ class Config:
     # === base ===
     outdir: str
     recdir: str = None  # output directory for lensing rec. Default to outdir
-    dec_range: Union[list, dict] = None
     save_as_map: bool = False  # save plm as map, otherwise as alm.
     nbundle: int = None  # number of bundles, if any.
 
@@ -117,7 +116,7 @@ class Config:
     file_slm0: str = None  # path to data file, if differs from file_slm
     file_nlm: str = None  # path to noise alm files for std/N0-type sims.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
-    file_nlm_N1: str = None  # path to noise alm files for N1-type sims.
+
     add_noise: bool = True  # whether to add noise in simulations.
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
     cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
@@ -196,7 +195,7 @@ class Config:
     @staticmethod
     def copy_script(fpath, dir_dst: str, git_track=True, only_rank0=True, timestamp=True):
         """
-        Copy file to directory with version suffix and time mark (if duplicate).
+        Copy file to directory with version suffix and timestamp (if duplicate).
 
         The scripts named name[.suffix].ext will be copied to dir_dst as
             - name.ext (if `versioned=False`)
@@ -220,7 +219,7 @@ class Config:
             exist_file = os.path.basename(existing_files[-1])
             logger.info(f"new script {out_fname} is identical to {exist_file}, skipping copy.")
         else:
-            if existing_files and timestamp:
+            if os.path.exists(os.path.join(dir_dst, out_fname)) and timestamp:
                 timestamp = datetime.now().strftime('%y%m%d_%H%M')
                 base, sfx = os.path.splitext(out_fname)
                 out_fname = f"{base}.{timestamp}{sfx}"
@@ -264,16 +263,10 @@ class Config:
         # all three types of ILC ('mv', 'cibfree', 'tszfree') go into the same `cinvdir`
         self.cinvdir = f"{self.cinvdir}/{self.rectype}"
 
-        # set field specific settings
-        if isinstance(self.dec_range, dict):
-            if self.field is not None:
-                self.dec_range = self.dec_range[self.field]
         # auto adjust spice kwargs
         if self.spice_kwargs:
             for key in ['apodizesigma', 'thetamax']:
-                if self.spice_kwargs.get(key, None) == 'dec':
-                    self.spice_kwargs[key] = max(self.dec_range) - min(self.dec_range)
-                elif isinstance(self.spice_kwargs[key], dict):
+                if isinstance(self.spice_kwargs[key], dict):
                     self.spice_kwargs[key] = self.spice_kwargs[key][self.field]
 
         # mvtypes has to be a list
@@ -472,20 +465,9 @@ class Config:
     def tf2d(self) -> Union[dict, None]:
         """Return a 2d TFxbl functions for T/E/B."""
         if self.file_tf2d:
-            if isinstance(self.file_tf2d, (list, tuple)):
-                l, m = self.file_tf2d
-                ell, emm = hp.Alm.getlm(lmax=self.cinv_lmax)
-                alm_mask = np.ones_like(emm, dtype=float)
-                alm_mask[ell < l] = 0
-                alm_mask[emm < m] = 0
-                _, _, k = hq.dec2tf2d(0, *self.dec_range)
-                alm_mask[emm > k * ell] = 0
-                alm_mask = self._regularize_tf2d(alm_mask)
-                return dict(t=alm_mask.copy(), p=alm_mask.copy())
-            else:
-                loaded = np.load(self.path(self.file_tf2d, field=self.field))
-                tf2d = self._regularize_tf2d(loaded['tf2d'])
-                return dict(t=tf2d.copy(), p=tf2d.copy())
+            loaded = np.load(self.path(self.file_tf2d, field=self.field))
+            tf2d = self._regularize_tf2d(loaded['tf2d'])
+            return dict(t=tf2d.copy(), p=tf2d.copy())
         else:
             logger.warning("No 2d TF given.")
             return None
@@ -573,7 +555,7 @@ class Config:
     def g(self):
         from healqest.ducc_sht import Geometry
 
-        return Geometry.from_dec(nside=self.nside, dec_range=getattr(self, 'dec_range', None))
+        return Geometry.from_mask(self.mask_boundary)
 
     @property
     def flT(self):

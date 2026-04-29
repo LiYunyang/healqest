@@ -292,7 +292,7 @@ class Config:
         """
         if path is None:
             return None
-        if path.startswith('/'):
+        if path.startswith('/') or path.startswith('./'):
             out = path
         else:
             out = os.path.join(os.environ["HEALQEST_IO_ROOT"], path)

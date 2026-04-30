@@ -98,7 +98,7 @@ class Config:
     cinv_lmax: int  # maximum l for cinv
     cinv_lmin: int = None  # minimum l for cinv
     cinv_mmin: int = None  # minimum m for cinv
-    file_bl: Union[str, float]  # path to beam file or gaussian beam size in arcmin FWHM
+    file_bl: Union[str, float] = None  # path to beam file or gaussian beam size in arcmin FWHM
     file_tf1d: Union[str, int] = None  # path to tf1d file.
     # If a integer is given, this is interpreted as a l_cut.
     file_tf2d: Union[str, list] = None  # path to tf2d file.
@@ -107,7 +107,7 @@ class Config:
     lx_power: float = None  # the power of the lx filter. For wide+summer fields, use 6.
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
-    file_slm: str  # path to (beamed) signal alm files for std/N0-type sims.
+    file_slm: str = None  # path to (beamed) signal alm files for std/N0-type sims.
     file_slm0: str = None  # path to data file, if differs from file_slm
     file_nlm: str = None  # path to noise alm files for std/N0-type sims.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
@@ -115,6 +115,7 @@ class Config:
     add_noise: bool = True  # whether to add noise in simulations.
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
     cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
+    fmask_ilc: Union[str, list[str]] = None  # path(s) to mask used for ilc
     fmask_cinv: Union[str, list[str]] = None  # path(s) to mask used for cinv
 
     # === lensrec ===
@@ -441,21 +442,25 @@ class Config:
     @property
     def bl(self) -> np.ndarray:
         if self._bl is None:
-            if self.file_bl is None:
-                logger.error("beam file not given! assuming unity bl for now.")
-                self._bl = np.ones(self.cinv_lmax + 1)
-            elif isinstance(self.file_bl, str):
+            if isinstance(self.file_bl, str):
                 beam_file = self.path(self.file_bl)
                 logger.warning("loading the beam file assuming 150 GHz.")
                 # TODO: default to 150 GHz for the test file
-                self._bl = np.loadtxt(beam_file)[: self.cinv_lmax + 1, 2]
+                self.bl = np.loadtxt(beam_file)[: self.cinv_lmax + 1, 2]
             elif isinstance(self.file_bl, (float, np.floating, int, np.integer)):
-                self._bl = hp.gauss_beam(np.deg2rad(self.file_bl / 60), lmax=self.cinv_lmax)
+                self.bl = hp.gauss_beam(np.deg2rad(self.file_bl / 60), lmax=self.cinv_lmax)
             else:
-                raise ValueError(f"unsupported file_bl: {self.file_bl}")
-        if self.cinv_lmin:
-            self._bl[: self.cinv_lmin] = 0
+                logger.error("beam is unset! make sure it is set later in the pipeline!")
         return self._bl
+
+    @bl.setter
+    def bl(self, _bl):
+        bl = np.array(_bl[: self.cinv_lmax + 1])
+        if bl.shape[-1] != self.cinv_lmax + 1:
+            raise ValueError(f"bl has to be of length {self.cinv_lmax + 1}, but got {bl.shape[-1]}")
+        if self.cinv_lmin:
+            bl[: self.cinv_lmin] = 0
+        self._bl = bl
 
     @cached_property
     def tf2d(self) -> Union[dict, None]:
@@ -471,6 +476,7 @@ class Config:
     def tfbl_1d(self, s) -> np.ndarray:
         """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`."""
         assert s in ['t', 'p']
+        assert self.bl is not None
         out = self.bl.copy()
         if self.tf1d is not None:
             out *= self.tf1d[s]
@@ -482,6 +488,7 @@ class Config:
         if self.tf2d is None:
             return None
         else:
+            assert self.bl is not None
             return np.array(hp.almxfl(self.tf2d[s], self.bl))
 
     @staticmethod
@@ -584,6 +591,10 @@ class Config:
             else:
                 mask *= _mask
         return mask
+
+    @cached_property
+    def mask_ilc(self):
+        return self._load_mask(self.fmask_ilc, field=0)
 
     @cached_property
     def mask_cinv(self):

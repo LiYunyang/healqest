@@ -92,6 +92,7 @@ class Config:
     nbundle: int = None  # number of bundles, if any.
 
     # === cinv ===
+    file_ilc: str  # path to the ILC weight file (.npz).
     eps_t: float  # convergence threshold for cinv T component
     eps_p: float  # convergence threshold for cinv Pol component
     cinv_lmax: int  # maximum l for cinv
@@ -135,8 +136,6 @@ class Config:
     # === inputs ===
     sim_range: list[int]  # index range (inclusive) of the input alms files
     sim_range_N1: list[int] = None  # index range (inclusive) of the input alms files for N1-type
-    file_alm: Union[str, list]  # path or list of path to input alms files
-    file_alm_N1: Union[str, list]  # path or list of path to input alms files for N1
     kappa_in: str  # fname of input kappa maps
     clkk_in: str  # fname of input kappa spectrum
 
@@ -150,6 +149,7 @@ class Config:
         self._validate_config(kwargs)
         self.__dict__.update(kwargs)
         self._set_defaults()
+        self._bl = None  # this is a cached property that can be overridden later.
 
     @classmethod
     def from_yaml(cls, fname, field=None):
@@ -438,22 +438,24 @@ class Config:
             ell, sltt, slee, slbb, slte = hq.get_unlensedcls(cambcls, lmax=self.lmax)[:5]
         return dict(tt=sltt, ee=slee, bb=slbb, te=slte)
 
-    @cached_property
-    def bl(self):
-        if self.file_bl is None:
-            logger.error("beam file not given! assuming unity bl for now.")
-            bl = np.ones(self.cinv_lmax + 1)
-        elif isinstance(self.file_bl, str):
-            beam_file = self.path(self.file_bl)
-            logger.warning("loading the beam file assuming 150 GHz.")
-            bl = np.loadtxt(beam_file)[: self.cinv_lmax + 1, 2]  # TODO: default to 150 GHz for the test file
-        elif isinstance(self.file_bl, (float, np.floating, int, np.integer)):
-            bl = hp.gauss_beam(np.deg2rad(self.file_bl / 60), lmax=self.cinv_lmax)
-        else:
-            raise ValueError(f"unsupported file_bl: {self.file_bl}")
+    @property
+    def bl(self) -> np.ndarray:
+        if self._bl is None:
+            if self.file_bl is None:
+                logger.error("beam file not given! assuming unity bl for now.")
+                self._bl = np.ones(self.cinv_lmax + 1)
+            elif isinstance(self.file_bl, str):
+                beam_file = self.path(self.file_bl)
+                logger.warning("loading the beam file assuming 150 GHz.")
+                # TODO: default to 150 GHz for the test file
+                self._bl = np.loadtxt(beam_file)[: self.cinv_lmax + 1, 2]
+            elif isinstance(self.file_bl, (float, np.floating, int, np.integer)):
+                self._bl = hp.gauss_beam(np.deg2rad(self.file_bl / 60), lmax=self.cinv_lmax)
+            else:
+                raise ValueError(f"unsupported file_bl: {self.file_bl}")
         if self.cinv_lmin:
-            bl[: self.cinv_lmin] = 0
-        return dict(t=bl.copy(), p=bl.copy())
+            self._bl[: self.cinv_lmin] = 0
+        return self._bl
 
     @cached_property
     def tf2d(self) -> Union[dict, None]:
@@ -469,7 +471,7 @@ class Config:
     def tfbl_1d(self, s) -> np.ndarray:
         """Return 1d TFxbl functions for T/E/B with lmax=`cinv_lmax`."""
         assert s in ['t', 'p']
-        out = self.bl[s].copy()
+        out = self.bl.copy()
         if self.tf1d is not None:
             out *= self.tf1d[s]
         return out
@@ -480,7 +482,7 @@ class Config:
         if self.tf2d is None:
             return None
         else:
-            return np.array(hp.almxfl(self.tf2d[s], self.bl[s]))
+            return np.array(hp.almxfl(self.tf2d[s], self.bl))
 
     @staticmethod
     def tf1dfromtf2d(file_tf2d, lmax=None):

@@ -514,8 +514,8 @@ class KappaMap:
 def compute_ps_single(mobj1, mobj2, bundle1, bundle2):
     m1 = mobj1.get_fname(bundle_key=bundle1)
     m2 = mobj2.get_fname(bundle_key=bundle2)
-    clkk = hq.kappa_spectrum(m1, m2, mask1=mobj1.file_mask,mask2=mobj2.file_mask, g=mobj1.config.g,
-                             anafast=False, **mobj1.config.spice_kwargs)  # fmt: off
+    clkk = kappa_spectrum(m1, m2, mask1=mobj1.file_mask,mask2=mobj2.file_mask, g=mobj1.config.g,
+                          anafast=False, **mobj1.config.spice_kwargs)  # fmt: off
     return clkk
 
 

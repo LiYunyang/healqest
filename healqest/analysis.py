@@ -4,6 +4,8 @@ import multiprocessing
 import logging
 import operator
 
+logger = logging.getLogger(__name__)
+
 
 def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
     """
@@ -391,6 +393,8 @@ class LensingSpectra:
 
         if self.do_SAN0:
             self.SAN0s = SAN0s[:, : self.Lmax + 1] / self.resp2
+            logger.info("calibrate SAN0 by N0")
+            self.SAN0s *= self.N0 / np.mean(self.SAN0s, axis=0)
 
     def bin_spec(self, bins, norm_cl=None, resp_err=False):
         if norm_cl is not None:
@@ -410,9 +414,11 @@ class LensingSpectra:
         if self.do_SAN0:
             cls = self.Cls + self.N0 - self.SAN0s  # replace N0 with the per-realization SAN0
             self.cov = bin_Cls(cls * fac, bins=bins)[-1]
-        self.cov_sys = N0cov / self.N + N1cov / self.N_N1  # systematic err from subtracting N0/N1
+        self.cov_sys = N0cov / self.N
+        if self.N_N1 > 0:
+            self.cov_sys += N1cov / self.N_N1  # systematic err from subtracting N0/N1
 
-        if resp_err:
+        if resp_err and self.N_N1 > 0:
             resp_bin, *_, resp_cov = bin_Cls(self.resp2_cls, bins=bins)[1:]
             k = self.y / resp_bin
             resp_cov = np.einsum('ij,i,j->ij', resp_cov / self.N_N1, k, k)

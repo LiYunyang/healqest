@@ -24,7 +24,7 @@ def load(tag, i, ktype, cmbset, N1=False, bundle=None):
     s1, s2, c1, c2 = config.ktype2ij(ktype, i, j=None, cmbset=cmbset)
     if config.save_as_map:
         fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)
-        out = healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1))
+        out = healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1), return_cosmo=False)
         out = hp.ma(out, badval=0)  # important for partial maps.
         out.fill_value = hp.UNSEEN  # important for partial maps.
         return out
@@ -68,7 +68,7 @@ def main(tag, key, bundle, cmbset):
     mf_grad = mf1_grad + mf2_grad
     mf_curl = mf1_curl + mf2_curl
     if config.save_as_map:
-        maps_out = [mf_grad, mf1_grad, mf2_grad, mf_curl, mf1_curl, mf2_curl]
+        maps_out = hp.ma([mf_grad, mf1_grad, mf2_grad, mf_curl, mf1_curl, mf2_curl])
         hp.write_map(
             fname,
             maps_out,

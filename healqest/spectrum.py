@@ -421,7 +421,7 @@ class KappaMap:
         # read maps and bad pixels are set to 0
         gctag = 'gmf' if not self.curl else 'cmf'
         field = gctag if mf_group == 0 else f"{gctag}{mf_group}"
-        mf, h = hq.read_map(file_mf, h=True, field=field, dtype=np.float64)
+        mf, h = hq.read_map(file_mf, h=True, field=field, dtype=np.float64, return_cosmo=False)
         h = dict(h)
         assert h['NSIM'] == (i2 - i1 + 1), f"loaded MF ({h['NSIM']}) is inconsistent with config settings!"
         nsim = h[f'NSIM'] if mf_group == 0 else h[f'NSIM{mf_group}']
@@ -452,7 +452,7 @@ class KappaMap:
                 N1=self.N1,
                 bundle=bundle_pair,
             )
-            y = hq.read_map(file_plm, field=0 if not self.curl else 1, dtype=np.float64)
+            y = hq.read_map(file_plm, field=0 if not self.curl else 1, dtype=np.float64, return_cosmo=False)
             mf = self._get_mf(mf_group=self.mf_group, y=y, bundle=bundle_pair)
             kmv = y - mf
 

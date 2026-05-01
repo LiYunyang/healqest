@@ -25,8 +25,9 @@ def load(tag, i, ktype, cmbset, N1=False, bundle=None):
     if config.save_as_map:
         fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)
         out = healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1), return_cosmo=False)
-        out = hp.ma(out, badval=0)  # important for partial maps.
-        out.fill_value = hp.UNSEEN  # important for partial maps.
+        # make sure consistent UNSEEN pixel
+        out[:, ~config.mask_boundary] = hp.UNSEEN
+        out = hp.ma(out)
         return out
     else:
         fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)

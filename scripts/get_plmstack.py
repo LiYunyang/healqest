@@ -68,7 +68,9 @@ def main(tag, key, bundle, cmbset):
     mf_grad = mf1_grad + mf2_grad
     mf_curl = mf1_curl + mf2_curl
     if config.save_as_map:
-        maps_out = hp.ma([mf_grad, mf1_grad, mf2_grad, mf_curl, mf1_curl, mf2_curl])
+        maps_out = np.ma.array(
+            [mf_grad, mf1_grad, mf2_grad, mf_curl, mf1_curl, mf2_curl], fill_value=hp.UNSEEN
+        )
         hp.write_map(
             fname,
             maps_out,

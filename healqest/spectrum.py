@@ -1,4 +1,3 @@
-import logging
 import os
 import subprocess
 import sys
@@ -7,9 +6,9 @@ import tempfile as tf
 
 import numpy as np
 import healpy as hp
-from healqest import healqest_utils as hq
+from healqest import healqest_utils as hq, log
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def kspice(  # noqa: C901
@@ -546,7 +545,7 @@ def compute_ps(mobj1: KappaMap, mobj2: KappaMap, save=False, skip=False):
         cl_out = mobj1.config.p_cls(tag=name, seed1=mobj1.i, seed2=None, ktype1=k1, ktype2=k2,
                                     N1=mobj1.N1, ext='dat', cmbset=mobj1.cmbset, curl=mobj1.curl)  # fmt: off
         if skip and os.path.exists(cl_out):
-            logger.warning(f"Skipping {cl_out}")
+            logger.warning(f"Skipping {cl_out}", extra={"force": True})
             return None
         os.makedirs(os.path.dirname(cl_out), exist_ok=True)
 

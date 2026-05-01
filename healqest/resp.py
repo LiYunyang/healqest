@@ -1,10 +1,9 @@
 # quicklens routines for QE covariance calc
 
 import numpy as np
-from healqest import wignerd
-import logging
+from healqest import wignerd, log
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def fill_resp_fullsky(qeXY, qeZA, ret, fX, fY, fast=False):

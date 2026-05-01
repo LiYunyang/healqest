@@ -13,7 +13,6 @@ from functools import cached_property
 import filecmp
 import glob
 from importlib import resources
-import logging
 import os
 import string
 import shutil
@@ -27,7 +26,7 @@ import healpy as hp
 import yaml
 from git import Repo, InvalidGitRepositoryError
 
-from healqest import healqest_utils as hq
+from healqest import healqest_utils as hq, log
 
 try:
     from mpi4py import MPI
@@ -39,7 +38,7 @@ try:
 except ImportError:
     rank = 0
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def get_git_version():
@@ -879,95 +878,3 @@ def parser():
     p.add_argument('-skip', action='store_true', help='skip finished jobs')
     p.add_argument('-v', '--verbose', default=3, type=int, help='Output verbosity')
     return p
-
-
-class MPIAwareFormatter(logging.Formatter):
-    COLORS = {
-        logging.DEBUG: "\033[37m",  # white
-        logging.INFO: "\033[32m",  # green
-        logging.WARNING: "\033[33m",  # yellow
-        logging.ERROR: "\033[31m",  # red
-        logging.CRITICAL: "\033[41m",  # red background
-    }
-    RESET = "\033[0m"
-    FAINT = "\033[2;37m"
-
-    def format2(self, record):
-        record.rank = rank  # Save rank into the record
-        record.name = record.name.split('.')[-1]  # truncate to keep only the module name
-        record.name = f"\033[2;37m{record.name}{self.RESET}"
-        asctime = self.formatTime(record, self.datefmt)
-        color = self.COLORS.get(record.levelno, "")
-        prefix = f"[{rank}]{color}{asctime}{self.RESET}|"
-
-        # Format rest of the message
-        message = super().format(record)
-
-        # Replace the [asctime(rank)] part with the colored version
-        # This assumes `[{asctime}({rank})]` is at the beginning of your format string
-        end = message.find("|") + 1
-        return f"{prefix}{message[end:]}"
-
-    def format(self, record):
-        # Fixed-width module name
-        name = record.name.split(".")[-1][:10].rjust(10)
-        name_colored = f"{self.FAINT}{name}{self.RESET}"
-
-        # Faint rank (global rank must be defined elsewhere)
-        rank_colored = f"{self.FAINT}{rank}{self.RESET}"
-
-        # Time colored by log level
-        asctime = self.formatTime(record, self.datefmt)
-        time_color = self.COLORS.get(record.levelno, "")
-        asctime_colored = f"{time_color}{asctime}{self.RESET}"
-
-        # Actual log message
-        message = record.getMessage()
-
-        return f"{rank_colored}|{asctime_colored}|{name_colored} {message}"
-
-
-def verbose2level(verbosity: int) -> int:
-    verbose = int(verbosity)
-    verbose = max(verbose, 0)
-    verbose = min(verbose, 4)
-    return {0: logging.CRITICAL, 1: logging.ERROR, 2: logging.WARNING, 3: logging.INFO, 4: logging.DEBUG}[
-        verbose
-    ]
-
-
-def setup_logger(verbose=3, force=True, quiet=True):
-    """
-    Central logging config. Call this early in your script.
-
-    Parameters
-    ----------
-    verbose: int=3
-        verboisity. 0=CRITICAL, 1=ERROR, 2=WARNING, 3=INFO, 4=DEBUG
-    force: bool=True
-    quiet: bool=True
-        If True, scilence sub-warning level message from selected modules.
-    """
-    if rank > 0:
-        # Silence all logging on non-root ranks
-        logging.disable(logging.CRITICAL)
-        # return
-        pass
-
-    fmt = "[{rank}]{asctime}|{name} {message}"
-    datefmt = "%H:%M:%S"
-
-    formatter = MPIAwareFormatter(fmt, datefmt, style='{')
-
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(formatter)
-
-    # Configure root logger
-    logging.basicConfig(level=verbose2level(verbose), handlers=[handler], force=force)
-
-    if quiet:
-        for name in logging.root.manager.loggerDict:
-            if not name.startswith("healqest") and name != "__main__":
-                logging.getLogger(name).setLevel(logging.WARNING)
-            else:
-                pass

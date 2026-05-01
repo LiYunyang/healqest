@@ -8,6 +8,7 @@ import numba
 import healpy as hp
 import ducc0
 from packaging import version
+from healqest import log
 
 if version.parse(ducc0.__version__) < version.parse('0.36.0'):
     warnings.warn(
@@ -16,9 +17,8 @@ if version.parse(ducc0.__version__) < version.parse('0.36.0'):
         UserWarning,
     )
 
-import logging
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 rtype = {np.dtype(np.complex128): np.dtype(np.float64), np.dtype(np.complex64): np.dtype(np.float32)}
 ctype = {rtype[ctyp]: ctyp for ctyp in rtype}

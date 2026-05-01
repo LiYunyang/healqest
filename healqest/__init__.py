@@ -1,8 +1,5 @@
 import logging
+from .log import setup_logger
 
-from .startup import setup_logger
-
-# Check if logging has already been configured
-# If not, set up the logger at "INFO" level.
 if not logging.getLogger().hasHandlers():
-    setup_logger(verbose=3)
+    setup_logger(verbose=3, verbose_other=2)

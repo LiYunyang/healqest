@@ -1,7 +1,7 @@
-import logging
 import numpy as np
+from healqest import log
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 class weights_plus:

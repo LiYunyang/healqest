@@ -3,11 +3,10 @@ from itertools import product
 import numpy as np
 import healpy as hp
 import os
-import logging
-from healqest import qest, startup, healqest_utils as hq
+from healqest import qest, startup, healqest_utils as hq, log
 from mpi4py.MPI import COMM_WORLD as comm
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
@@ -32,7 +31,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                 bundle=bundle_pair,
             )
             if os.path.exists(file_plm):
-                logger.warning(f"skipping QE: {mvtype}, existing file: {file_plm}")
+                logger.warning(f"skipping QE: {mvtype}, existing file: {file_plm}", extra={"force": True})
                 continue
             else:
                 qes += config.mvtype2qe(mvtype)
@@ -44,7 +43,9 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
         mvtypes = config.mvtypes
 
     if not qes:
-        logger.warning(f"no qe needed, skipping lensing reconstruction")
+        logger.warning(
+            f"no qe needed, skipping lensrec {seed1}{cmbset1}{seed2}{cmbset2}", extra={"force": True}
+        )
         return
 
     estimator = qest.Qest(

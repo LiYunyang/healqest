@@ -3,11 +3,10 @@ from itertools import product
 import numpy as np
 import healpy as hp
 import os
-import logging
-from healqest import weights, resp, startup, healqest_utils as hq, qest
+from healqest import weights, resp, startup, healqest_utils as hq, qest, log
 from mpi4py.MPI import COMM_WORLD as comm
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def main(seed, cmbset, bundle_pair=None):  # noqa: C901
@@ -24,7 +23,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         for mvtype in config.mvtypes:
             cl_out = config.p_cls(mvtype, seed, seed, 'xx', 'xx', SAN0=True, cmbset=cmbset, curl=args.curl)
             if os.path.exists(cl_out):
-                logger.warning(f"Skipping {cl_out}")
+                logger.warning(f"Skipping {cl_out}", extra={"force": True})
                 continue
             else:
                 qes += config.mvtype2qe(mvtype)
@@ -35,7 +34,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         mvtypes = config.mvtypes
 
     if not qes:
-        logger.warning(f"No qe needed, skipping SAN0")
+        logger.warning(f"No qe needed, skipping SAN0", extra={"force": True})
         return
     else:
         logger.info(f"Performing SAN0: {mvtypes} QE: {qes}")

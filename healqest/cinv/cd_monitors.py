@@ -1,10 +1,12 @@
 import numpy as np
+from .. import log
 from . import cinv_utils
-import logging
-logger = logging.getLogger(__name__)
+
+logger = log.get_logger(__name__)
 
 try:
     from mpi4py import MPI
+
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
 except ImportError:
@@ -21,7 +23,7 @@ class Logger:
 
 class logger_basic(Logger):
     def __call__(self, i, eps, watch=None, **kwargs):
-        if rank ==0:
+        if rank == 0:
             logger.info(f"[{str(watch.elapsed())}] {i} {eps:.2e}")
 
 
@@ -31,10 +33,10 @@ class logger_none(Logger):
 
 
 class MonitorBasic(object):
-    """Class for monitoring whether the solver has converged
+    """Class for monitoring whether the solver has converged.
 
-    Selected attributes
-    ---------
+    Attributes
+    ----------
     dot_op: operator
         the method to calculate the residual
     iter_max: float/int
@@ -54,7 +56,7 @@ class MonitorBasic(object):
         self.d0 = None
         self.eps = None
 
-    def criterion(self, i, soltn, resid):
+    def criterion(self, i, soltn, resid) -> bool:
         delta = self.dot_op(resid, resid)
         if i == 0:
             self.d0 = delta
@@ -73,5 +75,5 @@ class MonitorBasic(object):
 
         return False
 
-    def __call__(self, *args):
+    def __call__(self, *args) -> bool:
         return self.criterion(*args)

@@ -2,16 +2,15 @@
 
 import tempfile
 import os
-import logging
 import shutil
 
 import healpy as hp
 import numpy as np
 from mpi4py.MPI import COMM_WORLD as comm
-from healqest import startup
+from healqest import startup, log
 from healqest.spectrum import KappaMap, compute_ps
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def stype2ktypes(stype):

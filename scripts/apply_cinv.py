@@ -1,14 +1,13 @@
 import os
 import healpy as hp
 import numpy as np
-from healqest import startup
+from healqest import startup, log
 from healqest import healqest_utils as hq
 
 from healqest.cinv import cinv_hp as cinv
-import logging
 from mpi4py.MPI import COMM_WORLD as comm
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def main(seed, cmbset, N1, ilc_type):
@@ -20,7 +19,7 @@ def main(seed, cmbset, N1, ilc_type):
             logger.error(f"{fname} exists but is corrupted, redoing it.")
             pass
         else:
-            logger.warning(f"Skipping {fname}")
+            logger.warning(f"Skipping {fname}", extra={"force": True})
             return
     os.makedirs(os.path.dirname(fname), exist_ok=True)
 
@@ -116,7 +115,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     dm = hq.load_module("healqest.data_module", args.module_path)
 
-    startup.setup_logger(verbose=args.verbose)
+    log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
     from itertools import product

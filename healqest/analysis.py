@@ -1,10 +1,10 @@
 from functools import partial
 import numpy as np
 import multiprocessing
-import logging
 import operator
+from healqest import log
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
@@ -265,7 +265,7 @@ class LensingSpectra:
                 self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
                 self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
             else:
-                logging.warning("not loading resp function due to no N1 sims")
+                logger.warning("not loading resp function due to no N1 sims")
                 self.resp2 = np.ones(self.Lmax + 1)
                 return
         elif self.resp_type in ['cross', 'cross2']:
@@ -286,7 +286,7 @@ class LensingSpectra:
                 self.resp2 *= loaded['Cl_bias'][: self.Lmax + 1]
                 # which bundle doesn't matter
         else:
-            logging.warning("disable resp function")
+            logger.warning("disable resp function")
             self.resp2 = np.ones(self.Lmax + 1)
             return
         if resp_smooth is not None:

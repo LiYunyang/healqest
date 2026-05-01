@@ -1,13 +1,11 @@
-import logging
-import sys
 from typing import TypedDict
 
 import numpy as np
 import healpy as hp
 from healqest import healqest_utils as utils
-from healqest import weights, resp
+from healqest import weights, resp, log
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 np.seterr(all='ignore')
 
 

@@ -3,11 +3,11 @@ from astropy.io import fits
 import numpy as np
 import healpy as hp
 import importlib
-import logging as lg
 import hashlib
 import string
+from . import log
 
-logger = lg.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 np.seterr(divide="ignore", invalid="ignore")
 

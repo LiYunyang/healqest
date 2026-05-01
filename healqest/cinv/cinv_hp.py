@@ -9,13 +9,13 @@ but with additional cleaning/formatting and commenting.
 import abc
 import healpy as hp
 import numpy as np
-import logging
+from .. import log
 from . import opfilt_hp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
 from .opfilt_hp import SkyInverseFilterJoint, SkyInverseFilter, NoiseInverseFilter, TFObj
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 class cinv(abc.ABC):

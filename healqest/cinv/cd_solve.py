@@ -1,16 +1,15 @@
 import numpy as np
-import logging
+from .. import log
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
-tr_cg = lambda i: i - 1
-tr_cd = lambda i: 0
+
+def tr_cg(i):
+    return i - 1
 
 
 class CacheMemory(dict):
-    """A dictionary-like object that can store things and remove keys
-    conveniently.
-    """
+    """A dictionary-like object that can store things and remove keys conveniently."""
 
     def __init__(self):
         pass
@@ -26,30 +25,21 @@ class CacheMemory(dict):
         del self[key]
 
     def trim(self, keys):
-        """Remove a list of keys from the dictionary"""
+        """Remove a list of keys from the dictionary."""
         assert set(keys).issubset(list(self.keys()))
         for key in set(self.keys()) - set(keys):
             del self[key]
 
 
-def cd_solve(
-    x,
-    b,
-    fwd_op,
-    pre_ops,
-    dot_op,
-    criterion,
-    tr,
-    cache=CacheMemory(),
-    roundoff=25,
-):
-    """Conjugate direction solver
+def cd_solve(x, b, fwd_op, pre_ops, dot_op, criterion, tr, cache=None, roundoff=25):  # noqa: C901
+    """Conjugate direction solver.
+
     The customizable conjugate directions loop for x=[fwd_op]^{-1}b.
     The initial value of x is taken as guess.
     fwd_op, pre_op(s) and dot_op mustn't modify the inputs!
 
-    Selected Parameters:
-    --------
+    Parameters
+    ----------
     x: flexible format (array, customized classes...)
         solve result
     b: flexible format (array, customized classes...)
@@ -58,7 +48,7 @@ def cd_solve(
         operator for generating new search direction
     dot_op: operator
         operator for generating delta from the residual
-    criterion: function
+    criterion: callable
         the function that determines whether things have converged
     tr: truncation / restart functions
         Suggest:  Truncated Partial Restart (TPR)
@@ -66,6 +56,8 @@ def cd_solve(
     cache: CacheMemory object
         cacher for search objects.
     """
+    if cache is None:
+        cache = CacheMemory()
 
     n_pre_ops = len(pre_ops)
 
@@ -73,7 +65,7 @@ def cd_solve(
     searchdirs = [op(residual) for op in pre_ops]
 
     iter = 0
-    while criterion(iter, x, residual) == False:
+    while not criterion(iter, x, residual):
         searchfwds = [fwd_op(searchdir) for searchdir in searchdirs]
         deltas = [dot_op(searchdir, residual) for searchdir in searchdirs]
 
@@ -111,10 +103,7 @@ def cd_solve(
             [prev_dTAd_inv, prev_searchdirs, prev_searchfwds] = cache.restore(titer)
 
             for searchdir in searchdirs:
-                proj = [
-                    dot_op(searchdir, prev_searchfwd)
-                    for prev_searchfwd in prev_searchfwds
-                ]
+                proj = [dot_op(searchdir, prev_searchfwd) for prev_searchfwd in prev_searchfwds]
                 betas = np.dot(prev_dTAd_inv, proj)
 
                 for beta, prev_searchdir in zip(betas, prev_searchdirs):

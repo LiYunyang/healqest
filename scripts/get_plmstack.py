@@ -1,8 +1,7 @@
-import logging
 import numpy as np
 import healpy as hp
 import os
-from healqest import startup, healqest_utils
+from healqest import startup, healqest_utils, log
 from itertools import product
 
 try:
@@ -17,7 +16,7 @@ except ImportError:
     size = 1
     has_mpi = False
 
-logger = logging.getLogger(__name__)
+logger = log.get_logger(__name__)
 
 
 def load(tag, i, ktype, cmbset, N1=False, bundle=None):

@@ -94,7 +94,7 @@ if __name__ == "__main__":
     parser.add_argument('-curl', action='store_true', help='compute the curl mode')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     args = parser.parse_args()
-    startup.setup_logger(verbose=args.verbose)
+    log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
     config.tmp_dir = config.path(config.outdir, 'tmp/')  # /tmp might be too small for storage

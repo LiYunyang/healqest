@@ -126,7 +126,7 @@ if __name__ == "__main__":
     parser.add_argument('-std', action='store_true', help='do standard Cls')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     args = parser.parse_args()
-    startup.setup_logger(verbose=args.verbose)
+    log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
     if config.save_as_map:

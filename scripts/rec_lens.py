@@ -225,7 +225,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     dm = hq.load_module("healqest.data_module", args.module_path)
 
-    startup.setup_logger(verbose=args.verbose)
+    log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
     cinv = config.rectype != 'naive'

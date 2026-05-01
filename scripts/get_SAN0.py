@@ -222,7 +222,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    startup.setup_logger(verbose=args.verbose)
+    log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
     cinv = config.rectype != 'naive'

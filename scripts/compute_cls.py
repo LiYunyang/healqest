@@ -6,9 +6,11 @@ import shutil
 
 import healpy as hp
 import numpy as np
+
+from mpi4py import MPI
 from mpi4py.MPI import COMM_WORLD as comm
 from healqest import startup, log
-from healqest.spectrum import KappaMap, compute_ps
+from healqest.spectrum import KappaMap, compute_ps, ClsDB
 
 logger = log.get_logger(__name__)
 
@@ -33,23 +35,60 @@ def stypes2ktypes(spec_types):
 
 def get_kmap_and_spec(config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset='a', skip=False):
     with tempfile.TemporaryDirectory(prefix='lens', dir=config.tmp_dir) as tmp:
+        _stypes = list(set(stypes))
+        if skip:
+            for stype in _stypes:
+                k1, k2 = stype2ktypes(stype)
+                sql_path, sql_table, sql_key = config.get_sql_keys(
+                    tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
+                )
+                if ClsDB(sql_path, sql_table).query(sql_key, return_data=False):
+                    spec_key = '_'.join(sql_key.values())
+                    logger.info(
+                        f"skipping {os.path.basename(sql_path)} {table}: {spec_key}", extra={'force': True}
+                    )
+                    _stypes.remove(stype)
+
         kmaps = dict()
-        for ktype in stypes2ktypes(stypes):
+        for ktype in stypes2ktypes(_stypes):
             for g in set(mf_pair):
                 kmaps[(ktype, g)] = KappaMap(
                     config, i, ktype, mvtype=mvtype, mf_group=g, N1=N1, cmbset=cmbset, outdir=tmp, curl=curl
                 )
-        for stype in stypes:
+
+        local_results = []
+        sql_table = None
+        sql_path = None
+        for stype in _stypes:
             k1, k2 = stype2ktypes(stype)
             g1, g2 = mf_pair
-            compute_ps(kmaps[(k1, g1)], kmaps[(k2, g2)], skip=skip, save=True)
+            _p, _t, sql_key = config.get_sql_keys(
+                tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
+            )
+            if sql_table is None and sql_path is None:
+                sql_table = _t
+                sql_path = _p
+            else:
+                assert sql_table == _t and sql_path == _p, (
+                    "all specs in the same call should write to the same SQLite table."
+                )
+            cl_dat = compute_ps(kmaps[(k1, g1)], kmaps[(k2, g2)])
+            local_results.append((sql_key, cl_dat))
+        if local_results:
+            comm.send((sql_path, sql_table, local_results), dest=0)
 
 
 def main(i, mvtype, cmbset, curl=False, skip=False):
     mf_pair = [1, 2] if config.mfsplit else [0, 0]
     common_kw = dict(i=i, mvtype=mvtype, skip=skip, curl=curl, config=config)
     if args.std:
+        if i == 0:
+            logger.warning(
+                'i=0 skipped for N0 set. use `-rdn0` flag to compute the data spectrum.',
+                extra={'force': True},
+            )
         stypes = [] if i == 0 else ['xxxx', 'xyyx', 'xyxy']
+
         get_kmap_and_spec(stypes=stypes, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
         if args.cross:
             get_kmap_and_spec(stypes=['xx'], N1=False, cmbset=cmbset, mf_pair=(0, 0), **common_kw)
@@ -97,16 +136,38 @@ if __name__ == "__main__":
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
+    assert comm.size > 1, f"{__name__} only works in MPI mode."
+
     config.tmp_dir = config.path(config.outdir, 'tmp/')  # /tmp might be too small for storage
     config.tmp_file_mask = os.path.join(config.tmp_dir, 'psmask.fits')
+
     if comm.rank == 0:
         os.makedirs(config.tmp_dir, exist_ok=True)
         hp.write_map(config.tmp_file_mask, config.mask_ps, dtype=np.float32, overwrite=True)
     comm.barrier()
 
     loop = np.arange(args.i1, args.i2 + 1)
-    for _i in loop[comm.rank :: comm.size]:
-        main(_i, cmbset=args.set, mvtype=args.mvtype, curl=args.curl, skip=args.skip)
+
+    if comm.rank == 0:
+        n_workers = comm.size - 1
+        n_done = 0
+        dbs = {}
+        while n_done < n_workers:
+            msg = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG)
+            if msg is None:
+                n_done += 1
+            else:
+                db_path, table, results = msg
+                key = (db_path, table)
+                if key not in dbs:
+                    dbs[key] = ClsDB.create(db_path, table)
+                for sql_key, cl in results:
+                    dbs[key].write(sql_key, cl)
+    else:
+        for _i in loop[(comm.rank - 1) :: (comm.size - 1)]:
+            main(_i, cmbset=args.set, mvtype=args.mvtype, curl=args.curl, skip=args.skip)
+        comm.send(None, dest=0)
+
     comm.barrier()
     if comm.rank == 0:
         os.unlink(config.tmp_file_mask)

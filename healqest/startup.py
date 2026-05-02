@@ -796,6 +796,41 @@ class Config:
         out = self.path(self.outdir, subdir, fname)
         return out
 
+    def get_sql_table(self, tag, spec_type: str, curl=False):
+        assert spec_type.lower() in ['n0', 'n1', 'san0', 'rdn0']
+        fname = f'{spec_type.lower()}.db'
+        gc_tag = 'g' if not curl else 'c'
+        table = f'{gc_tag}{tag}'
+        out = self.path(self.outdir, 'cls', fname)
+        return out, table
+
+    def get_sql_keys(self, tag, seed, ktype1, ktype2, N1=False, SAN0=False, cmbset='a', curl=False):
+        """Returns the sqlite db path, table name, and key-values pair for the SQL entry."""
+        if SAN0:
+            assert N1 is False
+            assert ktype2 == ktype1
+            spec_type = 'san0'
+        elif N1:
+            spec_type = 'n1'
+        elif seed == 0 or ktype1 in ['0x', 'x0'] or ktype2 in ['0x', 'x0']:
+            spec_type = 'rdn0'
+        else:
+            spec_type = 'n0'
+
+        out, table = self.get_sql_table(tag, spec_type=spec_type, curl=curl)
+        s1, s2, c1, c2 = self.ktype2ij(ktype1, seed, j=None, cmbset=cmbset)
+        l1 = f"{s1}{c1}"
+        l2 = f"{s2}{c2}"
+        if ktype2 is not None:
+            s1, s2, c1, c2 = self.ktype2ij(ktype2, seed, j=None, cmbset=cmbset)
+            l3 = f"{s1}{c1}"
+            l4 = f"{s2}{c2}"
+        else:
+            l3 = None
+            l4 = None
+        kv = dict(l1=l1, l2=l2, l3=l3, l4=l4)
+        return out, table, kv
+
     def p_resp(self, tag, bundle=None):
         """Paths to response functions."""
         bundle_str = self.bundle2str(bundle)

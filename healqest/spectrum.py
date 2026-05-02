@@ -3,12 +3,65 @@ import subprocess
 import sys
 from typing import Union
 import tempfile as tf
-
+import sqlite3
 import numpy as np
 import healpy as hp
 from healqest import healqest_utils as hq, log
 
 logger = log.get_logger(__name__)
+
+
+class ClsDB:
+    """SQLite interface for storing and querying lensing power spectra."""
+
+    def __init__(self, path, table):
+        self.path = path
+        self.table = table
+
+    @classmethod
+    def create(cls, path, table):
+        """Create the DB file and initialize the table if needed. Call from write rank only."""
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with cls._connect(path) as conn:
+            conn.execute(
+                f"CREATE TABLE IF NOT EXISTS {table} "
+                "(l1 TEXT NOT NULL, l2 TEXT NOT NULL, l3 TEXT, l4 TEXT, "
+                "cl BLOB NOT NULL, PRIMARY KEY (l1, l2, l3, l4))"
+            )
+        return cls(path, table)
+
+    @staticmethod
+    def _connect(path):
+        conn = sqlite3.connect(path, timeout=30)
+        conn.execute("PRAGMA journal_mode=WAL")
+        return conn
+
+    def query(self, kv, return_data=True):
+        """Return the cl array for the given key, or None if not found or table doesn't exist."""
+        if not os.path.exists(self.path):
+            return None
+        try:
+            with self._connect(self.path) as conn:
+                row = conn.execute(
+                    f"SELECT cl FROM {self.table} WHERE l1=? AND l2=? AND l3=? AND l4=?",
+                    (kv['l1'], kv['l2'], kv['l3'], kv['l4']),
+                ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+        if not return_data:
+            return row is not None
+        if row is None:
+            return None
+        return np.frombuffer(row[0], dtype=np.float32).copy()
+
+    def write(self, kv, cl):
+        """Insert or replace a cl array for the given key."""
+        blob = np.asarray(cl, dtype=np.float32).tobytes()
+        with self._connect(self.path) as conn:
+            conn.execute(
+                f"INSERT OR REPLACE INTO {self.table} (l1, l2, l3, l4, cl) VALUES (?, ?, ?, ?, ?)",
+                (kv['l1'], kv['l2'], kv['l3'], kv['l4'], blob),
+            )
 
 
 def kspice(  # noqa: C901
@@ -518,7 +571,7 @@ def compute_ps_single(mobj1, mobj2, bundle1, bundle2):
     return clkk
 
 
-def compute_ps(mobj1: KappaMap, mobj2: KappaMap, save=False, skip=False):
+def compute_ps(mobj1: KappaMap, mobj2: KappaMap):
     """
     Compute power spectrum of two kappa map objects.
 
@@ -527,27 +580,12 @@ def compute_ps(mobj1: KappaMap, mobj2: KappaMap, save=False, skip=False):
     mobj1, mobj2: KappaMap
         The kappa map objects to cross-correlate. If `mobj2.ktype` is None, it will be treated as the input
         kappa map.
-    save: bool=False
-        If True, save the output power spectrum to disk.
-    skip: bool=False:
-        If True, skip the computation if the output file already exists.
-
     """
     if not mobj2.cross:
         assert mobj1.cmbset == mobj2.cmbset
         assert mobj1.curl == mobj2.curl
         assert mobj1.N1 == mobj2.N1
     assert mobj1.i == mobj2.i
-    name = f"{mobj1.mvtype}"
-    k1, k2 = mobj1.ktype, mobj2.ktype
-
-    if save:
-        cl_out = mobj1.config.p_cls(tag=name, seed1=mobj1.i, seed2=None, ktype1=k1, ktype2=k2,
-                                    N1=mobj1.N1, ext='dat', cmbset=mobj1.cmbset, curl=mobj1.curl)  # fmt: off
-        if skip and os.path.exists(cl_out):
-            logger.warning(f"Skipping {cl_out}", extra={"force": True})
-            return None
-        os.makedirs(os.path.dirname(cl_out), exist_ok=True)
 
     out = []
     if mobj1.config.nbundle is not None:
@@ -572,7 +610,5 @@ def compute_ps(mobj1: KappaMap, mobj2: KappaMap, save=False, skip=False):
 
     mask_bias = mobj1.mask_bias(mobj2)
     out = np.array(out) / mask_bias
-    if save:
-        header = f"# nlmax, ncor, nside = {mobj1.config.Lmax:8d} {1:8d} {mobj1.config.g.nside:8d}"
-        hq.write_cl(cl_out, out, header=header)
+
     return out

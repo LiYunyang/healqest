@@ -169,15 +169,14 @@ class cinv_t(cinv):
         tf1d,
         tf2d=None,
         bl=None,
-        lx_cut=None,
-        lx_power=None,
+        mtheta=None,
         eps_min=1.0e-5,
         ellscale=True,
         g=None,
         mmin=None,
     ):
         assert len(ninv) == 1
-        tf = TFObj(1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin)
+        tf = TFObj(1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
         # only take the first entry as the temperation ninv
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, tf=tf, g=g
@@ -249,8 +248,7 @@ class cinv_p(cinv):
         tf1d,
         tf2d=None,
         bl=None,
-        lx_cut=None,
-        lx_power=None,
+        mtheta=None,
         eps_min=1.0e-5,
         ellscale=True,
         g=None,
@@ -258,7 +256,7 @@ class cinv_p(cinv):
     ):
         assert isinstance(ninv, list)
         assert len(ninv) in [2]
-        tf = TFObj(2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin)
+        tf = TFObj(2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, tf=tf, g=g
         )
@@ -329,8 +327,7 @@ class cinv_tp(cinv):
         tf1d,
         tf2d,
         bl=None,
-        lx_cut=None,
-        lx_power=None,
+        mtheta=None,
         eps_min=1.0e-5,
         ellscale=False,
         g=None,
@@ -338,7 +335,7 @@ class cinv_tp(cinv):
     ):
         assert isinstance(ninv, list)
         assert len(ninv) in [3]  # TT/PP or TT/QQ/UU
-        tf = TFObj(3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, lx_cut=lx_cut, lx_power=lx_power, bl=bl, m_cut=mmin)
+        tf = TFObj(3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
 
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, g=g, tf=tf

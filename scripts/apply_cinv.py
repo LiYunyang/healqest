@@ -35,8 +35,7 @@ def main(seed, cmbset, N1, ilc_type):
         nl_res=nlres,
         ellscale=config.ellscale,
         g=config.g,
-        lx_cut=config.lx_cut,
-        lx_power=config.lx_power,
+        mtheta=config.mtheta,
         mmin=config.cinv_mmin,
     )
     if config.rectype == 'sqe':

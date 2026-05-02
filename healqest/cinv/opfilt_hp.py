@@ -30,11 +30,10 @@ class TFObj:
     bl_t: NDArray = None  # (lmax+1, )
     bl_e: NDArray = None  # (lmax+1, )
     bl_b: NDArray = None  # (lmax+1, )
-    lx_cut = None
-    lx_power = None
+    mtheta: dict = None
     m_cut = None
 
-    def __init__(self, npol, lmax, tf1d, tf2d=None, bl=None, lx_cut=None, lx_power=None, m_cut=None):  # noqa: C901
+    def __init__(self, npol, lmax, tf1d, tf2d=None, bl=None, mtheta=None, m_cut=None):  # noqa: C901
         """
         Initialize the TF object.
 
@@ -44,6 +43,8 @@ class TFObj:
             Number of polarizations. 1 for T, 2 for E/B, 3 for T/E/B
         tf1d: array or list of array
         tf2d: array or list of array
+        mtheta: dict
+            configuration of the mtheta filter, parameterized by `lx_cut` and `power`.
         """
         self.npol = npol
         self.lmax = lmax
@@ -66,13 +67,12 @@ class TFObj:
 
         # mmcut should've already been incoporated in tf2d in config.
         # So no just need to apply m_cut to mtheta.
-        if lx_cut is not None:
-            assert bl is not None, "lx_cut requires bl to be set"
-            self.lx_cut = lx_cut
-            self.lx_power = lx_power
+        if mtheta is not None:
+            assert bl is not None, "mtheta requires bl to be set"
+            self.mtheta = mtheta
             self.m_cut = m_cut
             if tf2d is not None:
-                logger.warning(f"using lx_cut={lx_cut}, power={lx_power} in lieu of the provided tf2d")
+                logger.warning(f"using mtheta ({mtheta}) in lieu of the provided tf2d")
                 _tf2d = np.array([None, None])
                 tf2d = None
 
@@ -131,7 +131,7 @@ class TFObj:
 
         # === start of adjoint operation, but not needed forward operation ===
         if adjoint:
-            if self.lx_cut:
+            if self.mtheta:
                 # slice assignment is important to make sure that it does modification inplace!
                 maps[:] = g_tf.apply_map(np.atleast_2d(maps))
             alms = g.map2alm(maps, lmax=self.lmax, iter=0, alms=alms, check=False)
@@ -141,8 +141,8 @@ class TFObj:
         for i, s in enumerate(self.pols):
             tf2d = getattr(self, f"tf2d_{s}")
             if tf2d is None:
-                if self.lx_cut:
-                    # perform beam operation if lx_cut will be applied
+                if self.mtheta:
+                    # perform beam operation if mtheta will be applied
                     tf1d = getattr(self, f"bl_{s}")
                 else:
                     # otherwise, perform with the effective 1d TF (that includes bl!)
@@ -156,7 +156,7 @@ class TFObj:
             return np.squeeze(alms)
         else:
             maps = g.alm2map(alms, maps=maps)
-            if self.lx_cut:
+            if self.mtheta:
                 maps[:] = g_tf.apply_map(np.atleast_2d(maps))
             return np.squeeze(maps)
 
@@ -464,10 +464,8 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             assert self.g.nside == self.nside
 
         # setup the TF object for the theta-dependent m-cut
-        if tf.lx_cut:
-            self.g_tf = ducc_sht.GeometryTF(
-                self.g, self.nonzero, lx_cut=tf.lx_cut, m_cut=tf.m_cut, power=tf.lx_power
-            )
+        if tf.mtheta:
+            self.g_tf = ducc_sht.GeometryTF(self.g, self.nonzero, m_cut=tf.m_cut, **tf.mtheta)
         else:
             self.g_tf = None
 

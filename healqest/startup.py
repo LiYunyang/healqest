@@ -78,7 +78,7 @@ class PartialFormatter(string.Formatter):
 
 
 class Config:
-    __keywords__ = ['base', 'lensrec', 'inputs', 'pspec', 'cinv']
+    __keywords__ = ['base', 'ilc', 'lensrec', 'inputs', 'pspec', 'cinv']
 
     # === command-line parameters ===
     field: str = None  # SPT field name, used for output/fname parsing and mask selection
@@ -90,8 +90,12 @@ class Config:
     save_as_map: bool = False  # save plm as map, otherwise as alm.
     nbundle: int = None  # number of bundles, if any.
 
+    # === ilc ===
+    file_ilc: str = None  # path to the ILC weight file (.npz)
+    fmask_ilc: Union[str, list[str]] = None  # path(s) to mask used for ilc
+
     # === cinv ===
-    file_ilc: str  # path to the ILC weight file (.npz).
+
     eps_t: float  # convergence threshold for cinv T component
     eps_p: float  # convergence threshold for cinv Pol component
     cinv_lmax: int  # maximum l for cinv
@@ -112,12 +116,11 @@ class Config:
     add_noise: bool = True  # whether to add noise in simulations.
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
     cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
-    fmask_ilc: Union[str, list[str]] = None  # path(s) to mask used for ilc
     fmask_cinv: Union[str, list[str]] = None  # path(s) to mask used for cinv
 
     # === lensrec ===
     rectype: str  # [sqe,gmv]
-    ilctype: str = 'mv'  # [mv, xilc, tsz]
+    xilctype: str = 'mv'  # [mv, xilc, tsz], not to be confused with ILC type
     mvtypes: list[str]  # subset of ['TT', 'TE', 'EE', 'TB', 'EB'] for SQE
     nside: int  # Map nside, used for ducc wrapper. This is enforced for lensrec too, so 2nside>Lmax
     lminT: int  # override lmin
@@ -245,11 +248,11 @@ class Config:
 
         # append a second level of directory to distinguish rectypes
         assert self.rectype in ['naive', 'sqe', 'gmv']
-        assert self.ilctype in ['mv', 'xilc', 'tsz']
-        if self.ilctype == 'mv':
+        assert self.xilctype in ['mv', 'xilc', 'tsz']
+        if self.xilctype == 'mv':
             subname = f"{self.rectype}"
         else:
-            subname = f"{self.rectype}_{self.ilctype}"
+            subname = f"{self.rectype}_{self.xilctype}"
         self.outdir = f"{self.outdir}/{subname}"
         self.recdir = f"{self.recdir}/{subname}"
         # all three types of ILC ('mv', 'cibfree', 'tszfree') go into the same `cinvdir`
@@ -377,14 +380,14 @@ class Config:
     @property
     def ilcs(self):
         """Return the list of ILC type(s) needed for lensrec."""
-        if self.ilctype == 'mv':
+        if self.xilctype == 'mv':
             return ['mv']
-        elif self.ilctype == 'xilc':
+        elif self.xilctype == 'xilc':
             return ['tszfree', 'cibfree']
-        elif self.ilctype == 'tsz':
+        elif self.xilctype == 'tsz':
             return ['mv', 'tszfree']
         else:
-            raise ValueError(f'Undefined ilctype: {self.ilctype}')
+            raise ValueError(f'Undefined xilctype: {self.xilctype}')
 
     @property
     def qes(self):

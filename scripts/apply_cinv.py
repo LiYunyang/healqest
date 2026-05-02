@@ -93,7 +93,7 @@ if __name__ == "__main__":
     Examples
     --------
     - standard set-a sims, from seed-0 (data) to seed 100 (for N0, i.e. set-a)
-    >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -i1 0 -i2 100 [-set a] -skip
+    >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -i1 0 -i2 100 [-set a] -skip -ilc mv
 
     - standard set-a/b sims, from seed-1 to seed 100 (for N1)
     >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -i1 1 -i2 100 [-set a] -skip -n1

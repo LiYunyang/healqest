@@ -365,10 +365,13 @@ class LensingSpectra:
             del self.config.__dict__[k]
 
     @property
+    def hartlap(self):
+        """Divide the inverse covariance by this factor, because the invcov is overestimated."""
+        return self.N / (self.N - self.cov.shape[0] - 1)
+
+    @property
     def snr(self):
-        hartlap = self.N / (self.N - self.cov.shape[0] - 1)
-        # hartlap = 1
-        snr = np.sqrt(np.sum(np.linalg.inv(self.cov) / hartlap))
+        snr = np.sqrt(np.sum(np.linalg.inv(self.cov) / self.hartlap))
         return snr
 
     def load(self):  # noqa: C901

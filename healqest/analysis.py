@@ -144,6 +144,119 @@ def load_N1(i, config, mvtype, average=True, coadd=False, curl=False):
     return _ - N0, N0
 
 
+def load_sql_Cls(seeds, config, mvtype, cross=False, cmbset='a', curl=False):
+    db = config.get_sql_table(mvtype, spec_type='n0', curl=curl)
+    out = list()
+    with db:
+        for i in seeds:
+            _db, sql_key = config.get_sql_keys(
+                tag=mvtype,
+                seed=i,
+                ktype1='xx',
+                ktype2=None if cross else 'xx',
+                N1=False,
+                SAN0=False,
+                cmbset=cmbset,
+                curl=curl,
+            )
+            assert _db == db
+            out.append(db.query_conn(sql_key))
+    return np.array(out)
+
+
+def load_sql_data(config, mvtype, cmbset='a', curl=False):
+    db = config.get_sql_table(mvtype, spec_type='rdn0', curl=curl)
+    with db:
+        _db, sql_key = config.get_sql_keys(
+            tag=mvtype, seed=0, ktype1='xx', ktype2='xx', N1=False, SAN0=False, cmbset=cmbset, curl=curl
+        )
+        assert _db == db
+        return db.query_conn(sql_key)
+
+
+def load_sql_Cls_ab(seeds, config, mvtype, curl=False):
+    db = config.get_sql_table(mvtype, spec_type='n1', curl=curl)
+    out = list()
+    with db:
+        for i in seeds:
+            _db, sql_key = config.get_sql_keys(
+                tag=mvtype,
+                seed=i,
+                ktype1='aa',
+                ktype2='bb',
+                N1=True,
+                SAN0=False,
+                cmbset='a',  # for N1 type, always use 'a'
+                curl=curl,
+            )
+            assert _db == db
+            out.append(db.query_conn(sql_key))
+    return np.array(out)
+
+
+def load_sql_N0(seeds, config, mvtype, cmbset='a', curl=False):
+    db = config.get_sql_table(mvtype, spec_type='n0', curl=curl)
+    out = list()
+    kw = dict(N1=False, SAN0=False, cmbset=cmbset, curl=curl, tag=mvtype)
+    with db:
+        for i in seeds:
+            _db, k1 = config.get_sql_keys(seed=i, ktype1='xy', ktype2='xy', **kw)
+            assert _db == db
+            _db, k2 = config.get_sql_keys(seed=i, ktype1='xy', ktype2='yx', **kw)
+            assert _db == db
+            cls_xyxy = db.query_conn(k1)
+            cls_xyyx = db.query_conn(k2)
+            out.append(cls_xyxy + cls_xyyx)
+    return np.array(out)
+
+
+def load_sql_SAN0(seeds, config, mvtype, cmbset='a', curl=False):
+    db = config.get_sql_table(mvtype, spec_type='san0', curl=curl)
+    out = list()
+    kw = dict(N1=False, SAN0=True, cmbset=cmbset, curl=curl, tag=mvtype)
+    with db:
+        for i in seeds:
+            _db, sql_key = config.get_sql_keys(seed=i, ktype1='xx', ktype2='xx', **kw)
+            assert _db == db
+            out.append(db.query_conn(sql_key))
+    return np.array(out)
+
+
+def load_sql_RDN0(seeds, config, mvtype, cmbset='a', curl=False):
+    db = config.get_sql_table(mvtype, spec_type='rdn0', curl=curl)
+    out = list()
+    kw = dict(N1=False, SAN0=False, cmbset=cmbset, curl=curl, tag=mvtype)
+    with db:
+        for i in seeds:
+            tot = 0
+            for ktype1, ktype2 in [('x0', 'x0'), ('x0', '0x'), ('0x', '0x'), ('0x', 'x0')]:
+                _db, sql_key = config.get_sql_keys(seed=i, ktype1=ktype1, ktype2=ktype2, **kw)
+                assert _db == db
+                tot += db.query_conn(sql_key)
+            out.append(tot)
+    return np.array(out)
+
+
+def load_sql_N1(seeds, config, mvtype, curl=False):
+    db = config.get_sql_table(mvtype, spec_type='n1', curl=curl)
+    out = list()
+    kw = dict(N1=True, SAN0=False, curl=curl, tag=mvtype, cmbset='a')
+    with db:
+        for i in seeds:
+            cl = 0
+            for sign, ktype1, ktype2 in [
+                (-1, 'xy', 'xy'),
+                (-1, 'xy', 'yx'),
+                (1, 'ab', 'ab'),
+                (1, 'ab', 'ba'),
+            ]:
+                _db, sql_key = config.get_sql_keys(seed=i, ktype1=ktype1, ktype2=ktype2, **kw)
+                assert _db == db
+                cl += sign * db.query_conn(sql_key)
+            out.append(cl)
+    return np.array(out)
+
+
 class LensingSpectra:
     def __init__(
         self,
@@ -161,6 +274,7 @@ class LensingSpectra:
         do_RDN0=False,
         do_data=False,
         curl=False,
+        sql=False,
     ):
         """Lensing spectra object.
 
@@ -177,16 +291,18 @@ class LensingSpectra:
             multipoles. `auto` is based on the auto-spectra and should be most
             accurate at all multipoles.
         average: bool=True
-            If True, average all spectra in the file, otherwise return the last
-            column.
+            If True, average all spectra in the file, otherwise return the last column.
         coadd: bool
             Special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing
             reconstruction map is coadded before taking spectra.
+        sql: bool=False
+            If True, load the spectra from the SQLite database instead of txt files.
         """
         self.config = config
         self.cmbset = cmbset
         self.curl = curl
         self.average = average
+        self.sql = sql
         if Lmax is None:
             self.Lmax = self.config.Lmax
         else:
@@ -251,17 +367,23 @@ class LensingSpectra:
         else:
             return np.zeros(self.Lmax + 1)
 
-    def load_resp(self, resp_smooth=None):
+    def load_resp(self, resp_smooth=None):  # noqa: C901
         if self.resp_type == 'auto':
             if self.N_N1 > 0:
-                _f = partial(
-                    load_Cls_ab,
-                    config=self.config,
-                    mvtype=self.mvtype,
-                    average=self.average,
-                    coadd=self.coadd,
-                )
-                Cls_ab = np.array(list(map(_f, range(1, self.N_N1 + 1))))[:, : self.Lmax + 1]
+                if not self.sql:
+                    _f = partial(
+                        load_Cls_ab,
+                        config=self.config,
+                        mvtype=self.mvtype,
+                        average=self.average,
+                        coadd=self.coadd,
+                    )
+                    Cls_ab = np.array(list(map(_f, range(1, self.N_N1 + 1))))
+                else:
+                    Cls_ab = load_sql_Cls_ab(
+                        range(1, self.N_N1 + 1), self.config, self.mvtype, curl=self.curl
+                    )
+                Cls_ab = Cls_ab[:, : self.Lmax + 1]
                 self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
                 self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
             else:
@@ -304,51 +426,64 @@ class LensingSpectra:
         snr = np.sqrt(np.sum(np.linalg.inv(self.cov) / hartlap))
         return snr
 
-    def load(self):
+    def load(self):  # noqa: C901
         self.offload()
-        with multiprocessing.Pool(10) as p:
-            map = p.map
-            if self.N_N1 > 0:
-                loop = range(1, self.N_N1 + 1)
-                _f = partial(
-                    load_N1,
-                    config=self.config,
-                    mvtype=self.mvtype,
-                    average=self.average,
-                    coadd=self.coadd,
-                    curl=self.curl,
-                )
-                N1s, N1N0s = np.transpose(np.array(list(map(_f, loop))), (1, 0, 2))
 
-            loop = range(1, self.N + 1)
-            _f = partial(
-                load_N0,
-                config=self.config,
-                mvtype=self.mvtype,
-                average=self.average,
-                SAN0=False,
-                coadd=self.coadd,
-                cmbset=self.cmbset,
-                curl=self.curl,
-            )
-            N0s = np.array(list(map(_f, loop)))
+        if not self.sql:
+            with multiprocessing.Pool(10) as p:
+                map = p.map
+                if self.N_N1 > 0:
+                    loop = range(1, self.N_N1 + 1)
+                    _f = partial(
+                        load_N1,
+                        config=self.config,
+                        mvtype=self.mvtype,
+                        average=self.average,
+                        coadd=self.coadd,
+                        curl=self.curl,
+                    )
+                    N1s, N1N0s = np.transpose(np.array(list(map(_f, loop))), (1, 0, 2))
 
-            if self.do_SAN0:
+                loop = range(1, self.N + 1)
                 _f = partial(
                     load_N0,
                     config=self.config,
                     mvtype=self.mvtype,
                     average=self.average,
-                    SAN0=True,
+                    SAN0=False,
                     coadd=self.coadd,
                     cmbset=self.cmbset,
                     curl=self.curl,
                 )
-                SAN0s = np.array(list(map(_f, loop)))
+                N0s = np.array(list(map(_f, loop)))
 
-            if self.do_RDN0:
+                if self.do_SAN0:
+                    _f = partial(
+                        load_N0,
+                        config=self.config,
+                        mvtype=self.mvtype,
+                        average=self.average,
+                        SAN0=True,
+                        coadd=self.coadd,
+                        cmbset=self.cmbset,
+                        curl=self.curl,
+                    )
+                    SAN0s = np.array(list(map(_f, loop)))
+
+                if self.do_RDN0:
+                    _f = partial(
+                        load_RDN0,
+                        config=self.config,
+                        mvtype=self.mvtype,
+                        average=self.average,
+                        coadd=self.coadd,
+                        cmbset=self.cmbset,
+                        curl=self.curl,
+                    )
+                    RDN0s = np.array(list(map(_f, loop))) - N0s
+
                 _f = partial(
-                    load_RDN0,
+                    load_Cls,
                     config=self.config,
                     mvtype=self.mvtype,
                     average=self.average,
@@ -356,21 +491,36 @@ class LensingSpectra:
                     cmbset=self.cmbset,
                     curl=self.curl,
                 )
-                RDN0s = np.array(list(map(_f, loop))) - N0s
+                Cls_hat = np.array(list(map(_f, loop)))
 
-            _f = partial(
-                load_Cls,
-                config=self.config,
-                mvtype=self.mvtype,
-                average=self.average,
-                coadd=self.coadd,
+                if self.do_data:
+                    Cl0 = _f(0)
+
+        else:
+            N0s = load_sql_N0(
+                range(1, self.N + 1), self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl
+            )
+            if self.N_N1 > 0:
+                N1s = load_sql_N1(range(1, self.N_N1 + 1), self.config, self.mvtype, curl=self.curl)
+            if self.do_SAN0:
+                SAN0s = load_sql_SAN0(
+                    range(1, self.N + 1), self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl
+                )
+            if self.do_RDN0:
+                RDN0s = load_sql_RDN0(
+                    range(1, self.N + 1), self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl
+                )
+                RDN0s -= N0s
+            Cls_hat = load_sql_Cls(
+                range(1, self.N + 1),
+                self.config,
+                self.mvtype,
+                cross=False,
                 cmbset=self.cmbset,
                 curl=self.curl,
             )
-            Cls_hat = np.array(list(map(_f, loop)))
-
             if self.do_data:
-                Cl0 = _f(0)
+                Cl0 = load_sql_data(self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl)
 
         self.N0s = N0s[:, : self.Lmax + 1] / self.resp2
 

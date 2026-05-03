@@ -27,6 +27,7 @@ import yaml
 from git import Repo, InvalidGitRepositoryError
 
 from healqest import healqest_utils as hq, log
+from healqest.spectrum import ClsDB
 
 try:
     from mpi4py import MPI
@@ -801,11 +802,11 @@ class Config:
         fname = f'{spec_type.lower()}.db'
         gc_tag = 'g' if not curl else 'c'
         table = f'{gc_tag}{tag}'
-        out = self.path(self.outdir, 'cls', fname)
-        return out, table
+        path = self.path(self.outdir, 'cls', fname)
+        return ClsDB(path, table)
 
     def get_sql_keys(self, tag, seed, ktype1, ktype2, N1=False, SAN0=False, cmbset='a', curl=False):
-        """Returns the sqlite db path, table name, and key-values pair for the SQL entry."""
+        """Returns a ClsDB handle and key-value dict for the SQL entry."""
         if SAN0:
             assert N1 is False
             assert ktype2 == ktype1
@@ -817,7 +818,7 @@ class Config:
         else:
             spec_type = 'n0'
 
-        out, table = self.get_sql_table(tag, spec_type=spec_type, curl=curl)
+        db = self.get_sql_table(tag, spec_type=spec_type, curl=curl)
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed, j=None, cmbset=cmbset)
         l1 = f"{s1}{c1}"
         l2 = f"{s2}{c2}"
@@ -829,7 +830,7 @@ class Config:
             l3 = None
             l4 = None
         kv = dict(l1=l1, l2=l2, l3=l3, l4=l4)
-        return out, table, kv
+        return db, kv
 
     def p_resp(self, tag, bundle=None):
         """Paths to response functions."""

@@ -12,11 +12,47 @@ logger = log.get_logger(__name__)
 
 
 class ClsDB:
-    """SQLite interface for storing and querying lensing power spectra."""
+    """SQLite interface for storing and querying lensing power spectra.
+
+    Notes
+    -----
+    Each Cls database contains a type of lensing spectra, e.g., N0, N1, RDN0 and SAN0.
+    Each database has multiple tables, each for a different estimator, for example "gTT" for TT grad spectra;
+    "cEB" for EB curl spectra, etc. The primary key of each table is the 4-tuple (l1, l2, l3, l4) that
+    identifies the 4 "legs" that went into the quadratic reconstruction, for example ('1a', '1a', '1b', '1b')
+    is an "aabb" type spectrum for N1.
+
+    Examples
+    --------
+    To quick inspect an existing database from the command line:
+
+    1. check available tables:
+    >>> sqlite3 n0.db ".tables"
+    2. check available entries (primary keys only), with limit:
+    >>> sqlite3 n0.db "SELECT l1, l2, l3, l4 FROM gTT LIMIT 100"
+    """
 
     def __init__(self, path, table):
         self.path = path
         self.table = table
+        self.QUERY_SQL = f"SELECT cl FROM {self.table} WHERE l1=? AND l2=? AND l3=? AND l4=?"
+        self.WRITE_SQL = f"INSERT OR REPLACE INTO {self.table} (l1, l2, l3, l4, cl) VALUES (?, ?, ?, ?, ?)"
+        self._conn = None
+
+    def __eq__(self, other):
+        return isinstance(other, ClsDB) and self.path == other.path and self.table == other.table
+
+    def __enter__(self):
+        self._conn = self._connect(self.path)
+        return self
+
+    def __exit__(self, exc_type, *_):
+        if exc_type is None:
+            self._conn.commit()
+        else:
+            self._conn.rollback()
+        self._conn.close()
+        self._conn = None
 
     @classmethod
     def create(cls, path, table):
@@ -30,38 +66,64 @@ class ClsDB:
             )
         return cls(path, table)
 
+    @property
+    def name(self):
+        return os.path.basename(self.path)
+
     @staticmethod
     def _connect(path):
         conn = sqlite3.connect(path, timeout=30)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
-    def query(self, kv, return_data=True):
-        """Return the cl array for the given key, or None if not found or table doesn't exist."""
-        if not os.path.exists(self.path):
-            return None
-        try:
-            with self._connect(self.path) as conn:
-                row = conn.execute(
-                    f"SELECT cl FROM {self.table} WHERE l1=? AND l2=? AND l3=? AND l4=?",
-                    (kv['l1'], kv['l2'], kv['l3'], kv['l4']),
-                ).fetchone()
-        except sqlite3.OperationalError:
-            return None
+    def query_conn(self, kv, return_data=True):
+        row = self._conn.execute(self.QUERY_SQL, (kv['l1'], kv['l2'], kv['l3'], kv['l4'])).fetchone()
         if not return_data:
             return row is not None
         if row is None:
             return None
         return np.frombuffer(row[0], dtype=np.float32).copy()
 
+    def write_conn(self, kv, cl):
+        blob = np.asarray(cl, dtype=np.float32).tobytes()
+        self._conn.execute(self.WRITE_SQL, (kv['l1'], kv['l2'], kv['l3'], kv['l4'], blob))
+
+    def query(self, kv, return_data=True):
+        """Return the cl array for the given key, or None if not found or table doesn't exist."""
+        if not os.path.exists(self.path):
+            return None
+        try:
+            with self:
+                return self.query_conn(kv, return_data)
+        except sqlite3.OperationalError:
+            return None
+
     def write(self, kv, cl):
         """Insert or replace a cl array for the given key."""
-        blob = np.asarray(cl, dtype=np.float32).tobytes()
-        with self._connect(self.path) as conn:
-            conn.execute(
-                f"INSERT OR REPLACE INTO {self.table} (l1, l2, l3, l4, cl) VALUES (?, ?, ?, ?, ?)",
-                (kv['l1'], kv['l2'], kv['l3'], kv['l4'], blob),
-            )
+        with self:
+            self.write_conn(kv, cl)
+
+    @classmethod
+    def mpi_write(cls, comm):
+        """Last-rank writer loop.
+
+        Receive (db_path, table, [(key, cl), ...]) from workers until all send None.
+        """
+        from mpi4py import MPI
+
+        n_workers, n_done, dbs = comm.size - 1, 0, {}
+        while n_done < n_workers:
+            msg = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG)
+            if msg is None:
+                n_done += 1
+            else:
+                db_path, table, results = msg
+                key = (db_path, table)
+                if key not in dbs:
+                    dbs[key] = cls.create(db_path, table)
+                with dbs[key]:
+                    for sql_key, cl in results:
+                        dbs[key].write_conn(sql_key, cl)
 
 
 def kspice(  # noqa: C901

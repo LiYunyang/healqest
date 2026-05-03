@@ -7,7 +7,6 @@ import shutil
 import healpy as hp
 import numpy as np
 
-from mpi4py import MPI
 from mpi4py.MPI import COMM_WORLD as comm
 from healqest import startup, log
 from healqest.spectrum import KappaMap, compute_ps, ClsDB
@@ -34,48 +33,70 @@ def stypes2ktypes(spec_types):
 
 
 def get_kmap_and_spec(config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset='a', skip=False):
-    with tempfile.TemporaryDirectory(prefix='lens', dir=config.tmp_dir) as tmp:
-        _stypes = list(set(stypes))
-        if skip:
-            for stype in _stypes:
-                k1, k2 = stype2ktypes(stype)
-                sql_path, sql_table, sql_key = config.get_sql_keys(
-                    tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
-                )
-                if ClsDB(sql_path, sql_table).query(sql_key, return_data=False):
-                    spec_key = '_'.join(sql_key.values())
-                    logger.info(
-                        f"skipping {os.path.basename(sql_path)} {table}: {spec_key}", extra={'force': True}
-                    )
-                    _stypes.remove(stype)
+    """
+    Prepare the kappa maps for all the spectra, and compute the spectra of given types.
 
+    The result will be broadcasted to rank 0 and written to the database there.
+
+    Parameters
+    ----------
+    config: Config
+    stypes: list of str
+        list of 4-letter spec types, e.g., 'xxxx', 'xyyx'
+    i: int
+        seed number
+    mvtype: str
+        the lensrec MV type, e.g., "TT", "EB"
+    N1: bool
+        whether to compute N1-type spectra. if False, compute N0-type spectra.
+    mf_pair: tuple of int
+        the meanf-field group for the two kappa maps.
+    curl: bool
+        whether to compute the curl mode spectra.
+    cmbset: str='a'
+        the CMB set for the sims, e.g., 'a', 'b', '
+    skip: bool
+        whether to skip the spectra that already exist in the database.
+    """
+    # validate the single database for this call
+    db = None
+    to_skip = list()
+
+    for stype in stypes:
+        k1, k2 = stype2ktypes(stype)
+        db_new, sql_key = config.get_sql_keys(
+            tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
+        )
+        if db is None:
+            db = db_new
+        else:
+            assert db == db_new, "all specs in the same call should write to the same SQLite table."
+        if skip:
+            if db.query(sql_key, return_data=False):
+                spec_key = '_'.join(sql_key.values())
+                logger.info(f"skipping {db.name} {db.table}: {spec_key}", extra={'force': True})
+                to_skip.append(stype)
+    stypes = [s for s in stypes if s not in to_skip]
+
+    with tempfile.TemporaryDirectory(prefix='lens', dir=config.tmp_dir) as tmp:
         kmaps = dict()
-        for ktype in stypes2ktypes(_stypes):
+        for ktype in stypes2ktypes(stypes):
             for g in set(mf_pair):
                 kmaps[(ktype, g)] = KappaMap(
                     config, i, ktype, mvtype=mvtype, mf_group=g, N1=N1, cmbset=cmbset, outdir=tmp, curl=curl
                 )
 
         local_results = []
-        sql_table = None
-        sql_path = None
-        for stype in _stypes:
+        for stype in stypes:
             k1, k2 = stype2ktypes(stype)
             g1, g2 = mf_pair
-            _p, _t, sql_key = config.get_sql_keys(
+            _, sql_key = config.get_sql_keys(
                 tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
             )
-            if sql_table is None and sql_path is None:
-                sql_table = _t
-                sql_path = _p
-            else:
-                assert sql_table == _t and sql_path == _p, (
-                    "all specs in the same call should write to the same SQLite table."
-                )
             cl_dat = compute_ps(kmaps[(k1, g1)], kmaps[(k2, g2)])
             local_results.append((sql_key, cl_dat))
         if local_results:
-            comm.send((sql_path, sql_table, local_results), dest=0)
+            comm.send((db.path, db.table, local_results), dest=comm.size - 1)
 
 
 def main(i, mvtype, cmbset, curl=False, skip=False):
@@ -88,7 +109,6 @@ def main(i, mvtype, cmbset, curl=False, skip=False):
                 extra={'force': True},
             )
         stypes = [] if i == 0 else ['xxxx', 'xyyx', 'xyxy']
-
         get_kmap_and_spec(stypes=stypes, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
         if args.cross:
             get_kmap_and_spec(stypes=['xx'], N1=False, cmbset=cmbset, mf_pair=(0, 0), **common_kw)
@@ -148,25 +168,12 @@ if __name__ == "__main__":
 
     loop = np.arange(args.i1, args.i2 + 1)
 
-    if comm.rank == 0:
-        n_workers = comm.size - 1
-        n_done = 0
-        dbs = {}
-        while n_done < n_workers:
-            msg = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG)
-            if msg is None:
-                n_done += 1
-            else:
-                db_path, table, results = msg
-                key = (db_path, table)
-                if key not in dbs:
-                    dbs[key] = ClsDB.create(db_path, table)
-                for sql_key, cl in results:
-                    dbs[key].write(sql_key, cl)
+    if comm.rank == comm.size - 1:
+        ClsDB.mpi_write(comm)
     else:
-        for _i in loop[(comm.rank - 1) :: (comm.size - 1)]:
+        for _i in loop[comm.rank :: (comm.size - 1)]:
             main(_i, cmbset=args.set, mvtype=args.mvtype, curl=args.curl, skip=args.skip)
-        comm.send(None, dest=0)
+        comm.send(None, dest=comm.size - 1)
 
     comm.barrier()
     if comm.rank == 0:

@@ -2,11 +2,17 @@ from functools import lru_cache
 from itertools import product
 import numpy as np
 import healpy as hp
-import os
 from healqest import weights, resp, startup, healqest_utils as hq, qest, log
+from healqest.spectrum import ClsDB
 from mpi4py.MPI import COMM_WORLD as comm
 
 logger = log.get_logger(__name__)
+
+
+def get_db(config, mvtype, seed, cmbset, curl):
+    return config.get_sql_keys(
+        tag=mvtype, seed=seed, ktype1='xx', ktype2='xx', SAN0=True, N1=False, cmbset=cmbset, curl=curl
+    )
 
 
 def main(seed, cmbset, bundle_pair=None):  # noqa: C901
@@ -21,9 +27,9 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         qes = list()
         mvtypes = list()
         for mvtype in config.mvtypes:
-            cl_out = config.p_cls(mvtype, seed, seed, 'xx', 'xx', SAN0=True, cmbset=cmbset, curl=args.curl)
-            if os.path.exists(cl_out):
-                logger.warning(f"Skipping {cl_out}", extra={"force": True})
+            db, sql_key = get_db(config, mvtype, seed, cmbset, curl=args.curl)
+            if db.query(sql_key, return_data=False):
+                logger.info(f"skipping {mvtype} for seed {seed}", extra={'force': True})
                 continue
             else:
                 qes += config.mvtype2qe(mvtype)
@@ -183,9 +189,8 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         N0 *= w**2
         SAN0[f'{mvtype}'] = N0
 
-        cl_out = config.p_cls(mvtype, seed, seed, 'xx', 'xx', SAN0=True, cmbset=cmbset, curl=args.curl)
-        os.makedirs(os.path.dirname(cl_out), exist_ok=True)
-        hq.write_cl(cl_out, N0, header=f"# nlmax, ncor, nside = {config.Lmax:8d} {1:8d} {config.g.nside:8d}")
+        db, sql_key = get_db(config, mvtype, seed, cmbset, curl=args.curl)
+        comm.send((db.path, db.table, [(sql_key, N0)]), dest=comm.size - 1)
 
 
 if __name__ == "__main__":
@@ -224,6 +229,7 @@ if __name__ == "__main__":
 
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
+    assert comm.size > 1, f"{__name__} only works in MPI mode."
 
     cinv = config.rectype != 'naive'
 
@@ -238,5 +244,11 @@ if __name__ == "__main__":
         # (because rank0 might has other jobs)
 
     meta_loop = list(product(bundle_pairs, _loop))
-    for _bundle_pair, _seed in meta_loop[comm.rank :: comm.size]:
-        main(_seed, args.set, bundle_pair=_bundle_pair)
+
+    if comm.rank == comm.size - 1:
+        ClsDB.mpi_write(comm)
+    else:
+        for _bundle_pair, _seed in meta_loop[comm.rank :: (comm.size - 1)]:
+            main(_seed, args.set, bundle_pair=_bundle_pair)
+        comm.send(None, dest=comm.size - 1)
+    comm.barrier()

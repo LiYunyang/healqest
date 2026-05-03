@@ -1,4 +1,5 @@
 from functools import partial
+import re
 import numpy as np
 import multiprocessing
 import operator
@@ -144,117 +145,54 @@ def load_N1(i, config, mvtype, average=True, coadd=False, curl=False):
     return _ - N0, N0
 
 
-def load_sql_Cls(seeds, config, mvtype, cross=False, cmbset='a', curl=False):
-    db = config.get_sql_table(mvtype, spec_type='n0', curl=curl)
+def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, **kw):
+    """
+    Load spectra from the sqlite database and performs specific coadding procedure.
+
+    Parameters
+    ----------
+    seeds: list of int
+        The seeds of the spectra to be loaded.
+    config: Config
+    spec_type: str
+        The type of the spectra to be loaded, e.g., 'n0', 'n1', 'san0', 'rdn0'.
+    mvtype: str
+        The MV type of the spectra to be loaded, e.g., 'TT', 'EB'.
+    curl: bool
+        Whether to load the curl mode spectra.
+    ops: str
+        Instructions on how the spectra should be combined. The instruction will be parsed to be signs and
+        spec types. For example, "xyxy-xyyx" means loading the 'xyxy' and 'xyyx' spectra and coadding them
+        with + and - signs respectively.
+    Lmax: int=None
+
+    Returns
+    -------
+    np.ndarray
+        The coadded spectra.
+    """
+    db = config.get_sql_table(mvtype, spec_type=spec_type, curl=curl)
+    operators = re.split(r'([+-])', ops)
+    if operators[0] not in ['+', '-']:
+        operators = ['+'] + operators
+
+    assert len(operators) % 2 == 0, "invalid ops format"
     out = list()
-    with db:
-        for i in seeds:
-            _db, sql_key = config.get_sql_keys(
-                tag=mvtype,
-                seed=i,
-                ktype1='xx',
-                ktype2=None if cross else 'xx',
-                N1=False,
-                SAN0=False,
-                cmbset=cmbset,
-                curl=curl,
-            )
-            assert _db == db
-            out.append(db.query_conn(sql_key))
-    return np.array(out)
-
-
-def load_sql_data(config, mvtype, cmbset='a', curl=False):
-    db = config.get_sql_table(mvtype, spec_type='rdn0', curl=curl)
-    with db:
-        _db, sql_key = config.get_sql_keys(
-            tag=mvtype, seed=0, ktype1='xx', ktype2='xx', N1=False, SAN0=False, cmbset=cmbset, curl=curl
-        )
-        assert _db == db
-        return db.query_conn(sql_key)
-
-
-def load_sql_Cls_ab(seeds, config, mvtype, curl=False):
-    db = config.get_sql_table(mvtype, spec_type='n1', curl=curl)
-    out = list()
-    with db:
-        for i in seeds:
-            _db, sql_key = config.get_sql_keys(
-                tag=mvtype,
-                seed=i,
-                ktype1='aa',
-                ktype2='bb',
-                N1=True,
-                SAN0=False,
-                cmbset='a',  # for N1 type, always use 'a'
-                curl=curl,
-            )
-            assert _db == db
-            out.append(db.query_conn(sql_key))
-    return np.array(out)
-
-
-def load_sql_N0(seeds, config, mvtype, cmbset='a', curl=False):
-    db = config.get_sql_table(mvtype, spec_type='n0', curl=curl)
-    out = list()
-    kw = dict(N1=False, SAN0=False, cmbset=cmbset, curl=curl, tag=mvtype)
-    with db:
-        for i in seeds:
-            _db, k1 = config.get_sql_keys(seed=i, ktype1='xy', ktype2='xy', **kw)
-            assert _db == db
-            _db, k2 = config.get_sql_keys(seed=i, ktype1='xy', ktype2='yx', **kw)
-            assert _db == db
-            cls_xyxy = db.query_conn(k1)
-            cls_xyyx = db.query_conn(k2)
-            out.append(cls_xyxy + cls_xyyx)
-    return np.array(out)
-
-
-def load_sql_SAN0(seeds, config, mvtype, cmbset='a', curl=False):
-    db = config.get_sql_table(mvtype, spec_type='san0', curl=curl)
-    out = list()
-    kw = dict(N1=False, SAN0=True, cmbset=cmbset, curl=curl, tag=mvtype)
-    with db:
-        for i in seeds:
-            _db, sql_key = config.get_sql_keys(seed=i, ktype1='xx', ktype2='xx', **kw)
-            assert _db == db
-            out.append(db.query_conn(sql_key))
-    return np.array(out)
-
-
-def load_sql_RDN0(seeds, config, mvtype, cmbset='a', curl=False):
-    db = config.get_sql_table(mvtype, spec_type='rdn0', curl=curl)
-    out = list()
-    kw = dict(N1=False, SAN0=False, cmbset=cmbset, curl=curl, tag=mvtype)
-    with db:
-        for i in seeds:
-            tot = 0
-            for ktype1, ktype2 in [('x0', 'x0'), ('x0', '0x'), ('0x', '0x'), ('0x', 'x0')]:
-                _db, sql_key = config.get_sql_keys(seed=i, ktype1=ktype1, ktype2=ktype2, **kw)
-                assert _db == db
-                tot += db.query_conn(sql_key)
-            out.append(tot)
-    return np.array(out)
-
-
-def load_sql_N1(seeds, config, mvtype, curl=False):
-    db = config.get_sql_table(mvtype, spec_type='n1', curl=curl)
-    out = list()
-    kw = dict(N1=True, SAN0=False, curl=curl, tag=mvtype, cmbset='a')
     with db:
         for i in seeds:
             cl = 0
-            for sign, ktype1, ktype2 in [
-                (-1, 'xy', 'xy'),
-                (-1, 'xy', 'yx'),
-                (1, 'ab', 'ab'),
-                (1, 'ab', 'ba'),
-            ]:
-                _db, sql_key = config.get_sql_keys(seed=i, ktype1=ktype1, ktype2=ktype2, **kw)
+            for s, ktype in zip(operators[0::2], operators[1::2]):
+                k1 = ktype[:2]
+                k2 = ktype[2:] or None
+                _db, sql_key = config.get_sql_keys(seed=i, ktype1=k1, ktype2=k2, **kw, curl=curl, tag=mvtype)
                 assert _db == db
+                sign = -1 if s == '-' else 1
                 cl += sign * db.query_conn(sql_key)
             out.append(cl)
-    return np.array(out)
+    out = np.array(out)
+    if Lmax is not None:
+        out = out[:, : Lmax + 1]
+    return out
 
 
 class LensingSpectra:
@@ -379,11 +317,18 @@ class LensingSpectra:
                         coadd=self.coadd,
                     )
                     Cls_ab = np.array(list(map(_f, range(1, self.N_N1 + 1))))
+                    Cls_ab = Cls_ab[:, : self.Lmax + 1]
                 else:
-                    Cls_ab = load_sql_Cls_ab(
-                        range(1, self.N_N1 + 1), self.config, self.mvtype, curl=self.curl
+                    Cls_ab = load_sql(
+                        range(1, self.N_N1 + 1),
+                        config=self.config,
+                        spec_type='n1',
+                        mvtype=self.mvtype,
+                        curl=self.curl,
+                        ops='aabb',
+                        N1=True,
+                        Lmax=self.Lmax,
                     )
-                Cls_ab = Cls_ab[:, : self.Lmax + 1]
                 self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
                 self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
             else:
@@ -497,30 +442,22 @@ class LensingSpectra:
                     Cl0 = _f(0)
 
         else:
-            N0s = load_sql_N0(
-                range(1, self.N + 1), self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl
-            )
+            kw = dict(Lmax=self.Lmax, curl=self.curl, mvtype=self.mvtype, config=self.config)
+            N0_loop = range(1, self.N + 1)
+            N1_loop = range(1, self.N_N1 + 1) if self.N_N1 > 0 else []
+            N0s = load_sql(N0_loop, spec_type='n0', ops='xyxy+xyyx', cmbset=self.cmbset, **kw)
             if self.N_N1 > 0:
-                N1s = load_sql_N1(range(1, self.N_N1 + 1), self.config, self.mvtype, curl=self.curl)
+                N1s = load_sql(N1_loop, spec_type='n1', ops='abab+abba-xyxy-xyyx', cmbset='a', N1=True, **kw)
             if self.do_SAN0:
-                SAN0s = load_sql_SAN0(
-                    range(1, self.N + 1), self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl
-                )
+                SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, SAN0=True, **kw)
             if self.do_RDN0:
-                RDN0s = load_sql_RDN0(
-                    range(1, self.N + 1), self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl
+                RDN0s = load_sql(
+                    N0_loop, spec_type='rdn0', ops='x0x0+x00x+0xx0+0x0x', cmbset=self.cmbset, **kw
                 )
                 RDN0s -= N0s
-            Cls_hat = load_sql_Cls(
-                range(1, self.N + 1),
-                self.config,
-                self.mvtype,
-                cross=False,
-                cmbset=self.cmbset,
-                curl=self.curl,
-            )
+            Cls_hat = load_sql(N0_loop, spec_type='n0', ops='xxxx', cmbset=self.cmbset, **kw)
             if self.do_data:
-                Cl0 = load_sql_data(self.config, self.mvtype, cmbset=self.cmbset, curl=self.curl)
+                Cl0 = load_sql([0], spec_type='rdn0', ops='xxxx', cmbset=self.cmbset, **kw)[0]
 
         self.N0s = N0s[:, : self.Lmax + 1] / self.resp2
 

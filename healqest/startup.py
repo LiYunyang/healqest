@@ -832,6 +832,35 @@ class Config:
         kv = dict(l1=l1, l2=l2, l3=l3, l4=l4)
         return db, kv
 
+    def query_spectra(self, tag, spec_type, stype, curl=False):
+        """
+        Quickly extract a single spectrum from the SQL database.
+
+        This should not be used for extracting a large number of spectra for performance reason. For that,
+        it is better to open a context manager for the database and do multiple queries in a row. See examples
+        in `analysis.load_sql()` for reference.
+
+        Parameters
+        ----------
+        tag: str
+            name of a QE or a MVtype, e.g., "TT"/"TEET"/"MVprf"
+        spec_type: str
+            Type of the spectrum, e.g., "n0"/"n1"/"san0"/"rdn0"
+        stype: str
+            The underscore-separated 4-leg notation of the spectrum, e.g., "1a_1a_2b_2b".
+        curl: bool=False
+            Indicator for curl spectra, which will have a different tag.
+
+        Returns
+        -------
+        cl: np.ndarray
+        """
+        db = self.get_sql_table(tag=tag, spec_type=spec_type, curl=curl)
+        legs = stype.split('_')
+        assert len(legs) == 4
+        kv = {f"l{i}": leg for i, leg in enumerate(legs, start=1)}
+        return db.query(kv)
+
     def p_resp(self, tag, bundle=None):
         """Paths to response functions."""
         bundle_str = self.bundle2str(bundle)

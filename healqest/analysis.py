@@ -332,7 +332,7 @@ class LensingSpectra:
                 self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
                 self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
             else:
-                logger.warning("not loading resp function due to no N1 sims")
+                logger.info("not loading resp function due to no N1 sims")
                 self.resp2 = np.ones(self.Lmax + 1)
                 return
         elif self.resp_type in ['cross', 'cross2']:

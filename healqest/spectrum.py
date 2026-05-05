@@ -58,7 +58,9 @@ class ClsDB:
     def create(cls, path, table):
         """Create the DB file and initialize the table if needed. Call from write rank only."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with cls._connect(path) as conn:
+        if not os.path.exists(path):
+            logger.info(f"creating new database: {os.path.basename(path)}")
+        with cls._connect(path, create_if_missing=True) as conn:
             conn.execute(
                 f"CREATE TABLE IF NOT EXISTS {table} "
                 "(l1 TEXT NOT NULL, l2 TEXT NOT NULL, l3 TEXT, l4 TEXT, "
@@ -71,7 +73,12 @@ class ClsDB:
         return os.path.basename(self.path)
 
     @staticmethod
-    def _connect(path):
+    def _connect(path, create_if_missing=False):
+        if not os.path.exists(path) and not create_if_missing:
+            raise FileNotFoundError(
+                f"database file {os.path.basename(path)} not found. "
+                f"Create it with `create` explicitly before writing."
+            )
         conn = sqlite3.connect(path, timeout=30)
         conn.execute("PRAGMA journal_mode=WAL")
         return conn

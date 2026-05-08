@@ -6,7 +6,6 @@ including
     - modules for map io.
 """
 
-import abc
 import argparse
 from datetime import datetime
 from functools import cached_property
@@ -574,6 +573,14 @@ class Config:
         fl = np.zeros((self.lmax + 1)).astype(float)
         fl[self.lminP : self.lmaxP + 1] = 1
         return fl
+
+    def load_ilc(self, ilc_type):
+        from healqest.cinv.cinv_hp import ILCData
+
+        ilc = ILCData(self.path(self.file_ilc, field=self.field), ilc_type=ilc_type)
+        logger.info(f"setting beams by the ILC effective beam.")
+        self.bl = ilc.bl
+        return ilc
 
     # === setup masks ===
     def _load_mask(self, item, field=0):

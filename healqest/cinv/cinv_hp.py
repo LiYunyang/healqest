@@ -632,3 +632,68 @@ class MapsBase(abc.ABC):
             alm = hp.almxfl(reduce_lmax(alms[j], config.lmax), fl)
             almbars[j], flms[j] = alm, fl
         return almbars, flms
+
+
+class ILCData:
+    """Class to hold ILC/cinv related data.
+
+    Notes
+    -----
+    The ILC data is fully parsed from a pre-generated ILC file. So the attributes of this class should all be
+    implemented in the `.npz` file from which the `ILCData` is instantiated.
+
+    Attributes
+    ----------
+    bl_sim: dict
+        dict of simulation beams with 90/150/220/effective keys. Each value is an array of sufficient length.
+    bl_t, bl_p: dict
+        dict of data temperature/polarization beams with 90/150/220 keys. Each value is an array of sufficient
+        length.
+    weights: np.ndarray
+        Array of shape (2, 3, lmax). The per-ell ILC weights For T and P, 3 frequencies.
+    ilc_nlres: np.ndarray
+        Array of shape (2, lmax+1). The ILC noise+residual (subtracting the white noise part)
+    ilc_ninv: np.ndarray
+        Array of shape (2, npix). The ILC noise inverse in pixel space. This is built from the sparse `ninv`
+        array from the ILC file, with `nside` and `ninv_ipix` infos.
+    nep: np.ndarray
+        Array of shape (2,). The white noise equivalent temperature for T and P.
+    ninv_nl: np.ndarray
+        Array of shape (2, lmax+1). The harmonic space ninv_nl for `NoiseInverseFilterAlm`
+
+    """
+
+    def __init__(self, fname, ilc_type):
+        """
+        Initialize the ILCData object by loading the ILC file and parsing the relevant data.
+
+        Parameters
+        ----------
+        fname: str
+            The file name of the ILC data file, which should be a `.npz`
+        ilc_type: str
+            ilc type, e.g., 'mv', 'tszfree', 'cibfree'.
+        """
+        loaded = np.load(fname, allow_pickle=True)
+        self.bl_sim = loaded['bl_sim'].item()
+        self.bl = self.bl_sim['effective']
+        logger.warning("overwrite bl with the effective ILC beam.")
+        self.bl_t = loaded['bl_t'].item()
+        self.bl_p = loaded['bl_p'].item()
+        self.weights = loaded['weights'].item()[ilc_type]
+        self.ilc_nlres = loaded['ilc_nlres'].item()[ilc_type]
+        self.ilc_ninv = np.zeros((2, hp.nside2npix(loaded['nside'])))
+        ipix = loaded['ninv_ipix']
+        self.ilc_ninv[:, ipix] = loaded['ninv'].item()[ilc_type]
+        self.lmax = self.weights.shape[-1] - 1
+
+        # nep is optional. For inhomogeneous alm model, this is not needed.
+        if 'nep' in loaded.files:
+            self.nep = loaded['nep'].item()[ilc_type]
+        else:
+            self.nep = None
+
+        if 'ninv_nl' in loaded.files:
+            self.ninv_nl = loaded['ninv_nl'].item()[ilc_type]
+        else:
+            self.ninv_nl = None

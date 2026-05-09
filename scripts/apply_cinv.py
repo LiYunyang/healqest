@@ -24,7 +24,7 @@ def main(seed, cmbset, N1, ilc_type):
     os.makedirs(os.path.dirname(fname), exist_ok=True)
 
     sims = dm.Data(config=config, N1=N1, ilc_type=ilc_type)
-    ninv_t, ninv_p = sims.get_ninv()
+    (ninv_t, ninv_p), ninv_nl = sims.get_ninv()
     nlres = sims.get_nlres(cinv=True)
     add_noise = config.add_noise and not N1
 
@@ -37,6 +37,7 @@ def main(seed, cmbset, N1, ilc_type):
         g=config.g,
         mtheta=config.mtheta,
         mmin=config.cinv_mmin,
+        ninv_nl=ninv_nl,
     )
     if config.rectype == 'sqe':
         cinv_t = cinv.cinv_t(
@@ -64,7 +65,7 @@ def main(seed, cmbset, N1, ilc_type):
         almbar = np.array([tlmbar, elmbar, blmbar])
     elif config.rectype == 'gmv':
         cinv_tp = cinv.cinv_tp(
-            ninv=[ninv_t, ninv_p, ninv_p],
+            ninv=[ninv_t, ninv_p],
             tf1d=[config.tfbl_1d('t'), config.tfbl_1d('p')],
             tf2d=[config.tfbl_2d('t'), config.tfbl_2d('p')],
             bl=[config.bl, config.bl],

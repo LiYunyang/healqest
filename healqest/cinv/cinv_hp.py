@@ -13,7 +13,7 @@ from .. import log
 from . import opfilt_hp
 from . import cd_solve, cd_monitors
 from . import hp_utils, cinv_utils
-from .opfilt_hp import SkyInverseFilterJoint, SkyInverseFilter, NoiseInverseFilter, TFObj
+from .opfilt_hp import SkyInverseFilterJoint, SkyInverseFilter, TFObj
 
 logger = log.get_logger(__name__)
 
@@ -115,6 +115,16 @@ class cinv(abc.ABC):
         self.eps = monitor.eps
         opfilt_hp.calc_fini(soltn, self.s_inv_filt)
 
+    def set_ninv_model(self, ninv, ninv_nl=None):
+        from .opfilt_hp import NoiseInverseFilterAlm, NoiseInverseFilterPix
+
+        if ninv_nl is None:
+            self.n_inv_filt = hp_utils.jit(NoiseInverseFilterPix, n_inv=ninv, tf=self.tf, g=self.g)
+        else:
+            self.n_inv_filt = hp_utils.jit(
+                NoiseInverseFilterAlm, n_inv=ninv, tf=self.tf, g=self.g, ninv_nl=ninv_nl
+            )
+
     @abc.abstractmethod
     def get_fl(self, pol, lmax):
         raise NotImplementedError("get_fl method must be implemented in subclass")
@@ -174,6 +184,7 @@ class cinv_t(cinv):
         ellscale=True,
         g=None,
         mmin=None,
+        ninv_nl=None,
     ):
         assert len(ninv) == 1
         tf = TFObj(1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
@@ -184,7 +195,7 @@ class cinv_t(cinv):
 
         # Set up s_inv_filt and n_inv_filt
         self.s_inv_filt = hp_utils.jit(SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
-        self.n_inv_filt = hp_utils.jit(NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
+        self.set_ninv_model(ninv=ninv, ninv_nl=ninv_nl)
 
     def apply_ivf(self, tmap, soltn=None):
         if soltn is None:
@@ -253,6 +264,7 @@ class cinv_p(cinv):
         ellscale=True,
         g=None,
         mmin=None,
+        ninv_nl=None,
     ):
         assert isinstance(ninv, list)
         assert len(ninv) in [2]
@@ -263,7 +275,7 @@ class cinv_p(cinv):
 
         # Set up s_inv_filt and n_inv_filt
         self.s_inv_filt = hp_utils.jit(SkyInverseFilter, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
-        self.n_inv_filt = hp_utils.jit(NoiseInverseFilter, n_inv=ninv, tf=self.tf, g=self.g)
+        self.set_ninv_model(ninv=ninv, ninv_nl=ninv_nl)
 
     def apply_ivf(self, qumap, soltn=None):
         if soltn is not None:
@@ -332,15 +344,16 @@ class cinv_tp(cinv):
         ellscale=False,
         g=None,
         mmin=None,
+        ninv_nl=None,
     ):
         assert isinstance(ninv, list)
-        assert len(ninv) in [3]  # TT/PP or TT/QQ/UU
+        assert len(ninv) in [2]  # TT/PP
         tf = TFObj(3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
 
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, g=g, tf=tf
         )
-        self.n_inv_filt = hp_utils.jit(NoiseInverseFilter, ninv, tf=self.tf, g=g)
+        self.set_ninv_model(ninv=ninv, ninv_nl=ninv_nl)
         self.s_inv_filt = hp_utils.jit(SkyInverseFilterJoint, s_cls=self.dl, nl_res=self.nl_res, tf=self.tf)
 
     @property
@@ -589,6 +602,10 @@ class MapsBase(abc.ABC):
     @abc.abstractmethod
     def get_nlres(self, cinv=False):
         raise NotImplementedError("get_nlres method must be implemented in subclass")
+
+    @abc.abstractmethod
+    def get_ninv_nl(self):
+        pass
 
     def load_sim_alm(self, config, seed, cmbset, bundle, add_noise):
         """Prepare the input alms for naive cinv-filtering."""

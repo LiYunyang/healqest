@@ -240,8 +240,8 @@ class PreOperatorDiag:
             bl2 = getattr(tf, f"tf1d_{s}")[: lmax + 1] ** 2
             sl = cl + nl / bl2
             self.cls[s] = sl
-            nlev = n_inv_filt.nlev_cl_t if s == 't' else n_inv_filt.nlev_cl_p
-            _filt = 1 / sl + 1 / nlev * bl2
+            nlev = n_inv_filt.get_nl(s)
+            _filt = 1 / sl + cinv_utils.cli(nlev) * bl2
 
             _fl = cinv_utils.cli(sl + nlev / bl2)  # direct bl2 division is better than NESTED cli!
             _fl[:2] = 0
@@ -309,8 +309,8 @@ class PreOperatorDiagJoint(PreOperatorDiag):
             bl2 = getattr(tf, f"tf1d_{s}")[: lmax + 1] ** 2
             s_mat[i] = cl + nl / bl2
 
-            nlev = n_inv_filt.nlev_cl_t if s == 't' else n_inv_filt.nlev_cl_p
-            n_mat[i] = 1 / nlev * bl2
+            nlev = n_inv_filt.get_nl(s)
+            n_mat[i] = cinv_utils.cli(nlev) * bl2
 
             _fl = cinv_utils.cli(s_mat[i] + nlev / bl2)
             _fl[:2] = 0
@@ -403,11 +403,7 @@ class SkyInverseFilterJoint(SkyInverseFilter):
         return alms_out
 
 
-class NoiseInverseFilter:  # alm_filter_ninv(object):
-    """Class that performs inverse variance filtering: [tfbl] [m2a] N-1 [a2m] [tfbl]."""
-
-    nlev_cl_t: float = None  # equivalent noise level in uK^2 sr for precond
-    nlev_cl_p: float = None  # equivalent noise level in uK^2 sr for precond
+class NoiseInverseFilter:
     almsize: int
 
     def __init__(self, n_inv, tf, g=None, fast=True, **kwargs):
@@ -425,7 +421,7 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             If True, only store partial maps. This should significantly speedup `apply_map`
         """
         _ninv = np.atleast_2d(n_inv)
-        assert _ninv.shape[0] in [1, 2, 3]
+        assert _ninv.shape[0] in [1, 2]
         self.nonzero = np.where(np.sum(_ninv, axis=0) > 0)[0]
         # saving index is fastest compared to masks for nside2048 masks
 
@@ -436,26 +432,17 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         self.nside = hp.npix2nside(self.npix)
         self.pixarea = hp.nside2pixarea(self.nside)
 
-        fsky = np.count_nonzero(self.nonzero) / _ninv.shape[-1]
         if fast:
             _ninv = np.ascontiguousarray(_ninv[:, self.nonzero])
         self.n_inv_t = None
-        self.n_inv_q = None
-        self.n_inv_u = None
+        self.n_inv_p = None
 
         self.npol = tf.npol
         assert self.npol in [1, 2, 3]
-        assert self.npol == _ninv.shape[0], f"ninv maps should match npol={self.npol}, got {_ninv.shape[0]}"
         if self.npol in [1, 3]:
-            logger.warning(f"input ninv has shape {_ninv.shape}, taking the first row as T")
             self.n_inv_t = _ninv[0]
-            self.nlev_cl_t, fsky, NET = self.ninv2nlev(self.n_inv_t, fsky=fsky)
         if self.npol in [2, 3]:
-            logger.warning(f"input ninv has shape {_ninv.shape}, taking the second to last as Q")
-            self.n_inv_q = _ninv[-2]
-            logger.warning(f"input ninv has shape {_ninv.shape}, taking the last row as U")
-            self.n_inv_u = _ninv[-1]
-            self.nlev_cl_p, fsky, NET = self.ninv2nlev((self.n_inv_q + self.n_inv_u) / 2, fsky=fsky)
+            self.n_inv_p = _ninv[-1]
 
         if g is None:
             self.g = None
@@ -470,17 +457,6 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             self.g_tf = None
 
     @staticmethod
-    def load_ninvs(fnames):
-        if isinstance(fnames, list):
-            n_inv_prod = hp_utils.read_map(fnames[0])
-            if len(fnames) > 1:
-                for n in fnames[1:]:
-                    n_inv_prod = n_inv_prod * hp_utils.read_map(n)
-            return n_inv_prod
-        else:
-            return hp_utils.read_map(fnames)
-
-    @staticmethod
     def ninv2nlev(ninv, fsky=None):
         if fsky is None:
             fsky = np.mean(ninv > 0)
@@ -492,11 +468,37 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
         logger.info(f"ninv2nlev: {NET:.2f} uK-amin noise Cl over fsky {fsky:.2f}")
         return nlev, fsky, NET
 
+    def apply_map(self, maps):
+        """Modify the maps in-place."""
+        return NotImplemented
+
     def calc_prep(self, maps):
         maps_copy = np.copy(maps)
         self.apply_map(maps_copy)
         alms = self.tf.apply_tf(maps=maps_copy, alms=None, g=self.g, adjoint=True, g_tf=self.g_tf)
         return alms
+
+    def apply_alm(self, alms):
+        """harmonic-space Ninv operation: apply A^T N^-1 A on alms."""
+        assert alms.shape[-1] == self.almsize
+        maps = self.tf.apply_tf(alms=alms, maps=None, g=self.g, adjoint=False, g_tf=self.g_tf)
+        self.apply_map(maps)
+        alms[:] = self.tf.apply_tf(maps=maps, alms=alms, g=self.g, adjoint=True, g_tf=self.g_tf)
+
+
+class NoiseInverseFilterPix(NoiseInverseFilter):  # alm_filter_ninv(object):
+    """Pixel-space inverse variance filtering: [tfbl] [m2a] N-1 [a2m] [tfbl]."""
+
+    nlev_cl_t: float = None  # equivalent noise level in uK^2 sr for precond
+    nlev_cl_p: float = None  # equivalent noise level in uK^2 sr for precond
+
+    def __init__(self, n_inv, tf, g=None, fast=True, **kwargs):
+        super().__init__(n_inv, tf, g=g, fast=fast, **kwargs)
+        fsky = np.count_nonzero(self.nonzero) / self.npix
+        if self.npol in [1, 3]:
+            self.nlev_cl_t, fsky, NET = self.ninv2nlev(self.n_inv_t, fsky=fsky)
+        if self.npol in [2, 3]:
+            self.nlev_cl_p, fsky, NET = self.ninv2nlev(self.n_inv_p, fsky=fsky)
 
     def apply_map(self, maps):
         """map-based Ninv operation: N^-1."""
@@ -506,12 +508,52 @@ class NoiseInverseFilter:  # alm_filter_ninv(object):
             if maps.shape[0] in (1, 3):
                 maps[0, self.nonzero] *= self.n_inv_t / self.pixarea
             if maps.shape[0] in (2, 3):
-                maps[-2, self.nonzero] *= self.n_inv_q / self.pixarea
-                maps[-1, self.nonzero] *= self.n_inv_u / self.pixarea
+                maps[-2:, self.nonzero] *= self.n_inv_p / self.pixarea
 
-    def apply_alm(self, alms):
-        """harmonic-space Ninv operation: apply A^T N^-1 A on alms."""
-        assert alms.shape[-1] == self.almsize
-        maps = self.tf.apply_tf(alms=alms, maps=None, g=self.g, adjoint=False, g_tf=self.g_tf)
-        self.apply_map(maps)
-        alms[:] = self.tf.apply_tf(maps=maps, alms=alms, g=self.g, adjoint=True, g_tf=self.g_tf)
+    def get_nl(self, s):
+        nlev = self.nlev_cl_t if s == 't' else self.nlev_cl_p
+        return nlev
+
+
+class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
+    """Harmonic-space inverse variance filtering: [tfbl] [m2a] N-1 [a2m] [tfbl]."""
+
+    nlinv_t: NDArray = None  # (lmax+1, )
+    nlinv_p: NDArray = None  # (lmax+1, )
+
+    def __init__(self, n_inv, ninv_nl, tf, g=None, fast=True, **kwargs):
+        super().__init__(n_inv, tf, g=g, fast=fast, **kwargs)
+        assert ninv_nl.shape[0] == 2
+        assert ninv_nl.shape[1] >= self.lmax + 1
+        if self.npol in [1, 3]:
+            self.nlinv_t = cinv_utils.cli(ninv_nl[0, : self.lmax + 1])
+        if self.npol in [2, 3]:
+            self.nlinv_p = cinv_utils.cli(ninv_nl[-1, : self.lmax + 1])
+
+    def apply_map(self, maps):
+        """harmonic-space Ninv operation: N^-1 = W F^-1 N_l^-1 F W (W=sqrt pixel weight, F=SHT)."""
+        ndim = np.atleast_2d(maps).shape[0]
+        assert ndim == self.npol
+        if ndim in (1, 3):
+            np.atleast_2d(maps)[0, self.nonzero] *= np.sqrt(self.n_inv_t)
+        if ndim in (2, 3):
+            maps[-2:, self.nonzero] *= np.sqrt(self.n_inv_p)
+
+        alms = self.g.map2alm(maps, lmax=self.lmax, iter=0, check=False)
+        assert alms.dtype == np.complex128
+
+        if ndim in (1, 3):
+            hp.almxfl(np.atleast_2d(alms)[0], self.nlinv_t, inplace=True)
+        if ndim in (2, 3):
+            hp.almxfl(alms[-2], self.nlinv_p, inplace=True)
+            hp.almxfl(alms[-1], self.nlinv_p, inplace=True)
+
+        self.g.alm2map(alms, maps=maps)
+        if ndim in (1, 3):
+            np.atleast_2d(maps)[0, self.nonzero] *= np.sqrt(self.n_inv_t)
+        if ndim in (2, 3):
+            maps[-2:, self.nonzero] *= np.sqrt(self.n_inv_p)
+
+    def get_nl(self, s):
+        nlinv = self.nlinv_t if s == 't' else self.nlinv_p
+        return cinv_utils.cli(nlinv)

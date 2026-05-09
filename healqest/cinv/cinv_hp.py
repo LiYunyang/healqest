@@ -603,10 +603,6 @@ class MapsBase(abc.ABC):
     def get_nlres(self, cinv=False):
         raise NotImplementedError("get_nlres method must be implemented in subclass")
 
-    @abc.abstractmethod
-    def get_ninv_nl(self):
-        pass
-
     def load_sim_alm(self, config, seed, cmbset, bundle, add_noise):
         """Prepare the input alms for naive cinv-filtering."""
         t = self.get_tmap(cmbset=cmbset, seed=seed, bundle=bundle, add_noise=add_noise, g=config.g)

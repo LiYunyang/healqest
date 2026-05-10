@@ -501,7 +501,7 @@ class NoiseInverseFilterPix(NoiseInverseFilter):  # alm_filter_ninv(object):
             self.nlev_cl_p, fsky, NET = self.ninv2nlev(self.n_inv_p, fsky=fsky)
 
     def apply_map(self, maps):
-        """map-based Ninv operation: N^-1."""
+        # TODO: apply the same 0-ing for ~nonzero pixels, like `NoiseInverseFilterAlm`. May help convergence.
         if maps.ndim == 1:
             maps[self.nonzero] *= self.n_inv_t / self.pixarea
         else:
@@ -516,7 +516,7 @@ class NoiseInverseFilterPix(NoiseInverseFilter):  # alm_filter_ninv(object):
 
 
 class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
-    """Harmonic-space inverse variance filtering: [tfbl] [m2a] N-1 [a2m] [tfbl]."""
+    """Harmonic-space inverse variance filtering: [tfbl] [a2m] [w] [m2a] N-1 [m2a] [w] [a2m] [tfbl]."""
 
     nlinv_t: NDArray = None  # (lmax+1, )
     nlinv_p: NDArray = None  # (lmax+1, )
@@ -531,13 +531,17 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
             self.nlinv_p = cinv_utils.cli(ninv_nl[-1, : self.lmax + 1])
 
     def apply_map(self, maps):
-        """harmonic-space Ninv operation: N^-1 = W F^-1 N_l^-1 F W (W=sqrt pixel weight, F=SHT)."""
         ndim = np.atleast_2d(maps).shape[0]
         assert ndim == self.npol
+
+        zero_mask = np.zeros(self.npix, dtype=float)
+        zero_mask[self.nonzero] = 1
+
         if ndim in (1, 3):
             np.atleast_2d(maps)[0, self.nonzero] *= np.sqrt(self.n_inv_t)
         if ndim in (2, 3):
             maps[-2:, self.nonzero] *= np.sqrt(self.n_inv_p)
+        maps *= zero_mask
 
         alms = self.g.map2alm(maps, lmax=self.lmax, iter=0, check=False)
         assert alms.dtype == np.complex128
@@ -553,6 +557,7 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
             np.atleast_2d(maps)[0, self.nonzero] *= np.sqrt(self.n_inv_t)
         if ndim in (2, 3):
             maps[-2:, self.nonzero] *= np.sqrt(self.n_inv_p)
+        maps *= zero_mask
 
     def get_nl(self, s):
         nlinv = self.nlinv_t if s == 't' else self.nlinv_p

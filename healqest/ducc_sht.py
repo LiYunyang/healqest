@@ -885,3 +885,72 @@ def get_almvar(wl0, lmax, Lmax=30):
     for L in range(Lmax + 1):
         out += wl0[L].real * load[:, L]
     return reduce_lmax(out, lmax)
+
+
+def wigner3j(l1, l2, m1, m2, lmax=None) -> tuple:
+    """
+    Compute the Wigner-3j symbol <l1 l2 l; m1 m2 m> for all valid l.
+
+    Parameters
+    ----------
+    l1, l2: int
+    m1, m2: int
+    lmax: int, optional
+        If provided, only return values upto lmax.
+
+    Returns
+    -------
+    l: np.ndarray
+        valid l values, upto lmax (if present).
+    wg3j: np.ndarray
+        corresponding Wigner-3j values, upto lmax (if present).
+    """
+    l0, wg3j = ducc0.misc.wigner3j_int(l1, l2, m1, m2)
+    if lmax is not None:
+        if l0 > lmax:
+            return np.array([]), np.array([])
+        wg3j = wg3j[: min(len(wg3j) + 1, lmax - l0 + 1)]
+    l = l0 + np.arange(len(wg3j))
+    return l, wg3j
+
+
+def get_product_spectra(cl, clw, lmax=None):
+    """
+    Compute the angular power spectrum of the product of two Gaussian random fields.
+
+    Notes
+    -----
+    For random fields X and Y with power spectra Cl1 and Cl2 respectively, the power spectrum of
+    the field Z = X*Y is given by
+        Cl_mod = sum_{l1,l2} (2l1+1)(2l2+1)/(4pi) * (Wigner3j(l1,l2,0,0,0))^2 * Cl1(l1) * Cl2(l2)
+
+    Parameters
+    ----------
+    cl: np.ndarray
+        shape (_lmax+1,)
+    clw: np.ndarray
+        shape (lmax_w+1,)
+    lmax: int, optional
+        the lmax of the output cl. If None, use _lmax.
+
+    Returns
+    -------
+    Cl_mod: np.ndarray
+        shape (nspec, lmax+1,)
+    """
+    from healqest import wignerd
+
+    _lmax = cl.shape[-1] - 1
+    lmax_w = clw.shape[-1] - 1
+    if lmax is None:
+        lmax = _lmax
+    npoints = (_lmax + lmax_w + lmax) // 2 + 1
+    glq = wignerd.gauss_legendre_quadrature(npoints)
+
+    def _f(n):
+        return (2 * np.arange(n + 1) + 1) / (4 * np.pi)
+
+    xi_W = glq.cf_from_cl(0, 0, _f(lmax_w) * clw)  # compute once
+    xi_X = glq.cf_from_cl(0, 0, _f(_lmax) * cl)
+    out = 2 * np.pi * glq.cl_from_cf(lmax, 0, 0, xi_X * xi_W)
+    return out

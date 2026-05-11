@@ -690,7 +690,6 @@ class ILCData:
         loaded = np.load(fname, allow_pickle=True)
         self.bl_sim = loaded['bl_sim'].item()
         self.bl = self.bl_sim['effective']
-        logger.warning("overwrite bl with the effective ILC beam.")
         self.bl_t = loaded['bl_t'].item()
         self.bl_p = loaded['bl_p'].item()
         self.weights = loaded['weights'].item()[ilc_type]

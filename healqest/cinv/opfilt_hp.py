@@ -5,6 +5,7 @@ Mergerd from opfilt_hp_[t/p/tp].py
 
 import numpy as np
 from numpy.typing import NDArray
+from functools import lru_cache
 import healpy as hp
 from healqest import ducc_sht, log
 from . import hp_utils, cinv_utils
@@ -559,6 +560,19 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
             maps[-2:, self.nonzero] *= np.sqrt(self.n_inv_p)
         maps *= zero_mask
 
+    @lru_cache(maxsize=3)
     def get_nl(self, s):
+        assert s in ['t', 'e', 'b']
+        # this is the effective noise over the full sky accounting for inhomogeneous weights.
         nlinv = self.nlinv_t if s == 't' else self.nlinv_p
-        return cinv_utils.cli(nlinv)
+        nl = cinv_utils.cli(nlinv)
+        fsky = np.sum(self.n_inv_t if s == 't' else self.n_inv_p) / np.count_nonzero(self.nonzero)
+        nl /= fsky
+
+        # or almost equivalently:
+        # fsky = np.count_nonzero(self.nonzero) / self.npix
+        # w = np.zeros(self.npix, dtype=float)
+        # w[self.nonzero] = self.n_inv_t if s == 't' else self.n_inv_p
+        # clw = hp.alm2cl(self.g.map2alm(np.sqrt(w), check=False, lmax=self.lmax)) / fsky
+        # nl = cinv_utils.cli(ducc_sht.get_product_spectra(nlinv, clw))
+        return nl

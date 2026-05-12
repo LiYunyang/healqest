@@ -187,7 +187,7 @@ class cinv_t(cinv):
         ninv_nl=None,
     ):
         assert len(ninv) == 1
-        tf = TFObj(1, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
+        tf = TFObj(1, lmax=lmax, tf1d=tf1d, bl=bl, tf2d=tf2d, mtheta=mtheta, m_cut=mmin)
         # only take the first entry as the temperation ninv
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, tf=tf, g=g
@@ -268,7 +268,7 @@ class cinv_p(cinv):
     ):
         assert isinstance(ninv, list)
         assert len(ninv) in [2]
-        tf = TFObj(2, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
+        tf = TFObj(2, lmax=lmax, tf1d=tf1d, bl=bl, tf2d=tf2d, mtheta=mtheta, m_cut=mmin)
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, tf=tf, g=g
         )
@@ -348,7 +348,7 @@ class cinv_tp(cinv):
     ):
         assert isinstance(ninv, list)
         assert len(ninv) in [2]  # TT/PP
-        tf = TFObj(3, lmax=lmax, tf1d=tf1d, tf2d=tf2d, mtheta=mtheta, bl=bl, m_cut=mmin)
+        tf = TFObj(3, lmax=lmax, tf1d=tf1d, bl=bl, tf2d=tf2d, mtheta=mtheta, m_cut=mmin)
 
         super().__init__(
             lmax, nside=nside, cl=cl, nl_res=nl_res, eps_min=eps_min, ellscale=ellscale, g=g, tf=tf

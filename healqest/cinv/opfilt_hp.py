@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 from functools import lru_cache
 import healpy as hp
 from healqest import ducc_sht, log
+from healqest.cinv.cinv_utils import cli
 from . import hp_utils, cinv_utils
 
 logger = log.get_logger(__name__)
@@ -34,7 +35,7 @@ class TFObj:
     mtheta: dict = None
     m_cut = None
 
-    def __init__(self, npol, lmax, tf1d, tf2d=None, bl=None, mtheta=None, m_cut=None):  # noqa: C901
+    def __init__(self, npol, lmax, tf1d, bl, tf2d=None, mtheta=None, m_cut=None):  # noqa: C901
         """
         Initialize the TF object.
 
@@ -60,11 +61,8 @@ class TFObj:
             assert _tf2d.shape[0] in [1, 2]
             assert hp.Alm.getlmax(_tf2d.shape[-1]) == lmax
 
-        if bl is not None:
-            _bl = np.atleast_2d(bl)[:, : lmax + 1]
-            assert _bl.shape[0] in [1, 2]
-        else:
-            _bl = [None, None]
+        _bl = np.atleast_2d(bl)[:, : lmax + 1]
+        assert _bl.shape[0] in [1, 2]
 
         # mmcut should've already been incoporated in tf2d in config.
         # So no just need to apply m_cut to mtheta.
@@ -166,15 +164,21 @@ class TFObj:
         for s in self.pols:
             # setattr modifies each copy of the tf1d/tf2d/bl SEPARATELY.
             # so no worries that each attribute begins as a view of the same array.
-            tf1d = getattr(self, f"tf1d_{s}")
-            tf2d = getattr(self, f"tf2d_{s}")
+            # tf1d = getattr(self, f"tf1d_{s}")
+            # tf2d = getattr(self, f"tf2d_{s}")
             bl = getattr(self, f"bl_{s}")
-            setattr(self, f"tf1d_{s}", tf1d * fl)
-            if tf2d is not None:
-                setattr(self, f"tf2d_{s}", hp.almxfl(tf2d, fl))
+            # setattr(self, f"tf1d_{s}", tf1d * fl)
+            # if tf2d is not None:
+            #     setattr(self, f"tf2d_{s}", hp.almxfl(tf2d, fl))
             if bl is not None:
                 setattr(self, f"bl_{s}", bl * fl)
         return self
+
+    def get_tfbl1d(self, s, lmax=None):
+        if lmax is None:
+            lmax = self.lmax
+        assert s in ['t', 'e', 'b']
+        return getattr(self, f"tf1d_{s}")[: lmax + 1] * getattr(self, f"bl_{s}")[: lmax + 1]
 
 
 class DotOperator:
@@ -238,18 +242,18 @@ class PreOperatorDiag:
             cl = s_cls[ss][: lmax + 1]
             nl = nl_res[ss][: lmax + 1]
 
-            bl2 = getattr(tf, f"tf1d_{s}")[: lmax + 1] ** 2
+            bl2 = tf.get_tfbl1d(s, lmax) ** 2
             sl = cl + nl / bl2
             self.cls[s] = sl
             nlev = n_inv_filt.get_nl(s)
-            _filt = 1 / sl + cinv_utils.cli(nlev) * bl2
+            _filt = 1 / sl + cli(nlev) * bl2
 
-            _fl = cinv_utils.cli(sl + nlev / bl2)  # direct bl2 division is better than NESTED cli!
+            _fl = cli(sl + nlev / bl2)  # direct bl2 division is better than NESTED cli!
             _fl[:2] = 0
             filt.append(_filt)
             fl.append(_fl)
 
-        self.filt = cinv_utils.cli(np.array(filt))
+        self.filt = cli(np.array(filt))
         self.fl = np.array(fl)
 
     def __call__(self, alms):
@@ -270,7 +274,7 @@ class PreOperatorDiag:
         assert alms.shape[0] == len(self.tf.pols)
         for idx, s in enumerate(self.tf.pols):
             fl = self.cls[s] / rescale_cl * self.fl[idx]
-            fl *= cinv_utils.cli(getattr(self.tf, f"tf1d_{s}"))
+            fl *= cli(self.tf.get_tfbl1d(s, self.tf.lmax))
             hp.almxfl(alms[idx], fl, inplace=True)
         return np.squeeze(alms)
 
@@ -307,17 +311,18 @@ class PreOperatorDiagJoint(PreOperatorDiag):
             ss = f"{s}{s}"
             cl = s_cls[ss][: lmax + 1]
             nl = nl_res[ss][: lmax + 1]
-            bl2 = getattr(tf, f"tf1d_{s}")[: lmax + 1] ** 2
+
+            bl2 = tf.get_tfbl1d(s, lmax) ** 2
             s_mat[i] = cl + nl / bl2
 
             nlev = n_inv_filt.get_nl(s)
-            n_mat[i] = cinv_utils.cli(nlev) * bl2
+            n_mat[i] = cli(nlev) * bl2
 
-            _fl = cinv_utils.cli(s_mat[i] + nlev / bl2)
+            _fl = cli(s_mat[i] + nlev / bl2)
             _fl[:2] = 0
             fl.append(_fl)
 
-        blte2 = (getattr(tf, f"tf1d_t") * getattr(tf, f"tf1d_e"))[: lmax + 1]
+        blte2 = tf.get_tfbl1d('t', lmax) * tf.get_tfbl1d('e', lmax)
         _te = s_cls['te'][: lmax + 1] + nl_res['te'][: lmax + 1] / blte2
         sinv, sinv_te = cinv_utils.invert_teb(np.array(s_mat), te=_te)
         self.filt, self.filt_te = cinv_utils.invert_teb(sinv + n_mat, te=sinv_te)
@@ -326,8 +331,7 @@ class PreOperatorDiagJoint(PreOperatorDiag):
         # for TE part (only used for GMV resp)
         cl = s_cls['te'][: lmax + 1]
         nl = nl_res['te'][: lmax + 1]
-        bl2 = tf.tf1d_t[: lmax + 1] * tf.tf1d_e[: lmax + 1]
-        self.fl_te = cinv_utils.cli(cl + nl / bl2)
+        self.fl_te = cli(cl + nl / blte2)
         self.fl_te[:2] = 0
 
     def calc(self, alms):
@@ -353,10 +357,10 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
             ss = f"{s}{s}"
             cltt = s_cls[ss][: self.lmax + 1]
             cltt_2d = hp_utils.cl2almformat(cltt)
-            tf1d = getattr(self.tf, f"tf1d_{s}")
-            nltt = nl_res[ss][: self.lmax + 1] / tf1d**2
+            bl2 = tf.get_tfbl1d(s, self.lmax) ** 2
+            nltt = nl_res[ss][: self.lmax + 1] / bl2
             nltt_2d = hp_utils.cl2almformat(nltt)
-            slinv.append(cinv_utils.cli(cltt_2d + nltt_2d))
+            slinv.append(cli(cltt_2d + nltt_2d))
         self.slinv = np.array(slinv)
 
     def calc(self, alms, inplace=False):
@@ -385,10 +389,10 @@ class SkyInverseFilterJoint(SkyInverseFilter):
             ss = f"{s}{s}"
             cl = s_cls[ss][: self.lmax + 1]
             nl = nl_res[ss][: self.lmax + 1]
-            bl2 = getattr(tf, f"tf1d_{s}")[: self.lmax + 1] ** 2
+            bl2 = tf.get_tfbl1d(s, self.lmax) ** 2
             slinv[i] = hp_utils.cl2almformat(cl + nl / bl2)
 
-        blte2 = (getattr(tf, f"tf1d_t") * getattr(tf, f"tf1d_e"))[: self.lmax + 1]
+        blte2 = tf.get_tfbl1d('t', self.lmax) * tf.get_tfbl1d('e', self.lmax)
         _te = s_cls['te'][: self.lmax + 1] + nl_res['te'][: self.lmax + 1] / blte2
         _te = hp_utils.cl2almformat(_te)
         self.slinv, self.slinv_te = cinv_utils.invert_teb(slinv, te=_te)
@@ -565,7 +569,8 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
         assert s in ['t', 'e', 'b']
         # this is the effective noise over the full sky accounting for inhomogeneous weights.
         nlinv = self.nlinv_t if s == 't' else self.nlinv_p
-        nl = cinv_utils.cli(nlinv)
+        nl = cli(nlinv)
+
         fsky = np.sum(self.n_inv_t if s == 't' else self.n_inv_p) / np.count_nonzero(self.nonzero)
         nl /= fsky
 
@@ -574,5 +579,5 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
         # w = np.zeros(self.npix, dtype=float)
         # w[self.nonzero] = self.n_inv_t if s == 't' else self.n_inv_p
         # clw = hp.alm2cl(self.g.map2alm(np.sqrt(w), check=False, lmax=self.lmax)) / fsky
-        # nl = cinv_utils.cli(ducc_sht.get_product_spectra(nlinv, clw))
+        # nl = cli(ducc_sht.get_product_spectra(nlinv, clw))
         return nl

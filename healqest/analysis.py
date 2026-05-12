@@ -63,6 +63,16 @@ def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
         return ellb[slc], np.squeeze(Clb[:, slc])
 
 
+def unbin_spectrum(Clb, bins, lmax):
+    assert Clb.shape[0] == len(bins) - 1, "the number of binned Cls should match the number of bins"
+    ell = np.arange(lmax + 1)
+    bin_idx = np.digitize(ell, bins, right=False)
+    out = np.zeros(lmax + 1)
+    sel = np.logical_and(bin_idx <= len(bins) - 1, bin_idx > 0)
+    out[sel] = Clb[bin_idx[sel] - 1]
+    return out
+
+
 def bin_Cls(Cls, bins):
     """Return bin center, bined Cls, error on the mean and cov.
 
@@ -488,9 +498,12 @@ class LensingSpectra:
 
     def bin_spec(self, bins, norm_cl=None, resp_err=False):
         if norm_cl is not None:
-            fac = 1 / norm_cl[: self.Lmax + 1]
+            norm_cb = bin_spectrum(norm_cl[: self.Lmax + 1], bins=bins, verbose=False)[1]
+            fac = 1 / unbin_spectrum(norm_cb, bins=bins, lmax=self.Lmax)
+            # fac = 1 / norm_cl[: self.Lmax + 1]
         else:
             fac = 1
+
         self.x = (bins[1:] + bins[:-1]) / 2
         N0cov = bin_Cls(self.N0s * fac, bins)[3]
         if self.N_N1 > 0:

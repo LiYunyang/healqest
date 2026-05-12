@@ -212,7 +212,7 @@ class LensingSpectra:
         do_RDN0=False,
         do_data=False,
         curl=False,
-        sql=False,
+        sql=True,
     ):
         """Lensing spectra object.
 
@@ -233,7 +233,7 @@ class LensingSpectra:
         coadd: bool
             Special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing
             reconstruction map is coadded before taking spectra.
-        sql: bool=False
+        sql: bool=True
             If True, load the spectra from the SQLite database instead of txt files.
         """
         self.config = config

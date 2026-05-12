@@ -531,9 +531,13 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
         assert ninv_nl.shape[0] == 2
         assert ninv_nl.shape[1] >= self.lmax + 1
         if self.npol in [1, 3]:
-            self.nlinv_t = cinv_utils.cli(ninv_nl[0, : self.lmax + 1])
+            self.nlinv_t = cli(ninv_nl[0, : self.lmax + 1])
+            # artificially debias the Nl by tf. This is not principled, but should give better weighting.
+            self.nlinv_t *= self.tf.tf1d_t[: self.lmax + 1] ** 2
         if self.npol in [2, 3]:
-            self.nlinv_p = cinv_utils.cli(ninv_nl[-1, : self.lmax + 1])
+            self.nlinv_p = cli(ninv_nl[-1, : self.lmax + 1])
+            # artificially debias the Nl by tf. This is not principled, but should give better weighting.
+            self.nlinv_p *= self.tf.tf1d_e[: self.lmax + 1] * self.tf.tf1d_b[: self.lmax + 1]
 
     def apply_map(self, maps):
         ndim = np.atleast_2d(maps).shape[0]

@@ -41,21 +41,11 @@ def main(seed, cmbset, N1, ilc_type):
     )
     if config.rectype == 'sqe':
         cinv_t = cinv.cinv_t(
-            ninv=[ninv_t],
-            tf1d=config.tf1d['t'],
-            # tf2d=config.tfbl_2d('t'),
-            bl=config.bl,
-            eps_min=config.eps_t,
-            **common_kw,
+            ninv=[ninv_t], tf1d=config.tf1d['t'], bl=config.bl, eps_min=config.eps_t, **common_kw
         )
 
         cinv_p = cinv.cinv_p(
-            ninv=[ninv_p, ninv_p],
-            tf1d=config.tf1d['p'],
-            bl=config.bl,
-            # tf2d=config.tfbl_2d('p'),
-            eps_min=config.eps_p,
-            **common_kw,
+            ninv=[ninv_p, ninv_p], tf1d=config.tf1d['p'], bl=config.bl, eps_min=config.eps_p, **common_kw
         )
 
         ivfs = cinv.library_cinv_sTP(sims, cinvt=cinv_t, cinvp=cinv_p, add_noise=add_noise)
@@ -67,7 +57,6 @@ def main(seed, cmbset, N1, ilc_type):
         cinv_tp = cinv.cinv_tp(
             ninv=[ninv_t, ninv_p],
             tf1d=[config.tf1d['t'], config.tf1d['p']],
-            # tf2d=[config.tfbl_2d('t'), config.tfbl_2d('p')],
             bl=[config.bl, config.bl],
             eps_min=max(config.eps_t, config.eps_p),
             **common_kw,

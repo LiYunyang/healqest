@@ -489,6 +489,32 @@ class Geometry:
             maps_out[masks] = hp.UNSEEN
         return maps_out
 
+    def map2leg(self, maps, lmax, nthreads=None):
+        nthreads = get_nthreads(nthreads)
+        mmax = int(np.ceil(lmax * np.max(np.sin(self.theta))))
+        kw = dict(nphi=self.nphi, ringstart=self.ofs, phi0=self.phi0, nthreads=nthreads)
+        legs = ducc0.sht.map2leg(map=np.atleast_2d(maps), mmax=mmax, **kw)
+        return legs
+
+    def leg2cm(self, legs, mask, lmax):
+        from scipy.stats import binned_statistic
+
+        fsky = np.zeros(self.ofs.shape[0])
+        for j, nphi in enumerate(self.nphi):
+            fsky[j] = np.mean(mask[self.ofs[j] : self.ofs[j] + nphi])
+
+        emm = np.arange(legs.shape[-1])
+        lx = np.outer(1 / np.sin(self.theta), emm).ravel()
+        bins = np.arange(0, lmax + 2)
+        # ΔΩ/Nⱼ per ring: accounts for unnormalized DFT sum in map2leg and pixel area
+        norm = (self.pixelarea / self.nphi / fsky)[:, None]
+
+        Cm = np.zeros((legs.shape[0], lmax + 1))
+        for j, _leg in enumerate(legs):
+            v, edge, _ = binned_statistic(lx, (np.abs(_leg) ** 2 * norm).ravel(), bins=bins)
+            Cm[j] = v
+        return Cm
+
 
 @numba.njit(fastmath=True, parallel=False)
 def fast_subtract(maps, cut_map, ipix, tf_pix):

@@ -526,16 +526,23 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
     nlinv_t: NDArray = None  # (lmax+1, )
     nlinv_p: NDArray = None  # (lmax+1, )
 
+    nl_eff_t: NDArray = None  # (lmax+1, ) effective nl for preconditioner and the analytic model
+    nl_eff_p: NDArray = None  # (lmax+1, ) effective nl for preconditioner and the analytic model
+
     def __init__(self, n_inv, ninv_nl, tf, g=None, fast=True, **kwargs):
         super().__init__(n_inv, tf, g=g, fast=fast, **kwargs)
         assert ninv_nl.shape[0] == 2
         assert ninv_nl.shape[1] >= self.lmax + 1
         if self.npol in [1, 3]:
-            self.nlinv_t = cli(ninv_nl[0, : self.lmax + 1])
+            self.nl_eff_t = ninv_nl[0, : self.lmax + 1]
+            self.nlinv_t = cli(self.nl_eff_t)
             # artificially debias the Nl by tf. This is not principled, but should give better weighting.
             self.nlinv_t *= self.tf.tf1d_t[: self.lmax + 1] ** 2
+
+            # self.nlinv_t[:] = self.nlinv_t[3000]
         if self.npol in [2, 3]:
-            self.nlinv_p = cli(ninv_nl[-1, : self.lmax + 1])
+            self.nl_eff_p = ninv_nl[-1, : self.lmax + 1]
+            self.nlinv_p = cli(self.nl_eff_p)
             # artificially debias the Nl by tf. This is not principled, but should give better weighting.
             self.nlinv_p *= self.tf.tf1d_e[: self.lmax + 1] * self.tf.tf1d_b[: self.lmax + 1]
 
@@ -571,12 +578,10 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
     @lru_cache(maxsize=3)
     def get_nl(self, s):
         assert s in ['t', 'e', 'b']
-        # this is the effective noise over the full sky accounting for inhomogeneous weights.
-        nlinv = self.nlinv_t if s == 't' else self.nlinv_p
-        nl = cli(nlinv)
-
+        nl = self.nl_eff_t if s == 't' else self.nl_eff_p
         fsky = np.sum(self.n_inv_t if s == 't' else self.n_inv_p) / np.count_nonzero(self.nonzero)
-        nl /= fsky
+        # this is the effective noise over the full sky accounting for inhomogeneous weights.
+        return nl / fsky
 
         # or almost equivalently:
         # fsky = np.count_nonzero(self.nonzero) / self.npix
@@ -584,4 +589,4 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
         # w[self.nonzero] = self.n_inv_t if s == 't' else self.n_inv_p
         # clw = hp.alm2cl(self.g.map2alm(np.sqrt(w), check=False, lmax=self.lmax)) / fsky
         # nl = cli(ducc_sht.get_product_spectra(nlinv, clw))
-        return nl
+        # return nl

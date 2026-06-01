@@ -962,7 +962,7 @@ def get_product_spectra(cl, clw, lmax=None):
     Returns
     -------
     Cl_mod: np.ndarray
-        shape (nspec, lmax+1,)
+        shape (lmax+1,) if pol is False, or (2, lmax+1) for [EE, BB] if pol is True.
     """
     from healqest import wignerd
 
@@ -977,6 +977,17 @@ def get_product_spectra(cl, clw, lmax=None):
         return (2 * np.arange(n + 1) + 1) / (4 * np.pi)
 
     xi_W = glq.cf_from_cl(0, 0, _f(lmax_w) * clw)  # compute once
-    xi_X = glq.cf_from_cl(0, 0, _f(_lmax) * cl)
-    out = 2 * np.pi * glq.cl_from_cf(lmax, 0, 0, xi_X * xi_W)
+    if cl.ndim == 2 and cl.shape[0] == 2:
+        clp = cl[0] + cl[1]
+        clm = cl[0] - cl[1]
+        xi_p = glq.cf_from_cl(2, 2, _f(_lmax) * clp)
+        xi_m = glq.cf_from_cl(2, -2, _f(_lmax) * clm)
+        out_p = 2 * np.pi * glq.cl_from_cf(lmax, 2, 2, xi_p * xi_W)
+        out_m = 2 * np.pi * glq.cl_from_cf(lmax, 2, -2, xi_m * xi_W)
+        out = np.array([(out_p + out_m) / 2, (out_p - out_m) / 2])
+    elif cl.ndim == 1 or cl.shape[0] == 1:
+        xi_X = glq.cf_from_cl(0, 0, _f(_lmax) * cl)
+        out = 2 * np.pi * glq.cl_from_cf(lmax, 0, 0, xi_X * xi_W)
+    else:
+        raise ValueError(f"cl must be either 1d or 2d with shape (2, lmax+1), got {cl.shape}")
     return out

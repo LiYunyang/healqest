@@ -337,7 +337,7 @@ class cinv_tp(cinv):
         nl_res,
         ninv,
         tf1d,
-        tf2d: None,
+        tf2d=None,
         bl=None,
         mtheta=None,
         eps_min=1.0e-5,

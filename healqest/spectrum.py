@@ -54,6 +54,9 @@ class ClsDB:
         self._conn.close()
         self._conn = None
 
+    def __str__(self):
+        return f"ClsDB(path={self.path}, table={self.table})"
+
     @classmethod
     def create(cls, path, table):
         """Create the DB file and initialize the table if needed. Call from write rank only."""
@@ -506,7 +509,7 @@ class KappaMap:
             self._make_map_kin()  # input kappa map from alms. Optionally save to disk for polspice.
         else:
             self._make_map()  # create the mf-subtracted kappa maps. Optionally save to disk for polspice.
-        self.file_mask = self.config.tmp_file_mask  # the on-disk mask file for polspice.
+        self.file_mask = getattr(self.config, 'tmp_file_mask', None)  # the on-disk mask file for polspice.
 
     def _save_map(self, kmap, bundle_key=None):
         fname = self.get_fname(bundle_key=bundle_key)
@@ -592,7 +595,7 @@ class KappaMap:
 
     def _make_map_kin(self):
         self.kmaps = {None: None}
-        if os.path.exists(self.get_fname()) and self.outdir is not None:
+        if self.outdir is not None and os.path.exists(self.get_fname()):
             pass
         else:
             fname = self.config.path(self.config.kappa_in, seed=self.i)

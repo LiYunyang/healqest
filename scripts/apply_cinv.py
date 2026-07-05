@@ -92,7 +92,7 @@ if __name__ == "__main__":
     parser = startup.parser()
     parser.add_argument('-i1', default=1, type=int, help='seed start')
     parser.add_argument('-i2', default=1, type=int, help='seed stop (inclusive)')
-    parser.add_argument('-ilc', default='mv', type=str, help='ILC type')
+    parser.add_argument('-ilc', nargs='+', default=['mv'], type=str, help='ILC type(s)')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     parser.add_argument(
         "-m",
@@ -112,9 +112,9 @@ if __name__ == "__main__":
     seed_loop = np.arange(args.i1, args.i2 + 1)
     if args.n1:
         # do cmbsets a and b
-        loop = list(product(seed_loop, ['a', 'b'], config.ilcs))
+        loop = list(product(seed_loop, ['a', 'b'], args.ilc))
     else:
         # do cmbset as requested ('a' by default)
-        loop = list(product(seed_loop, [args.set], config.ilcs))
+        loop = list(product(seed_loop, [args.set], args.ilc))
     for i, _cmbset, ilc in loop[comm.rank :: comm.size]:
         main(seed=i, cmbset=_cmbset, N1=args.n1, ilc_type=ilc)

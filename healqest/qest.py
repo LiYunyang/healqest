@@ -3,7 +3,7 @@ from typing import TypedDict
 import numpy as np
 import healpy as hp
 from healqest import healqest_utils as utils
-from healqest import weights, resp, log
+from healqest import weights, resp, log, ducc_sht
 
 logger = log.get_logger(__name__)
 np.seterr(all='ignore')
@@ -21,7 +21,7 @@ class Qest:
 
     __prf_estimators__ = ['TTprf', 'EEprf', 'TEprf', 'ETprf']  # exclude the odd parity ones!
 
-    def __init__(self, lmax, Lmax, Cls, nside=None, flT=None, flP=None, gmv=False):
+    def __init__(self, lmax, Lmax, Cls, g=None, flT=None, flP=None, gmv=False):
         """Setup quadratic estimator.
 
         Parameters
@@ -32,9 +32,9 @@ class Qest:
             Maximum multipole of the lens rec alm
         Cls: CMBCl
             dict of cls
-        nside: int=None
-            Healpix nside used for intermediate alm2map operations,
-            the nside has to be large enough, >1/2 lmax, to avoid aliasing
+        g: Geometry
+            Geometry instance defined within declination range. This will be used to compute spherical
+            harmonics functions with ducc0. If None, the slower full-sky healpy functions will be used.
         flT, flP: np.ndarray=None
             binary array of shape (lmax+1, ), indicating the POST cinv ell selection.
         gmv: bool=False
@@ -53,10 +53,11 @@ class Qest:
         assert self.fl_cut['B'].shape[-1] == self.lmax + 1
 
         self.cls = Cls
-        if nside is None:
+        if g is None:
             nside = utils.get_nside(lmax)
-        self.nside = nside
-
+            g = ducc_sht.Geometry(nside=nside)
+        self.g = g
+        self.nside = g.nside
         assert self.lmax < 2.0 * self.nside, "lmax must be less that 2*nside"
         self.gmv = gmv
 
@@ -92,7 +93,7 @@ class Qest:
             else:
                 return q, -u
 
-    def eval(self, qe, almbar1, almbar2, u=None, g=None, distortion='lens'):
+    def eval(self, qe, almbar1, almbar2, u=None, distortion='lens'):
         """Compute quadratic estimator.
 
         Parameters
@@ -103,10 +104,6 @@ class Qest:
           First and second filtered alm
         u: np.ndarray=None
           Profile instance
-        g: Geometry
-            Geometry instance defined within declination range. This will be used
-            to compute spherical harmonics functions with ducc0. If None, the slower
-            full-sky healpy functions will be used.
         distortion: str
             distortion type, 'lens' or 'prf' or 'tau'
 
@@ -131,15 +128,14 @@ class Qest:
 
         retglm = 0
         retclm = 0
-        if g is not None:
-            assert g.nside == self.nside
+
         assert q.ntrm % 2 == 0, f"Number of terms must be even: {q.ntrm}"
         for i in range(0, q.ntrm // 2):
             # skipping second half of reducant terms
             wX, wY, wP, sX, sY, sP = q.w[i][0], q.w[i][1], q.w[i][2], q.s[i][0], q.s[i][1], q.s[i][2]
 
-            Xq, Xu = self.alm2map_spin(almbar1, fell=wX, nside=self.nside, spin=sX, lmax=self.lmax, g=g)
-            Yq, Yu = self.alm2map_spin(almbar2, fell=wY, nside=self.nside, spin=sY, lmax=self.lmax, g=g)
+            Xq, Xu = self.alm2map_spin(almbar1, fell=wX, nside=self.nside, spin=sX, lmax=self.lmax, g=self.g)
+            Yq, Yu = self.alm2map_spin(almbar2, fell=wY, nside=self.nside, spin=sY, lmax=self.lmax, g=self.g)
             XYq = Xq * Yq - Xu * Yu  # XY = X*Y
             XYu = Xq * Yu + Yq * Xu  # XY = X*Y
 
@@ -158,10 +154,7 @@ class Qest:
                 XYq *= (-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
                 XYu *= -((-1) ** sP)  # XY = np.conj(XY) * (-1) ** sP
 
-            if g is None:
-                glm, clm = hp.map2alm_spin([XYq, XYu], np.abs(sP), self.Lmax)
-            else:
-                glm, clm = g.map2alm_spin([XYq, XYu], spin=np.abs(sP), lmax=self.Lmax, check=False)
+            glm, clm = self.g.map2alm_spin([XYq, XYu], spin=np.abs(sP), lmax=self.Lmax, check=False)
             glm = hp.almxfl(glm, _wP)
             clm = hp.almxfl(clm, _wP)  # for curl est, this will be -grad.
 
@@ -411,7 +404,7 @@ class Qest:
         weight = -1 * es / ss
         return weight, se
 
-    def rec_and_resp(self, qe, almbars1, almbars2, fls, fls2=None, u=None, g=None, fast=False, type1='lens'):
+    def rec_and_resp(self, qe, almbars1, almbars2, fls, fls2=None, u=None, fast=False, type1='lens'):
         """
         Compute lensing reconstruction for grad and curl modes, return also the analytical response functions.
 
@@ -425,8 +418,6 @@ class Qest:
             shape: (4, lmax+1), filter functions for TT/EE/BB/TE. If the two are the same, then set fls2=None.
         u: np.ndarray=None
             profile function for TTprf estimator
-        g: Geometry=None
-            Geometry instance defined within declination range.
         fast: bool=False
             If True, uses the fast response function calculation.
         type1: str
@@ -449,7 +440,7 @@ class Qest:
         else:
             _qe = qe
 
-        glm, clm = self.eval(_qe, almbars1[i1], almbars2[i2], g=g, distortion=type1)
+        glm, clm = self.eval(_qe, almbars1[i1], almbars2[i2], distortion=type1)
         # aresp_g = self.get_aresp_gmv(fls, _qe, fast=fast)
         # aresp_c = self.get_aresp_gmv(fls, _qe, fast=fast, curl=True)
         aresp_g = self.get_resp(fls, _qe, fast=fast, type1=type1, type2=type1, fls2=fls2)
@@ -462,7 +453,7 @@ class Qest:
         if qe.endswith('prf'):
             if not self.gmv:
                 assert _qe == 'TT', f"We only harden for 'TT' for SQE, got: {qe}"
-            slm = self.eval('TT', almbars1[0], almbars2[0], u=u, g=g, distortion='prf')[0]
+            slm = self.eval('TT', almbars1[0], almbars2[0], u=u, distortion='prf')[0]
             w_g, se_g = self.get_harden_weights(
                 _qe, fls, u, curl=False, fast=fast, type1=type1, type2='prf', fls2=fls2
             )
@@ -516,11 +507,11 @@ def get_harden_resps(keys, func):
     >>> get_harden_resps([ 'tau', 'lens', 'prf'], func=func)
     """
     R = 0
-    C11 = cofactor(keys, keys, 0, 0, func)
+    C00 = cofactor(keys, keys, 0, 0, func)
     for j, k in enumerate(keys):
         Rk = func(keys[0], k)
         Ck = cofactor(keys, keys, 0, j, func)
-        R += Ck * Rk / C11
+        R += Ck * Rk / C00
     return R
 
 
@@ -542,6 +533,6 @@ def get_harden_weights(keys, i, func):
     >>> func = lambda k1, k2: np.sum([R[f'{k1}-{k2}'][qe] for qe in ['TT', 'EE', 'TE', 'ET']], axis=0)
     >>> w_len = get_harden_weights(keys, 1, func=func) # weights for the lens component to harden against tau
     """
-    C11 = cofactor(keys, keys, 0, 0, func)
+    C00 = cofactor(keys, keys, 0, 0, func)
     Ck = cofactor(keys, keys, i, 0, func)
-    return Ck / C11
+    return Ck / C00

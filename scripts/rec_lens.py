@@ -50,7 +50,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
 
     estimator = qest.Qest(
         lmax=config.lmax,
-        nside=config.nside,
+        g=config.g,
         Cls=config.cmbcl,
         Lmax=config.Lmax,
         flT=config.flT,
@@ -101,15 +101,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
 
         for qe in qes:
             (glm, clm), (aresp_g, aresp_c) = estimator.rec_and_resp(
-                qe,
-                almbars1,
-                almbars2,
-                flms1,
-                g=config.g,
-                fast=True,
-                u=config.profile_u,
-                type1='lens',
-                fls2=flms2,
+                qe, almbars1, almbars2, flms1, fast=True, u=config.profile_u, type1='lens', fls2=flms2
             )
             alms_grads[qe] += glm / len(ilc_pair)
             alms_curls[qe] += clm / len(ilc_pair)

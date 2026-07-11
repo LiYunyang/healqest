@@ -73,7 +73,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
 
     estimator = qest.Qest(
         lmax=config.lmax,
-        nside=config.nside,
+        g=config.g,
         Cls=config.cmbcl,
         Lmax=config.Lmax,
         flT=config.flT,

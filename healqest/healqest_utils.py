@@ -101,23 +101,14 @@ def get_qes(qeset):
         "GMVTTEETE": ["TT", "EE", "TE", "ET"],
         "GMVTBEB": ["TB", "BT", "EB", "BE"],
         "MV": ["TT", "EE", "EB", "TE", "TB", "BE", "ET", "BT"],
-        "qMV": ["TT", "EE", "EB", "TE", "TB"],
         "MVnoTT": ["EE", "EB", "TE", "TB", "EB", "TE", "TB"],
-        "qMVnoTT": ["EE", "EB", "TE", "TB"],
         "MVnoEB": ["EE", "TE", "TB", "TE", "TB"],
-        "qMVnoEB": ["EE", "TE", "TB"],
         "TTEETE": ["TT", "EE", "TE", "ET"],
-        "qTTEETE": ["TT", "EE", "TE"],
         "TBEB": ["TB", "BT", "EB", "BE"],
-        "qTBEB": ["TB", "EB"],
         "PP": ["EE", "EB", "BE"],
-        "qPP": ["EE", "EB"],
         "TEET": ["TE", "ET"],
         "EBBE": ["EB", "BE"],
         "TBBT": ["TB", "BT"],
-        "qTEET": ["TE"],
-        "qEBBE": ["EB"],
-        "qTBBT": ["TB"],
     }
 
     if qeset in composite:

@@ -143,13 +143,10 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
         aresp_curl = 0
 
         for qe in config.mvtype2qe(mvtype):
-            fac = 1
-            if mvtype.startswith('q') and qe in ['TE', 'TB', 'EB']:
-                fac = 2
-            glm += alms_grads[qe] * fac
-            clm += alms_curls[qe] * fac
-            aresp_grad += aresp_grads[qe] * fac
-            aresp_curl += aresp_curls[qe] * fac
+            glm += alms_grads[qe]
+            clm += alms_curls[qe]
+            aresp_grad += aresp_grads[qe]
+            aresp_curl += aresp_curls[qe]
 
         wg = l * (l + 1) / aresp_grad / 2
         wc = l * (l + 1) / aresp_curl / 2

@@ -181,8 +181,6 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
     SAN0 = dict()
 
     for j, mvtype in enumerate(mvtypes):
-        if mvtype.startswith('q'):
-            raise NotImplementedError(f"q-type {mvtype} is not supported yet. Use")
         N0 = 0
         for q1 in config.mvtype2qe(mvtype):
             for q2 in config.mvtype2qe(mvtype):

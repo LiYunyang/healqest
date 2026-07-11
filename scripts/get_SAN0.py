@@ -118,7 +118,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         @lru_cache(maxsize=None)
         def get_weights(qe_hrd, ilc1, ilc2):
             weight = estimator.get_harden_weights(
-                qe_hrd.removesuffix('prf'),
+                qe_hrd.removesuffix('ph'),
                 fls[ilc1],
                 u=config.profile_u,
                 curl=args.curl,
@@ -127,15 +127,15 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
             )[0]
             return weight
 
-        if qe1 in qest.Qest.__prf_estimators__ and u1 is None:
+        if qe1 in qest.Qest.__PH_ESTIMATORS__ and u1 is None:
             w = get_weights(qe1, pair1[0], pair1[1])
-            clqq_cmb = _get_clqq(qe1.removesuffix('prf'), qe2, pair1, pair2, u1=None, u2=u2)
+            clqq_cmb = _get_clqq(qe1.removesuffix('ph'), qe2, pair1, pair2, u1=None, u2=u2)
             clqq_src = _get_clqq('TT', qe2, pair1, pair2, u1=config.profile_u, u2=u2)
             return clqq_cmb + w * clqq_src
 
-        if qe2 in qest.Qest.__prf_estimators__ and u2 is None:
+        if qe2 in qest.Qest.__PH_ESTIMATORS__ and u2 is None:
             w = get_weights(qe2, pair2[0], pair2[1])
-            clqq_cmb = _get_clqq(qe1, qe2.removesuffix('prf'), pair1, pair2, u1=u1, u2=None)
+            clqq_cmb = _get_clqq(qe1, qe2.removesuffix('ph'), pair1, pair2, u1=u1, u2=None)
             clqq_src = _get_clqq(qe1, 'TT', pair1, pair2, u1=u1, u2=config.profile_u)
             return clqq_cmb + w * clqq_src
 

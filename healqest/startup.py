@@ -364,15 +364,15 @@ class Config:
             return hq.get_qes(mvtype)
         elif mvtype in ['TBEB', 'qTBEB', 'TEET', 'EBBE']:
             return hq.get_qes(mvtype)
-        elif mvtype in Qest.__prf_estimators__:  # single prf estimators
+        elif mvtype in Qest.__PH_ESTIMATORS__:  # single ph estimators
             return [mvtype]
-        elif mvtype in ['MVprf', 'TTEETEprf']:  # compund prf estimators for SQE
-            qes = hq.get_qes(mvtype.removesuffix('prf'))
-            qes[qes.index('TT')] = 'TTprf'
+        elif mvtype in ['MVph', 'TTEETEph']:  # compund profile-harden estimators for SQE
+            qes = hq.get_qes(mvtype.removesuffix('ph'))
+            qes[qes.index('TT')] = 'TTph'
             return qes
-        elif mvtype in ['GMVprf', 'GTTEETEprf', 'GTBEBprf']:  # compund prf estimators for GMV
-            _qes = hq.get_qes(mvtype.removesuffix('prf').removeprefix('G'))
-            qes = [_ + 'prf' if _ + 'prf' in Qest.__prf_estimators__ else _ for _ in _qes]
+        elif mvtype in ['GMVph', 'GTTEETEph', 'GTBEBph']:  # compund profile-harden estimators for GMV
+            _qes = hq.get_qes(mvtype.removesuffix('ph').removeprefix('G'))
+            qes = [_ + 'ph' if _ + 'ph' in Qest.__PH_ESTIMATORS__ else _ for _ in _qes]
             return qes
         else:
             raise ValueError(f'Undefined mvtype: {mvtype}')
@@ -850,7 +850,7 @@ class Config:
         Parameters
         ----------
         tag: str
-            name of a QE or a MVtype, e.g., "TT"/"TEET"/"MVprf"
+            name of a QE or a MVtype, e.g., "TT"/"TEET"/"MVph"
         spec_type: str
             Type of the spectrum, e.g., "n0"/"n1"/"san0"/"rdn0"
         stype: str

@@ -94,20 +94,7 @@ def get_qes(qeset):
     list or None
         A list of estimators neesed.
     """
-    single = {
-        "TT",
-        "EE",
-        "TE",
-        "EB",
-        "TB",
-        "ET",
-        "BE",
-        "BT",
-        "TTbhTTprf",
-        "GMVbhTTprf",
-        "GMVTTEETEbhTTprf",
-        'TTprf',
-    }
+    single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT"}
 
     composite = {
         "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
@@ -131,8 +118,6 @@ def get_qes(qeset):
         "qTEET": ["TE"],
         "qEBBE": ["EB"],
         "qTBBT": ["TB"],
-        "qMVTTbhTTprf": ["TTbhTTprf", "EE", "TE", "TB", "EB"],
-        "MVTTbhTTprf": ["TTbhTTprf", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
     }
 
     if qeset in composite:

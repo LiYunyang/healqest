@@ -19,7 +19,8 @@ class CMBCl(TypedDict):
 class Qest:
     """QE estimator following the cmblensplus convention."""
 
-    __prf_estimators__ = ['TTprf', 'EEprf', 'TEprf', 'ETprf']  # exclude the odd parity ones!
+    __PH_ESTIMATORS__ = ['TTph', 'EEph', 'TEph', 'ETph']
+    # allowed single harden estimators, excluding the odd parity ones. The "GMVph" etc is made from these.
 
     def __init__(self, lmax, Lmax, Cls, g=None, flT=None, flP=None, gmv=False):
         """Setup quadratic estimator.
@@ -38,7 +39,7 @@ class Qest:
         flT, flP: np.ndarray=None
             binary array of shape (lmax+1, ), indicating the POST cinv ell selection.
         gmv: bool=False
-            If True, the response function and prf-hardening follows the GMV formalism
+            If True, the response function and profile-hardening follows the GMV formalism
         """
         self.lmax = lmax
         self.Lmax = Lmax
@@ -99,13 +100,13 @@ class Qest:
         Parameters
         ----------
         qe: str
-          Quadratic estimator type (defined in `weights_plus`): 'TT'/'EE'/'TE'/'EB'/'TB'/'prf'
+          Quadratic estimator type (defined in `weights_plus`): 'TT'/'EE'/'TE'/'EB'/'TB'
         almbar1,almbar2: complex array healpy alm
           First and second filtered alm
         u: np.ndarray=None
           Profile instance
         distortion: str
-            distortion type, 'lens' or 'prf' or 'tau'
+            distortion type, 'lens', 'rot', 'prf' or 'tau'
 
         Returns
         -------
@@ -345,6 +346,13 @@ class Qest:
         R: np.ndarray
             response function
         """
+        R = np.zeros(self.Lmax + 1, dtype=float)
+        if qe not in weights.weights_plus.estimators(type1):
+            logger.warning(f"{type1} distortion does not have {qe} defined. set response to 0.")
+            return R
+        else:
+            qeXY = weights.weights_plus(qe, self.cls, self.lmax, distortion=type1, curl=curl, u=u)
+
         if type2 is None:
             type2 = type1
         fl1 = self.fls2fls_dict(fls)
@@ -359,13 +367,6 @@ class Qest:
             keys = list(fl1.keys())
         else:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]  # SQE only picks the 2 (can be the same) diagonal terms.
-
-        R = np.zeros(self.Lmax + 1, dtype=float)
-        if qe not in weights.weights_plus.estimators(type1):
-            logger.warning(f"{type1} distortion does not have {qe} defined. set response to 0.")
-            return R
-        else:
-            qeXY = weights.weights_plus(qe, self.cls, self.lmax, distortion=type1, curl=curl, u=u)
 
         for _s1 in 'TEB':
             _qe1 = s1 + _s1
@@ -394,7 +395,7 @@ class Qest:
         return R
 
     def get_harden_weights(self, qe, fls, u, fls2=None, curl=False, fast=False, type1='lens', type2='prf'):
-        assert type2 == 'prf', "This is implemented for TTprf only (for any estimator)."
+        assert type2 == 'prf', "This is implemented for TTph only (for any estimator)."
         # ss = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=False, TTprf_type='ss')
         # es = self.get_aresp_gmv(fls, qe=qe, u=u, fast=fast, curl=curl, TTprf_type='es')
         # se = self.get_aresp_gmv(fls, qe="TT", u=u, fast=fast, curl=curl, TTprf_type='se')
@@ -411,13 +412,13 @@ class Qest:
         Parameters
         ----------
         qe: str
-            Quadratic estimator type, e.g., 'TT','TTprf'
+            Quadratic estimator type, e.g., 'TT','TTph'
         almbars1, almbars2: complex arrays
             First and second filtered alms, shape (3, nalm)
         fls, fls2: np.ndarray.
             shape: (4, lmax+1), filter functions for TT/EE/BB/TE. If the two are the same, then set fls2=None.
         u: np.ndarray=None
-            profile function for TTprf estimator
+            profile function for TTph estimator
         fast: bool=False
             If True, uses the fast response function calculation.
         type1: str
@@ -430,13 +431,13 @@ class Qest:
         [aresp_g, aresp_c]: list of np.ndarray
             Analytical response function for grad/curl mode
         hrd_out: dict or None
-            If `qe` ends with 'prf', return a dict containing the source response functions
+            If `qe` ends with 'ph', return a dict containing the source response functions
         """
         i1 = 'teb'.index(qe[0].lower())
         i2 = 'teb'.index(qe[1].lower())
 
-        if qe.endswith('prf'):
-            _qe = qe.removesuffix('prf')
+        if qe.endswith('ph'):
+            _qe = qe.removesuffix('ph')
         else:
             _qe = qe
 
@@ -450,7 +451,7 @@ class Qest:
             aresp_c = np.zeros_like(aresp_g)
 
         # do the source harden stuff
-        if qe.endswith('prf'):
+        if qe.endswith('ph'):
             if not self.gmv:
                 assert _qe == 'TT', f"We only harden for 'TT' for SQE, got: {qe}"
             slm = self.eval('TT', almbars1[0], almbars2[0], u=u, distortion='prf')[0]

@@ -16,19 +16,18 @@ class weights_plus:
             CMB spectra for weights, with keys 'tt','te','ee','bb'.
         lmax: int
             lmax of Cls for weights
-        u: array
+        u: np.ndarray
             f(ell) that describe the power spectrum of a foreground or beam function for profile hardening
             (can be array of 1s)
         distortion: str
-            type of distortion, 'lens', 'amp', or 'src' (source hardening)
+            type of distortion, 'lens', 'tau', 'rot', or 'prf' (foreground profile)
         """
-        if est == 'prf':
-            logger.warning('prf will be a distortion type rather than an estimator name in the future.')
-            est = 'TT'
-            distortion = 'prf'
-
+        assert distortion in ['lens', 'tau', 'rot', 'prf'], (
+            f"distortion must be one of ['lens', 'tau', 'rot', 'prf'], got {distortion}"
+        )
         if distortion == 'prf':
             assert u is not None, "Must provide u(ell)"
+            assert u.ndim == 1, f"u must be a 1D array, got shape: {u.shape}"
         if curl and distortion != 'lens':
             logger.warning(f"{distortion} type doesn't has curl mode, ignore `curl`")
 

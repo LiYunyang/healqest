@@ -378,7 +378,7 @@ class cinv_tp(cinv):
 
     def get_fl(self, pol, lmax):
         if pol == 'te':
-            out = self.pre_op.fl_te[: self.lmax + 1] * self.rescal_cl[: self.lmax + 1] ** 2
+            out = self.pre_op.fl[3, : self.lmax + 1] * self.rescal_cl[: self.lmax + 1] ** 2
         else:
             assert pol.lower() in 'teb'
             i = 'teb'.index(pol.lower())

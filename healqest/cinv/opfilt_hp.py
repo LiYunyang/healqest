@@ -221,10 +221,10 @@ class PreOperatorDiag:
 
     Attributes
     ----------
-    filt: array_like
-        1/(1/S + bl2/N) used as pre-conditioner
-    fl: array_like
-        1/(S+N/bl2) used for QE weights
+    filt: np.ndarray
+        shape (3, lmax+1). 1/(1/S + bl2/N) used as pre-conditioner
+    fl: np.ndarray
+        shape (3, lmax+1). 1/(S+N/bl2) used for QE weights
     """
 
     def __init__(self, s_cls, n_inv_filt, tf, nl_res=None):
@@ -285,10 +285,10 @@ class PreOperatorDiagJoint(PreOperatorDiag):
 
     Attributes
     ----------
-    filt: array_like
-        (S^{-1} + bl2/N)^-1 used as pre-conditioner
-    fl: array_like
-        1/(S+N/bl2) used for QE weights
+    filt: np.ndarray
+        shape (4, lmax+1). (S^{-1} + bl2/N)^-1 used as pre-conditioner
+    fl: np.ndarray
+        shape (4, lmax+1). TT/EE/BB/TE elements of the matrix inverse of (S+N/bl2), used for QE weights
     """
 
     def __init__(self, s_cls, n_inv_filt, tf, nl_res=None, te_only=True):
@@ -318,28 +318,29 @@ class PreOperatorDiagJoint(PreOperatorDiag):
             nlev = n_inv_filt.get_nl(s)
             n_mat[i] = cli(nlev) * bl2
 
-            _fl = cli(s_mat[i] + nlev / bl2)
+            _fl = s_mat[i] + nlev / bl2
             _fl[:2] = 0
             fl.append(_fl)
 
         blte2 = tf.get_tfbl1d('t', lmax) * tf.get_tfbl1d('e', lmax)
         _te = s_cls['te'][: lmax + 1] + nl_res['te'][: lmax + 1] / blte2
         sinv, sinv_te = cinv_utils.invert_teb(np.array(s_mat), te=_te)
-        self.filt, self.filt_te = cinv_utils.invert_teb(sinv + n_mat, te=sinv_te)
-        self.fl = np.array(fl)
+        self.filt = np.vstack(cinv_utils.invert_teb(sinv + n_mat, te=sinv_te))
 
         # for TE part (only used for GMV resp)
-        cl = s_cls['te'][: lmax + 1]
-        nl = nl_res['te'][: lmax + 1]
-        self.fl_te = cli(cl + nl / blte2)
-        self.fl_te[:2] = 0
+        # cl = s_cls['te'][: lmax + 1]
+        # nl = nl_res['te'][: lmax + 1]
+        # self.fl_te = cli(cl + nl / blte2)
+        # self.fl_te[:2] = 0
+
+        self.fl = np.vstack(cinv_utils.invert_teb(np.array(fl), te=_te))
 
     def calc(self, alms):
         alms = np.atleast_2d(alms)
-        assert alms.shape[0] == self.filt.shape[0]
+        assert alms.shape[0] == 3
         almsf = [hp.almxfl(alms[i], self.filt[i]) for i in range(alms.shape[0])]
-        almsf[0] += hp.almxfl(alms[1], self.filt_te)
-        almsf[1] += hp.almxfl(alms[0], self.filt_te)
+        almsf[0] += hp.almxfl(alms[1], self.filt[3])
+        almsf[1] += hp.almxfl(alms[0], self.filt[3])
         return np.squeeze(almsf)
 
 

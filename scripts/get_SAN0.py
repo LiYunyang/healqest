@@ -1,5 +1,7 @@
+from collections import defaultdict
 from functools import lru_cache
 from itertools import product
+from typing import Optional
 import numpy as np
 import healpy as hp
 from healqest import weights, resp, startup, healqest_utils as hq, qest, log
@@ -69,17 +71,6 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
             almbars = {s: _ for s, _ in zip('TEB', almbars)}
         return almbars, flms
 
-    clqq = dict()
-
-    estimator = qest.Qest(
-        lmax=config.lmax,
-        g=config.g,
-        Cls=config.cmbcl,
-        Lmax=config.Lmax,
-        flT=config.flT,
-        flP=config.flP,
-        gmv=config.rectype == 'gmv',
-    )
     fsky_tt = np.mean(config.mask_cinv['t'] ** 2)
     fsky_tp = np.mean(config.mask_cinv['t'] * config.mask_cinv['p'])
     fsky_pp = np.mean(config.mask_cinv['p'] ** 2)
@@ -89,7 +80,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         assert len(qe) == 2
         if set(qe.lower()) == {'t'}:
             return fsky_tt
-        elif set(qe.lower()) == {'eb'}:
+        elif set(qe.lower()).issubset({'e', 'b'}):
             return fsky_pp
         else:
             return fsky_tp
@@ -99,45 +90,45 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
     for ilc in config.ilcs:
         almbars[ilc], fls[ilc] = func(cmbset, seed=seed, bundle=b1, as_dict=True, ilc_type=ilc)
 
-    def _get_clqq(qe1, qe2, pair1, pair2, u1=None, u2=None):
+    def get_clqq(
+        qe1: str,
+        qe2: str,
+        pair1: tuple,
+        pair2: tuple,
+        u1: Optional[np.ndarray] = None,
+        u2: Optional[np.ndarray] = None,
+    ):
         """Get the response for a single pair of ilc combination.
 
         Parameters
         ----------
         qe1, qe2: str
-            TTprf, TT,
+            TT, MV, GMVph etc.
         pair1, pair2: tuple
             The ilc pair for the two estimators. e.g., ('mv', 'tszfree')
-        u1,u2: array-like
+        u1,u2: np.ndarray, optional.
             The presence of u1,u2 determines if the calculation is for a hardened calculation or not.
             For example, for TT-TTprf, if u2 is provided, then the cross between TT and the source estimator
             is performed. Otherwise, the estimator is dispatched to two calculations:
             `get_clqq('TT', 'TTprf', None, u)` and `get_clqq('TT', 'TT', None, None)` and combined.
         """
-
-        @lru_cache(maxsize=None)
-        def get_weights(qe_hrd, ilc1, ilc2):
-            weight = estimator.get_harden_weights(
-                qe_hrd.removesuffix('ph'),
-                fls[ilc1],
-                u=config.profile_u,
-                curl=args.curl,
-                fast=True,
-                fls2=fls[ilc2],
-            )[0]
-            return weight
-
         if qe1 in qest.Qest.__PH_ESTIMATORS__ and u1 is None:
-            w = get_weights(qe1, pair1[0], pair1[1])
-            clqq_cmb = _get_clqq(qe1.removesuffix('ph'), qe2, pair1, pair2, u1=None, u2=u2)
-            clqq_src = _get_clqq('TT', qe2, pair1, pair2, u1=config.profile_u, u2=u2)
-            return clqq_cmb + w * clqq_src
+            qest1 = get_estimator(pair1[0], pair1[1])
+            out = get_clqq(qe1.removesuffix('ph'), qe2, pair1, pair2, u1=None, u2=u2)
+            for j, u in enumerate(qest1.harden_cache.u):
+                clqq_prf_j = get_clqq('TT', qe2, pair1, pair2, u1=u, u2=u2)
+                w = qest1.harden_cache.get_harden_weights(qe1.removesuffix('ph'), j, curl=args.curl)
+                out += w * clqq_prf_j
+            return out
 
         if qe2 in qest.Qest.__PH_ESTIMATORS__ and u2 is None:
-            w = get_weights(qe2, pair2[0], pair2[1])
-            clqq_cmb = _get_clqq(qe1, qe2.removesuffix('ph'), pair1, pair2, u1=u1, u2=None)
-            clqq_src = _get_clqq(qe1, 'TT', pair1, pair2, u1=u1, u2=config.profile_u)
-            return clqq_cmb + w * clqq_src
+            qest2 = get_estimator(pair2[0], pair2[1])
+            out = get_clqq(qe1, qe2.removesuffix('ph'), pair1, pair2, u1=u1, u2=None)
+            for j, u in enumerate(qest2.harden_cache.u):
+                clqq_prf_j = get_clqq(qe1, 'TT', pair1, pair2, u1=u1, u2=u)
+                w = qest2.harden_cache.get_harden_weights(qe2.removesuffix('ph'), j, curl=args.curl)
+                out += w * clqq_prf_j
+            return out
 
         qeXY = weights.weights_plus(
             qe1, config.cmbcl, config.lmax, u=u1, curl=args.curl, distortion='lens' if u1 is None else 'prf'
@@ -157,28 +148,47 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         ret = np.zeros(config.Lmax + 1, dtype=np.complex128)
         return resp.fill_clq1q2_fullsky(qeXY, qeZA, ret, XZ, YA, XA, YZ, fast=True)
 
-    def get_clqq(qe1, qe2):
-        # looping over the ilc pairs, for xilc and tsz (gradient cleaning)
-        out = 0
-        ilc_pair = list(zip(config.ilcs, config.ilcs[::-1]))
-        for p1 in ilc_pair:
-            for p2 in ilc_pair:
-                out += _get_clqq(qe1, qe2, p1, p2) / (len(ilc_pair) ** 2)
-        return out
-
     san0_keys = list()
     for j, mvtype in enumerate(mvtypes):
         for q1 in config.mvtype2qe(mvtype):
             for q2 in config.mvtype2qe(mvtype):
                 san0_keys.append((q1, q2))
     san0_keys = set(san0_keys)
+
     logger.info(f"computing san0 from: {san0_keys}")
-    for q1, q2 in san0_keys:
-        clqq[f'{q1}{q2}'] = get_clqq(q1, q2)
+    clqq = defaultdict(lambda: 0)
+    ilc_pair = list(zip(config.ilcs, config.ilcs[::-1]))
+    ilc_pair_norm = len(ilc_pair) ** 2
+
+    do_ph = any([qe.endswith('ph') for qe in qes])
+    if do_ph:
+        assert len(config.ilcs) == 1, "Unlikely you want to do profile-hardening with multiple ilc pairs!"
+
+    @lru_cache(maxsize=None)
+    def get_estimator(ilc1, ilc2):
+        out = qest.Qest(
+            lmax=config.lmax,
+            g=config.g,
+            Cls=config.cmbcl,
+            Lmax=config.Lmax,
+            flT=config.flT,
+            flP=config.flP,
+            fast=True,
+            fls=fls[ilc1],
+            fls2=fls[ilc2],
+        )
+        if do_ph:
+            out.init_harden(config.profile_u)
+        return out
+
+    for p1 in ilc_pair:
+        for p2 in ilc_pair:
+            for q1, q2 in san0_keys:
+                _clqq = get_clqq(q1, q2, p1, p2, u1=None, u2=None)
+                clqq[f'{q1}{q2}'] += _clqq / ilc_pair_norm
 
     # build mv
     l = np.arange(config.Lmax + 1)
-    SAN0 = dict()
 
     for j, mvtype in enumerate(mvtypes):
         N0 = 0
@@ -190,7 +200,6 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         aresp = np.load(file_resp)['grad_resp' if not args.curl else 'curl_resp']
         w = l * (l + 1) / aresp / 2
         N0 *= w**2
-        SAN0[f'{mvtype}'] = N0
 
         db, sql_key = get_db(config, mvtype, seed, cmbset, curl=args.curl)
         comm.send((db.path, db.table, [(sql_key, N0)]), dest=comm.size - 1)

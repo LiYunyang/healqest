@@ -16,7 +16,7 @@ class weights_plus:
             CMB spectra for weights, with keys 'tt','te','ee','bb'.
         lmax: int
             lmax of Cls for weights
-        u: np.ndarray
+        u: np.ndarray, optional.
             f(ell) that describe the power spectrum of a foreground or beam function for profile hardening
             (can be array of 1s)
         distortion: str

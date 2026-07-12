@@ -48,16 +48,6 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
         )
         return
 
-    estimator = qest.Qest(
-        lmax=config.lmax,
-        g=config.g,
-        Cls=config.cmbcl,
-        Lmax=config.Lmax,
-        flT=config.flT,
-        flP=config.flP,
-        gmv=config.rectype == 'gmv',
-    )
-
     logger.info(f"Performing MV: {mvtypes} QE: {qes}")
 
     def func(cmbset, seed, bundle, ilc_type, as_dict=False):
@@ -97,12 +87,22 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
     for ilc1, ilc2 in ilc_pair:
         almbars1, flms1 = func(cmbset1, seed1, b1, ilc1)
         almbars2, flms2 = func(cmbset2, seed2, b2, ilc2)
-        # assert np.all(flms1==flms2)
 
+        estimator = qest.Qest(
+            lmax=config.lmax,
+            g=config.g,
+            Cls=config.cmbcl,
+            Lmax=config.Lmax,
+            flT=config.flT,
+            flP=config.flP,
+            fast=True,
+            fls=flms1,
+            fls2=flms2,
+        )
+        if any([qe.endswith('ph') for qe in qes]):
+            estimator.init_harden(config.profile_u, almbars1, almbars2)
         for qe in qes:
-            (glm, clm), (aresp_g, aresp_c) = estimator.rec_and_resp(
-                qe, almbars1, almbars2, flms1, fast=True, u=config.profile_u, type1='lens', fls2=flms2
-            )
+            (glm, clm), (aresp_g, aresp_c) = estimator.rec_and_resp(qe, almbars1, almbars2, type1='lens')
             alms_grads[qe] += glm / len(ilc_pair)
             alms_curls[qe] += clm / len(ilc_pair)
             aresp_grads[qe] += aresp_g / len(ilc_pair)

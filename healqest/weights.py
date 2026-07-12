@@ -46,10 +46,6 @@ class weights_plus:
             self.init_weights(est, sl=sl, curl=curl, u=u)
         elif est in ['ET', 'BT', 'BE']:
             self.init_weights(est[::-1], sl=sl, swap=True, curl=curl, u=u)
-        # elif est in ['TTcurl', 'EEcurl', 'BBcurl', 'TEcurl', 'TBcurl', 'EBcurl', 'T2curl', 'T1curl']:
-        #     self.init_weights(est[:2], sl=sl, curl=True)
-        # elif est in ['ETcurl', 'BTcurl', 'BEcurl']:
-        #     self.init_weights(est[:2][::-1], sl=sl, swap=True, curl=True)
         else:
             raise NotImplementedError(f"{est} is not implemented yet")
 
@@ -271,6 +267,7 @@ class weights_plus:
         elif self.distortion == 'prf':
             # profile hardened estimators for lensing
             f3 = 1 / u[: self.lmax + 1] * 0.5  # the 0.5 factor accounts for the second half redundant terms.
+            f3[u[: self.lmax + 1] == 0] = 0
             s3 = 0
         else:
             raise NotImplementedError(f"{self.distortion} is not implemented yet")

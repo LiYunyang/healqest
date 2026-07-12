@@ -132,7 +132,7 @@ class Config:
     Lmax: int  # maximum reconstruction L
     file_cmb: str  # Path to cmb spectrum used for lensrec
     fmask_qe: Union[str, list[str]] = None  # path(s) to mask used for lensrec
-    profile: str = None  # profile type for hardened estimator for TT.
+    profile: Union[str, list[str]] = None  # profile type for hardened estimator for TT.
 
     # === inputs ===
     sim_range: list[int]  # index range (inclusive) of the input alms files
@@ -271,7 +271,7 @@ class Config:
             self.sim_range_N1 = self.sim_range
 
     @staticmethod
-    def path(path, *args, **kwargs):
+    def path(path, *args, **kwargs) -> str:
         """
         Formatting the dir/file name.
 
@@ -542,17 +542,23 @@ class Config:
             return None
         raise NotImplementedError("the functionality of tf1d should be replaced by tf2d.")
 
+    def parse_profile(self, profile: str):
+        # assert self.profile in ['src', 'tsz']
+        if profile == 'src':
+            return np.ones(self.lmax + 1)
+        elif isinstance(profile, str):
+            return np.load(self.path(profile))
+        else:
+            raise NotImplementedError(f"can not handle profile {profile}")
+
     @property
-    def profile_u(self):
+    def profile_u(self) -> np.ndarray | None:
         if self.profile is None:
             return None
-        # assert self.profile in ['src', 'tsz']
-        if self.profile == 'src':
-            return np.ones(self.lmax + 1)
-        elif self.profile.endswith('npy'):
-            return np.load(self.path(self.profile))
-        else:
-            raise NotImplementedError(f"can not handle profile {self.profile}")
+        u = list()
+        for _ in self.as_list(self.profile):
+            u.append(self.parse_profile(_))
+        return np.array(u)
 
     @cached_property
     def g(self):

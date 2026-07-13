@@ -450,3 +450,10 @@ def lowpass_tf(lmax, power=6, lc=6144):
     x = np.arange(lmax + 1)
     integrand = np.exp(-((x[:, None] * np.sin(t)[None, :] / lc) ** power))
     return integrand @ w / (2 * np.pi)
+
+
+def cli(cl: np.ndarray):
+    out = np.zeros_like(cl)
+    good = np.logical_and(cl != 0, ~np.isnan(cl))
+    np.reciprocal(cl, out=out, where=good)
+    return out

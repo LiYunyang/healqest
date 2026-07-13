@@ -292,7 +292,7 @@ class Qest:
 
         Returns
         -------
-        [glm, clm]: list of complex array
+        [glm, clm]: list of np.ndarray
             Gradient/curl component of the plm
         [aresp_g, aresp_c]: list of np.ndarray
             Analytical response function for grad/curl mode
@@ -506,3 +506,20 @@ class HardenCache:
         j_sub.pop(kj)
         det_minor = HardenCache.det(i_sub, j_sub, func)
         return sign * det_minor
+
+
+def coadd_qe_alm(mvtype: str, alms: dict, response: dict, Lmax: int):
+    from healqest.startup import Config
+
+    l = np.arange(Lmax + 1)
+    alm = np.zeros(hp.Alm.getsize(Lmax), dtype=complex)
+    aresp = np.zeros(Lmax + 1, dtype=float)
+
+    for qe in Config.mvtype2qe(mvtype):
+        alm += alms[qe]
+        aresp += response[qe]
+
+    w = l * (l + 1) * utils.cli(aresp) / 2
+    # noinspection PyTypeChecker
+    alm = hp.almxfl(alm, w)
+    return alm, aresp

@@ -136,23 +136,9 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
             os.rename(temp_file, index_file)
 
     # build mv
-    l = np.arange(config.Lmax + 1)
     for j, mvtype in enumerate(mvtypes):
-        glm, clm = 0, 0
-        aresp_grad = 0
-        aresp_curl = 0
-
-        for qe in config.mvtype2qe(mvtype):
-            glm += alms_grads[qe]
-            clm += alms_curls[qe]
-            aresp_grad += aresp_grads[qe]
-            aresp_curl += aresp_curls[qe]
-
-        wg = l * (l + 1) / aresp_grad / 2
-        wc = l * (l + 1) / aresp_curl / 2
-
-        glm = np.nan_to_num(hp.almxfl(glm, wg))
-        clm = np.nan_to_num(hp.almxfl(clm, wc))
+        glm, aresp_grad = qest.coadd_qe_alm(mvtype, alms_grads, aresp_grads, config.Lmax)
+        clm, aresp_curl = qest.coadd_qe_alm(mvtype, alms_curls, aresp_curls, config.Lmax)
 
         maps = config.g.alm2map([glm, clm], pol=False).astype(np.float32)
         file_plm = config.p_plm(

@@ -44,9 +44,11 @@ def cd_solve(x, b, fwd_op, pre_ops, dot_op, criterion, tr, cache=None, roundoff=
         solve result
     b: flexible format (array, customized classes...)
         b = [fwd_op] x
-    pre_ops: list of operators
+    fwd_op: callable
+        operator for generating the residual
+    pre_ops: list of operators.
         operator for generating new search direction
-    dot_op: operator
+    dot_op: callable
         operator for generating delta from the residual
     criterion: callable
         the function that determines whether things have converged
@@ -55,6 +57,8 @@ def cd_solve(x, b, fwd_op, pre_ops, dot_op, criterion, tr, cache=None, roundoff=
         TR(i) = i - max(P, min( T, mod(i,R) ))
     cache: CacheMemory object
         cacher for search objects.
+    roundoff: int
+        the number of iterations before re-calculating the residual to avoid roundoff error accumulation.
     """
     if cache is None:
         cache = CacheMemory()

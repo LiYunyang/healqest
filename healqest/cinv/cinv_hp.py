@@ -56,7 +56,7 @@ class cinv(abc.ABC):
         else:
             logger.debug("Not applying any ell scaling")
             rescal_cl = np.ones_like(ell)
-        self.rescal_cl = rescal_cl
+        self.rescal_cl = np.array(rescal_cl)
 
         self.tf = tf
         invfac = cinv_utils.cli(self.rescal_cl)
@@ -153,18 +153,18 @@ class cinv_t(cinv):
         Healpy resolution of the maps to be filtered.
     cl : dict
         Fiducial CMB power spectra used for filtering.
-    nl_res : array_like
+    nl_res : np.array
         Dictionary of noise residual used in the filtering.
         (Additional details on the expected format should be provided.)
-    ninv: list of np.array or str
+    ninv: list of np.array or str.
         Inverse pixel variance maps.
-    tf1d : array_like
+    tf1d : np.ndarray or list
         1d transfer function.
-    tf2d : array_like
+    tf2d : np.ndarray or list, optional.
         2d trasnfer function.
-    eps_min : float, optional
+    eps_min : float=1e-5
         Minimum epsilon value for the filtering procedure, by default 1.0e-5.
-    ellscale : bool, optional
+    ellscale : bool=True
         Whether to scale by multipole ell, by default True.
 
     """
@@ -204,6 +204,7 @@ class cinv_t(cinv):
             talm = soltn.copy()
         logger.info("cinv_t.solve")
         self.solve(talm, tmap)
+        # noinspection PyTypeChecker
         hp.almxfl(talm, self.rescal_cl, inplace=True)
         return talm
 
@@ -231,20 +232,20 @@ class cinv_p(cinv):
         Healpy resolution of the maps to be filtered.
     cl : dict
         Fiducial CMB power spectra used for filtering.
-    nl_res : array_like
+    nl_res : np.ndarray
         Dictionary of noise residual used in the filtering.
         (Additional details on the expected format should be provided.)
     ninv : list
         Inverse pixel variance maps. Must be a list containing either 3 elements
         (for QQ, QU, and UU noise) or 1 element (for QQ = UU noise). Each element
         can be a file path or a Healpy map, and they must be consistent with the given nside.
-    tf1d : array_like
+    tf1d : np.ndarray or list
         1d transfer function.
-    tf2d : array_like
+    tf2d : np.ndarray or list, optional
         2d trasnfer function.
-    eps_min : float, optional
+    eps_min : float=1e-5
         Minimum epsilon value for the filtering procedure, by default 1.0e-5.
-    ellscale : bool, optional
+    ellscale : bool=True
         Whether to scale by multipole ell, by default True.
 
     """
@@ -286,7 +287,9 @@ class cinv_p(cinv):
         assert len(qumap) == 2
         logger.info("cinv_p.solve")
         self.solve(eblm, qumap)
+        # noinspection PyTypeChecker
         hp.almxfl(eblm[0], self.rescal_cl, inplace=True)
+        # noinspection PyTypeChecker
         hp.almxfl(eblm[1], self.rescal_cl, inplace=True)
         return eblm
 
@@ -312,20 +315,20 @@ class cinv_tp(cinv):
         Healpy resolution of the maps to be filtered.
     cl : dict
         Fiducial CMB power spectra used for filtering.
-    nl_res : array_like
+    nl_res : np.ndarray
         Dictionary of noise residuals used in the filtering.
         (Additional details on the expected format should be provided.)
     ninv : list
         Inverse pixel variance maps. Must be a list containing either 3 elements
         (for QQ, QU, and UU noise) or 1 element (for QQ = UU noise). Each element
         can be a file path or a Healpy map, and they must be consistent with the given nside.
-    tf1d : array or list of array
+    tf1d : np.ndarray or list
         One-dimensional transfer function for temperature/polarization.
-    tf2d : array or list of array
+    tf2d : np.ndarray or list, optional.
         Two-dimensional transfer function for temperatur/polarization.
-    eps_min : float, optional
+    eps_min : float=1e-5
         Minimum epsilon value for the filtering procedure, by default 1.0e-5.
-    ellscale : bool, optional
+    ellscale : bool=False
         Whether to scale by multipole ell, by default True.
     """
 
@@ -364,15 +367,18 @@ class cinv_tp(cinv):
             )
         return self._pre_op
 
-    def apply_ivf(self, tqumap, soltn=None):  # , apply_fini=''):
+    def apply_ivf(self, tqumap, soltn=None):
         assert len(tqumap) == 3
         if soltn is not None:
             raise NotImplementedError
         else:
             teblm = np.zeros((3, hp.Alm.getsize(self.lmax)), dtype=np.complex128)
-        self.solve(teblm, [tqumap[0], tqumap[1], tqumap[2]])  # , apply_fini=apply_fini)
+        self.solve(teblm, [tqumap[0], tqumap[1], tqumap[2]])
+        # noinspection PyTypeChecker
         hp.almxfl(teblm[0], self.rescal_cl, inplace=True)
+        # noinspection PyTypeChecker
         hp.almxfl(teblm[1], self.rescal_cl, inplace=True)
+        # noinspection PyTypeChecker
         hp.almxfl(teblm[2], self.rescal_cl, inplace=True)
         return teblm
 
@@ -454,6 +460,7 @@ class library_cinv_sTP:
         map_in = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
         tlm = self._apply_ivf_t(map_in, soltn=soltn)
         if self.lfilt is not None:
+            # noinspection PyTypeChecker
             hp.almxfl(tlm, self.lfilt, inplace=True)
         return tlm
 
@@ -544,7 +551,7 @@ class library_cinv_jTP:
 class MapsBase(abc.ABC):
     """Base class for maps, used for testing and as a base for Maps class."""
 
-    def __init__(self, nside):
+    def __init__(self):
         pass
 
     @abc.abstractmethod

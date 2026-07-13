@@ -43,8 +43,8 @@ class TFObj:
         ----------
         npol : int
             Number of polarizations. 1 for T, 2 for E/B, 3 for T/E/B
-        tf1d: array or list of array
-        tf2d: array or list of array
+        tf1d: np.ndarray or list of np.ndarray
+        tf2d: np.ndarray or list of np.ndarray, optional.
         mtheta: dict
             configuration of the mtheta filter, parameterized by `lx_cut` and `power`.
         """
@@ -109,6 +109,8 @@ class TFObj:
             return ['e', 'b']
         elif self.npol == 3:
             return ['t', 'e', 'b']
+        else:
+            raise ValueError(f"npol must be 1/2/3, not {self.npol}")
 
     def apply_tf(self, alms, maps, g, adjoint=False, g_tf=None):
         """
@@ -371,6 +373,7 @@ class SkyInverseFilter:  # alm_filter_sinv_nocorr:
         alms = np.atleast_2d(alms)
         if inplace:
             alms *= self.slinv
+            return None
         else:
             return np.squeeze(alms * self.slinv)
 
@@ -405,23 +408,25 @@ class SkyInverseFilterJoint(SkyInverseFilter):
         alms_out[1] += alms[0] * self.slinv_te
         if inplace:
             alms[:] = alms_out
-            return
+            return None
         return alms_out
 
 
 class NoiseInverseFilter:
     almsize: int
+    n_inv_t: np.ndarray
+    n_inv_p: np.ndarray
 
-    def __init__(self, n_inv, tf, g=None, fast=True, **kwargs):
+    def __init__(self, n_inv, tf, g, fast=True, **kwargs):
         """
         Initialize the noise inverse filter.
 
         Parameters
         ----------
-        n_inv : array_like
+        n_inv : np.ndarray
             Inverse noise map, (npix, ) or (2, npix). In the latter case, the two rows represent NET and NEQ/U
         tf: TFObj
-        g: Geometry
+        g: ducc_sht.Geometry
             ducc wrapper to speed up alm2map/map2alm
         fast: bool=False
             If True, only store partial maps. This should significantly speedup `apply_map`
@@ -440,8 +445,6 @@ class NoiseInverseFilter:
 
         if fast:
             _ninv = np.ascontiguousarray(_ninv[:, self.nonzero])
-        self.n_inv_t = None
-        self.n_inv_p = None
 
         self.npol = tf.npol
         assert self.npol in [1, 2, 3]
@@ -450,11 +453,8 @@ class NoiseInverseFilter:
         if self.npol in [2, 3]:
             self.n_inv_p = _ninv[-1]
 
-        if g is None:
-            self.g = None
-        else:
-            self.g = g
-            assert self.g.nside == self.nside
+        self.g = g
+        assert self.g.nside == self.nside
 
         # setup the TF object for the theta-dependent m-cut
         if tf.mtheta:
@@ -463,14 +463,14 @@ class NoiseInverseFilter:
             self.g_tf = None
 
     @staticmethod
-    def ninv2nlev(ninv, fsky=None):
+    def ninv2nlev(ninv, fsky: float | None = None):
         if fsky is None:
-            fsky = np.mean(ninv > 0)
+            fsky = float(np.mean(ninv > 0))
         else:
             # YL: this option is left for debugging
             pass
         nlev = 1 / np.sum(ninv) * 4 * np.pi * fsky
-        NET = np.rad2deg(np.sqrt(nlev)) * 60
+        NET = float(np.rad2deg(np.sqrt(nlev)) * 60)
         logger.info(f"ninv2nlev: {NET:.2f} uK-amin noise Cl over fsky {fsky:.2f}")
         return nlev, fsky, NET
 
@@ -564,9 +564,12 @@ class NoiseInverseFilterAlm(NoiseInverseFilter):  # alm_filter_ninv(object):
         assert alms.dtype == np.complex128
 
         if ndim in (1, 3):
+            # noinspection PyTypeChecker
             hp.almxfl(np.atleast_2d(alms)[0], self.nlinv_t, inplace=True)
         if ndim in (2, 3):
+            # noinspection PyTypeChecker
             hp.almxfl(alms[-2], self.nlinv_p, inplace=True)
+            # noinspection PyTypeChecker
             hp.almxfl(alms[-1], self.nlinv_p, inplace=True)
 
         self.g.alm2map(alms, maps=maps)

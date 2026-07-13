@@ -150,8 +150,8 @@ def kspice(  # noqa: C901
     subav: bool = False,
     subdipole: bool = False,
     script=False,
-    cl_out: str = None,
-    spice: str = None,
+    cl_out=None,
+    spice=None,
     kernel=False,
 ):
     """
@@ -319,7 +319,7 @@ def kappa_spectrum(  # noqa: C901
     g=None,
     anafast=True,
     nside=None,
-    cl_out: str = None,
+    cl_out=None,
     **kwargs,
 ):
     """
@@ -330,7 +330,7 @@ def kappa_spectrum(  # noqa: C901
     m1, m2: np.ndarray or str
         1d array of map or file(.fits) name of maps. If `synfast=True`, then m1/m2 can be alm/map array or map
         fname, but if `synfast=False`, then m1/m2 should be map fnames or map arrays.
-    mask1, mask2: np.ndarray or str
+    mask1, mask2: np.ndarray or str, optional.
         mask (binary or float) array or file names.
     mask_alm: bool=True
         If true, assume the input alm is unmasked and apply alm2map->mask->map2alm operations.

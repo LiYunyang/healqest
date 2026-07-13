@@ -347,6 +347,17 @@ class Qest:
                     aresp_c += _r * _w
         return glm, clm, aresp_g, aresp_c
 
+    def get_harden_weights(self, qe: str, j: int, curl: bool = False, type1: str = 'lens'):
+        if self.harden_cache is None:
+            return None
+        return self.harden_cache.get_harden_weights(qe, j, curl=curl, type1=type1)
+
+    @property
+    def u(self):
+        if self.harden_cache is None:
+            return []
+        return self.harden_cache.u
+
 
 class HardenCache:
     """Caches for profile-harden weights and responses.

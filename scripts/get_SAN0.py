@@ -104,7 +104,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         ----------
         qe1, qe2: str
             TT, MV, GMVph etc.
-        pair1, pair2: tuple
+        pair1, pair2: tuple.
             The ilc pair for the two estimators. e.g., ('mv', 'tszfree')
         u1,u2: np.ndarray, optional.
             The presence of u1,u2 determines if the calculation is for a hardened calculation or not.
@@ -115,18 +115,18 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         if qe1 in qest.Qest.__PH_ESTIMATORS__ and u1 is None:
             qest1 = get_estimator(pair1[0], pair1[1])
             out = get_clqq(qe1.removesuffix('ph'), qe2, pair1, pair2, u1=None, u2=u2)
-            for j, u in enumerate(qest1.harden_cache.u):
+            for j, u in enumerate(qest1.u):
                 clqq_prf_j = get_clqq('TT', qe2, pair1, pair2, u1=u, u2=u2)
-                w = qest1.harden_cache.get_harden_weights(qe1.removesuffix('ph'), j, curl=args.curl)
+                w = qest1.get_harden_weights(qe1.removesuffix('ph'), j, curl=args.curl)
                 out += w * clqq_prf_j
             return out
 
         if qe2 in qest.Qest.__PH_ESTIMATORS__ and u2 is None:
             qest2 = get_estimator(pair2[0], pair2[1])
             out = get_clqq(qe1, qe2.removesuffix('ph'), pair1, pair2, u1=u1, u2=None)
-            for j, u in enumerate(qest2.harden_cache.u):
+            for j, u in enumerate(qest2.u):
                 clqq_prf_j = get_clqq(qe1, 'TT', pair1, pair2, u1=u1, u2=u)
-                w = qest2.harden_cache.get_harden_weights(qe2.removesuffix('ph'), j, curl=args.curl)
+                w = qest2.get_harden_weights(qe2.removesuffix('ph'), j, curl=args.curl)
                 out += w * clqq_prf_j
             return out
 

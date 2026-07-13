@@ -103,7 +103,7 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fX, fY, switch_ZA=False, conj
     tl1max = np.min([qeXY.lmax, qeZA.lmax, lmax_fX])
     tl2max = np.min([qeXY.lmax, qeZA.lmax, lmax_fY])
 
-    glq = wignerd.gauss_legendre_quadrature((tl1max + tl2max + lmax) / 2 + 1)
+    glq = wignerd.GaussLegendreQuadrature((tl1max + tl2max + lmax) / 2 + 1)
     for i in range(0, qeXY.ntrm):
         for j in range(0, qeZA.ntrm if not fast else qeZA.ntrm // 2):
             # l1 part

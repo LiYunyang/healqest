@@ -978,7 +978,7 @@ def get_product_spectra(cl, clw, lmax=None):
     if lmax is None:
         lmax = _lmax
     npoints = (_lmax + lmax_w + lmax) // 2 + 1
-    glq = wignerd.gauss_legendre_quadrature(npoints)
+    glq = wignerd.GaussLegendreQuadrature(npoints)
 
     def _f(n):
         return (2 * np.arange(n + 1) + 1) / (4 * np.pi)

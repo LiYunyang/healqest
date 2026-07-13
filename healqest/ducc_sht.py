@@ -28,7 +28,7 @@ def get_nthreads(nthreads=None):
     if nthreads is not None and nthreads > 0:
         return nthreads
     else:
-        return int(os.getenv("OMP_NUM_THREADS", os.cpu_count()))
+        return int(os.getenv("OMP_NUM_THREADS", os.cpu_count() or 2))
 
 
 def _load_pixel_weights(nside):
@@ -176,7 +176,7 @@ class Geometry:
 
     def restrict(self):
         """Create a Geometry instance from nside and optional declination range."""
-        obj = self.__class__(self.nside, self.dec_range)
+        obj = self.__class__.from_dec(self.nside, self.dec_range)
         obj.ofs -= self.ofs[0]
         return obj
 
@@ -239,11 +239,11 @@ class Geometry:
         if use_weights or use_pixel_weights:
             w = 1
             if use_weights:
-                w = self.ring_weights
+                w = self.ring_weights.astype(maps.dtype)
             if use_pixel_weights:
                 assert not use_weights
-                w = self.pixel_weights
-            maps = maps * w.astype(maps.dtype)
+                w = self.pixel_weights.astype(maps.dtype)
+            maps = maps * w
         if check:
             if masked:
                 maps[mask] = 0
@@ -251,15 +251,15 @@ class Geometry:
 
     def map2alm(
         self,
-        maps,
+        maps: np.ndarray,
         lmax=None,
         mmax=None,
         iter=0,
-        pol=True,
-        use_weights=False,
+        pol: bool = True,
+        use_weights: bool = False,
         use_pixel_weights=False,
         nthreads=None,
-        rtol=1e-5,
+        rtol: float = 1e-5,
         check=True,
         alms=None,
         **kwargs,
@@ -271,20 +271,20 @@ class Geometry:
         ----------
         maps : array-like, shape (Npix,) or (n, Npix)
             The input map or a list of n input maps. Must be in ring ordering.
-        lmax : int, scalar, optional
+        lmax : int, optional.
             Maximum l of the power spectrum. Default: 3*nside-1
-        mmax : int, scalar, optional
+        mmax : int, optional.
             Maximum m of the alm. Default: lmax
-        iter : int, scalar, optional
+        iter : int=0
             Number of iteration (default: 0). If set to non-zero, this will call pseudo_analysis to solve for
             the alm iteratively.
-        pol : bool, optional
+        pol : bool=True
             If True, assumes input maps are TQU. Output will be TEB alm's. (input must be 1, 2 or 3 maps)
             If False, apply spin 0 harmonic transform to each map. (input can be any number of maps)
             If there is only one input map, it has no effect. Default: True.
-        use_weights: bool, scalar, optional
+        use_weights: bool=False
             If True, use the ring weighting. Default: False.
-        use_pixel_weights: bool, optional
+        use_pixel_weights: bool=False
             If True, use pixel by pixel weighting, healpy will automatically download the weights, if needed
         nthreads: int=None
             Controls the number of threads used in the computation. If None, it will use the value of
@@ -295,7 +295,7 @@ class Geometry:
             Check if there are bad pixels in the input maps and set them to zero for computation (a copy is
             made and the input array is not mutted). If you are certain that there are no bad pixels, you can
             set this to False to save overhead. Default: True.
-        alms: array-like
+        alms: np.ndarray
             The output alms buffer.
         """
         assert hp.get_nside(maps) == self.nside
@@ -313,7 +313,7 @@ class Geometry:
                 alms = alms[np.newaxis, :]
 
         func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
-        if pol is False:
+        if not pol:
             func(map=maps[:, np.newaxis, :], spin=0, alm=alms[:, np.newaxis, :], **kw, **kwargs)
         else:
             assert nmaps in [1, 2, 3], nmaps
@@ -352,8 +352,8 @@ class Geometry:
         nthreads: int=None
             Controls the number of threads used in the computation. If None, it will use the
             value of `OMP_NUM_THREADS`.
-        maps: array-like, shape (Npix,) or (nmaps, Npix)
-            The output maps buffer. If None, a new array will be created.
+        maps: np.ndarray
+            Shape (Npix,) or (nmaps, Npix). The output maps buffer. If None, a new array will be created.
 
         """
         alms = np.atleast_2d(alms)
@@ -470,6 +470,8 @@ class Geometry:
         if check:
             masks = hp.mask_bad(maps_in)
             maps_in[masks] = 0
+        else:
+            masks = None
         alms = self.map2alm(
             maps_in,
             pol=pol,
@@ -517,14 +519,14 @@ class Geometry:
 
 
 @numba.njit(fastmath=True, parallel=False)
-def fast_subtract(maps, cut_map, ipix, tf_pix):
+def fast_subtract(maps: np.ndarray, cut_map: np.ndarray, ipix, tf_pix):
     for i in numba.prange(maps.shape[0]):
         for j in range(ipix.size):
             maps[i, ipix[j]] -= cut_map[i, tf_pix[j]]
 
 
 @numba.njit(fastmath=True, parallel=False)
-def fast_assign(src, dst, ipix, tf_pix):
+def fast_assign(src: np.ndarray, dst: np.ndarray, ipix, tf_pix):
     for i in numba.prange(src.shape[0]):  # Parallel over rows
         for j in range(ipix.size):  # Sequential over columns
             dst[i, tf_pix[j]] = src[i, ipix[j]]
@@ -576,7 +578,7 @@ class GeometryTF:
         self.set_ipix(ipix)
 
         assert self.m_apodeg == 0, 'need to reimplement that, it was not working well anyways'
-        if power is not None:
+        if self.power is not None:
             _lx = 3 * self.lx_cut  # for Gaussian or exp-power-law.
         else:
             _lx = self.lx_cut  # for sharp cut off
@@ -589,7 +591,7 @@ class GeometryTF:
         self.mi = mcuts_min
         self.ma = mcuts_max
 
-        if power is not None:
+        if self.power is not None:
             self.mc = self.lx_cut * np.sin(np.minimum(self.g.theta, np.pi))
             self.fm = self.fm_power_law(power=self.power)
         else:
@@ -646,7 +648,7 @@ class GeometryTF:
             fm = self.fm(m, mc=mc)
             return fm
 
-    def _apply_tf_inplace(self, alms, maps, nthreads):
+    def _apply_tf_inplace(self, alms: np.ndarray, maps: np.ndarray, nthreads):
         if maps is not None:
             assert maps.ndim == 2, maps.shape
         assert alms.ndim == 2, alms.shape
@@ -654,7 +656,7 @@ class GeometryTF:
         maps = self.apply_map(maps, nthreads=nthreads)
         return maps
 
-    def _apply_tf_adjoint_inplace(self, alms, maps, lmax, nthreads):
+    def _apply_tf_adjoint_inplace(self, alms: np.ndarray, maps: np.ndarray, lmax, nthreads):
         assert maps.ndim == 2, maps.shape
         if alms is not None:
             assert alms.ndim == 2, alms.shape
@@ -667,10 +669,15 @@ class GeometryTF:
 
         Parameters
         ----------
-        maps: array-like, shape (ncomp, 12*nside**2)
+        maps: np.ndarray
+            shape (ncomp, 12*nside**2)
         nthreads: int=None
         fast: bool=True
             use the fast algorithm for array value assignment.
+
+        Returns
+        -------
+        maps: np.ndarray
         """
         assert maps.ndim == 2, maps.shape
         nmaps, npix = maps.shape
@@ -702,7 +709,7 @@ class GeometryTF:
         alms = self._apply_tf_adjoint_inplace(alms, _maps, lmax=lmax, nthreads=nthreads)
         return alms
 
-    def filter_alms(self, alms, nthreads=None):
+    def filter_alms(self, alms: np.ndarray, nthreads=None):
         """Apply lx cut to alms of shape (1,2,3) for T/EB/TEB (inplace)."""
         nthreads = get_nthreads(nthreads)
         lmax = hp.Alm.getlmax(alms.shape[-1])
@@ -710,7 +717,7 @@ class GeometryTF:
         self.apply_map(maps, nthreads=nthreads)
         return self.g.map2alm(maps, nthreads=nthreads, check=False, lmax=lmax)
 
-    def filter_maps(self, maps, nthreads=None):
+    def filter_maps(self, maps: np.ndarray, nthreads=None):
         """Apply lx cut to maps of shape (1,2,3) for T/QU/TQU (inplace)."""
         out = self.apply_map(np.atleast_2d(maps), nthreads=nthreads)
         if maps.ndim == 1:
@@ -754,9 +761,9 @@ def map2lens(maps, plm, g=None, **kwargs):
 
     Parameters
     ----------
-    maps : array-like, shape (3, Npix)
-        Unlensed CMB maps in TQU ordering.
-    plm : array-like
+    maps : np.ndarray
+        Shape (3, Npix). Unlensed CMB maps in TQU ordering.
+    plm : np.ndarray
         Alm of the lensing potential phi.
     g: Geometry
     """
@@ -777,13 +784,13 @@ def alm2lens(alms, plm, nside, g=None, **kwargs):
 
     Parameters
     ----------
-    alms : array-like
+    alms : np.ndarray
         Unlensed CMB map alms in TEB ordering.
-    plm : array-like
+    plm : np.ndarray
         Alm of the lensing potential phi.
     nside: int
         Nside of the output maps.
-    g: Geometry
+    g: Geometry, optional
     """
     lmax = hp.Alm.getlmax(len(plm))
     ell = np.arange(lmax + 1)
@@ -879,7 +886,7 @@ def get_almvar(wl0, lmax, Lmax=30):
 
     Parameters
     ----------
-    wl0: array-like
+    wl0: np.ndarray
         The alm of the variance map
     lmax: int
         The maximum l/m to compute

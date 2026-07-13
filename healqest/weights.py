@@ -1,11 +1,16 @@
+from typing import Optional
 import numpy as np
 from healqest import log
 
 logger = log.get_logger(__name__)
 
 
-class weights_plus:
-    def __init__(self, est, cls, lmax, curl=False, u=None, distortion='lens'):
+class WeightsPlus:
+    __QE_FIELDS__ = ['lens', 'tau', 'rot', 'prf']
+
+    def __init__(
+        self, est, cls: dict, lmax: int, curl=False, u: Optional[np.ndarray] = None, distortion='lens'
+    ):
         """Init the weights in `cmblensplus` style.
 
         Parameters
@@ -22,9 +27,7 @@ class weights_plus:
         distortion: str
             type of distortion, 'lens', 'tau', 'rot', or 'prf' (foreground profile)
         """
-        assert distortion in ['lens', 'tau', 'rot', 'prf'], (
-            f"distortion must be one of ['lens', 'tau', 'rot', 'prf'], got {distortion}"
-        )
+        assert distortion in self.__QE_FIELDS__, f"unknown {distortion}, select from: {self.__QE_FIELDS__}"
         if distortion == 'prf':
             assert u is not None, "Must provide u(ell)"
             assert u.ndim == 1, f"u must be a 1D array, got shape: {u.shape}"
@@ -84,7 +87,7 @@ class weights_plus:
             raise ValueError("X must be 'T', 'E' or 'B'")
         if conj:
             s = -s
-            w = np.conj(w) * (-1) ** s
+            w = np.conjugate(w) * (-1) ** s
         return w, s
 
     def w_X0j(self, X, conj=False):
@@ -99,7 +102,7 @@ class weights_plus:
             raise ValueError("X must be 'E' or 'B'")
         if conj:
             s = -s
-            w = np.conj(w) * (-1) ** s
+            w = np.conjugate(w) * (-1) ** s
         return w, s
 
     def w_X01(self, cl, s):
@@ -129,7 +132,7 @@ class weights_plus:
         w = cl[: self.lmax + 1].copy() * factor
         if conj:
             s = -s
-            w = np.conj(w) * (-1) ** s
+            w = np.conjugate(w) * (-1) ** s
         return w, s
 
     def _set_base_weights_lens(self, est, sl, *args):
@@ -229,7 +232,7 @@ class weights_plus:
         except NotImplementedError:
             raise NotImplementedError(f"{est} is not implemented yet for {self.distortion} field")
 
-    def init_weights(self, est, sl, swap=False, curl=False, u=None):
+    def init_weights(self, est, sl, swap=False, curl=False, u: Optional[np.ndarray] = None):
         """Initialize weights for the base estimators: TT/EE/BB/TE/TB/EB.
 
         Parameters
@@ -241,7 +244,7 @@ class weights_plus:
             swap the weights for map1 and map2, so TE -> ET
         curl: bool=False
             modify the weights such that "grad" gives the curl estimator and vice versa (off by -1).
-        u: np.ndarray
+        u: np.ndarray, optional.
             the profile function for profile hardening.
         """
         self.set_base_weights(distortion=self.distortion, est=est, sl=sl, u=u)
@@ -265,6 +268,7 @@ class weights_plus:
             f3 = np.ones(self.lmax + 1) * 0.5
             s3 = 0
         elif self.distortion == 'prf':
+            assert isinstance(u, np.ndarray)
             # profile hardened estimators for lensing
             f3 = 1 / u[: self.lmax + 1] * 0.5  # the 0.5 factor accounts for the second half redundant terms.
             f3[u[: self.lmax + 1] == 0] = 0

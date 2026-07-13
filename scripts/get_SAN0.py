@@ -130,10 +130,10 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
                 out += w * clqq_prf_j
             return out
 
-        qeXY = weights.weights_plus(
+        qeXY = weights.WeightsPlus(
             qe1, config.cmbcl, config.lmax, u=u1, curl=args.curl, distortion='lens' if u1 is None else 'prf'
         )
-        qeZA = weights.weights_plus(
+        qeZA = weights.WeightsPlus(
             qe2, config.cmbcl, config.lmax, u=u2, curl=args.curl, distortion='lens' if u2 is None else 'prf'
         )
         X = almbars[pair1[0]][qe1[0]]

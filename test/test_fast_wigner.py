@@ -70,8 +70,8 @@ def test_fast_san0(fake_data, qe1, qe2, curl):
     almbars1 = fake_data['alm1']
     almbars2 = fake_data['alm2']
 
-    qeXY = weights.weights_plus(qe1 if not curl else qe1 + 'curl', estimator.cls, estimator.lmax)
-    qeZA = weights.weights_plus(qe2 if not curl else qe2 + 'curl', estimator.cls, estimator.lmax)
+    qeXY = weights.WeightsPlus(qe1 if not curl else qe1 + 'curl', estimator.cls, estimator.lmax)
+    qeZA = weights.WeightsPlus(qe2 if not curl else qe2 + 'curl', estimator.cls, estimator.lmax)
 
     i1, i2 = 'TEB'.index(qe1[0]), 'TEB'.index(qe1[1])
     j1, j2 = 'TEB'.index(qe2[0]), 'TEB'.index(qe2[1])

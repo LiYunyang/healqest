@@ -141,7 +141,7 @@ class Qest:
         Parameters
         ----------
         qe: str
-          Quadratic estimator type (defined in `weights_plus`): 'TT'/'EE'/'TE'/'EB'/'TB'
+          Quadratic estimator type: 'TT'/'EE'/'TE'/'EB'/'TB'
         almbar1,almbar2: complex array healpy alm
           First and second filtered alm
         u: np.ndarray=None
@@ -164,7 +164,7 @@ class Qest:
         if distortion in ['prf']:
             assert u is not None, "Need profile function to compute this estimator"
 
-        q = weights.weights_plus(qe, self.cls, self.lmax, u=u, distortion=distortion)
+        q = weights.WeightsPlus(qe, self.cls, self.lmax, u=u, distortion=distortion)
 
         logger.info(f'Running {distortion} reconstruction: {qe}')
 
@@ -240,11 +240,11 @@ class Qest:
             response function
         """
         R = np.zeros(self.Lmax + 1, dtype=float)
-        if qe not in weights.weights_plus.estimators(type1):
+        if qe not in weights.WeightsPlus.estimators(type1):
             logger.warning(f"{type1} distortion does not have {qe} defined. set response to 0.")
             return R
         else:
-            qeXY = weights.weights_plus(qe, self.cls, self.lmax, distortion=type1, curl=curl, u=u)
+            qeXY = weights.WeightsPlus(qe, self.cls, self.lmax, distortion=type1, curl=curl, u=u)
 
         if type2 is None:
             type2 = type1
@@ -258,7 +258,7 @@ class Qest:
             keys = [f"{s1}{s1}", f"{s2}{s2}"]  # SQE only picks the 2 (can be the same) diagonal terms.
 
         for qe2 in [s1 + s2 for s1 in 'TEB' for s2 in 'TEB']:
-            if qe2 not in weights.weights_plus.estimators(type2):
+            if qe2 not in weights.WeightsPlus.estimators(type2):
                 # sometimes `_qe2` is not defined for the second distortion field,
                 # in this case it should be skipped.
                 continue
@@ -269,7 +269,7 @@ class Qest:
                 continue
             flX = self.fls[k1] * self.fl_cut[s1]
             flY = self.fls2[k2] * self.fl_cut[s2]
-            qeZA = weights.weights_plus(qe2, self.cls, self.lmax, distortion=type2, curl=curl, u=u2)
+            qeZA = weights.WeightsPlus(qe2, self.cls, self.lmax, distortion=type2, curl=curl, u=u2)
             R += resp.fill_resp_fullsky(
                 qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=self.fast
             )

@@ -4,53 +4,58 @@ import numpy as np
 
 
 class Profile(object):
-    """Profile to null out for profile hardening."""
-
     def __init__(self):
-        self.ells = np.arange(self.lmax + 1)
+        pass
 
-    def fourier(self):
-        if getattr(self, '_fourier', None):
-            f_k = self._fourier()
-        return f_k
+    def __call__(self, lmax):
+        pass
 
 
-class profileGaussian(Profile):
-    """
-    Returns Gaussian profile in harmonic space.
+class ProfileBeta(Profile):
+    def __init__(self, theta_c, beta=1, n=100, num_points=3):
+        """
+        Projected beta profile.
 
-    Parameters
-    ----------
-    fwhm : float
-      Full width half max in arcmins.
-    lmax: int, scalar, optional
-      Maximum l of the power spectrum. Default: 12000
+        Parameters
+        ----------
+        theta_c: float
+            Core radius in arcmins.
+        beta: float
+            Beta parameter of the profile.
+        n: float
+            Maximum theta in units of theta_c.
+        num_points: int
+            Number of samples per theta_c.
+        """
+        self.theta = np.linspace(0, max(n * theta_c, 5 * 60), int(num_points * n))
+        self.p = self.beta_profile(self.theta, theta_c, beta=beta, y0=1)
 
-    Returns
-    -------
-    p(ell) : array
-      profile as a function fo ell.
+    @staticmethod
+    def beta_profile(r, theta_c, beta, y0=1):
+        return y0 * (1 + (r / theta_c) ** 2) ** (-0.5 * (3 * beta - 1))
 
-    Examples
-    --------
-    >>> p_l = profileGaussian(1.2).fourier()
-    array([1.        , 0.99999998, 0.99999993, ..., 0.20564428, 0.20559007,
-       0.20553587])
-    """
+    def __call__(self, lmax):
+        import healpy as hp
 
-    name = 'profileGaussian'
+        u = hp.beam2bl(self.p, np.deg2rad(self.theta / 60), lmax=lmax)
+        u /= u[0]
+        return u
 
-    def __init__(self, fwhm, lmax=12000):
-        self.fwhm_rad = fwhm * 0.00029088
-        self.lmax = lmax
 
-        super(profileGaussian, self).__init__()
+class ProfileGaussian(Profile):
+    def __init__(self, fwhm):
+        """
+        Gaussian profile.
 
-    def _real(self):
-        """Compute realspace and then convert to Fourier."""
-        # To be implemented
+        Parameters
+        ----------
+        fwhm : float
+            Full width half max in arcmins.
+        """
+        self.fwhm_rad = np.deg2rad(fwhm / 60)
 
-    def _fourier(self):
+    def __call__(self, lmax):
         """Compute Fourier space directly."""
         sigma = self.fwhm_rad / (np.sqrt(8 * np.log(2)))
-        return np.exp(-0.5 * self.ells * (self.ells + 1) * sigma**2)
+        ell = np.arange(lmax + 1)
+        return np.exp(-0.5 * ell * (ell + 1) * sigma**2)

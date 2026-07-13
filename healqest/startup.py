@@ -544,7 +544,11 @@ class Config:
 
     def parse_profile(self, profile: str):
         # assert self.profile in ['src', 'tsz']
-        if profile == 'src':
+        if isinstance(profile, np.ndarray):
+            return profile[: self.lmax + 1]
+        elif callable(profile):
+            return profile(self.lmax)
+        elif profile == 'src':
             return np.ones(self.lmax + 1)
         elif isinstance(profile, str):
             return np.load(self.path(profile))

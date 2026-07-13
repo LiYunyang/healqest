@@ -52,9 +52,9 @@ class Qest:
         self.Lmax = Lmax
         self.size = hp.Alm.getsize(self.lmax)
 
-        self.fls = self.fls2dict(fls)
+        self.fls = self.fls2dict(fls[:, : self.lmax + 1])
         if fls2 is not None:
-            self.fls2 = self.fls2dict(fls2)
+            self.fls2 = self.fls2dict(fls2[:, : self.lmax + 1])
         else:
             self.fls2 = self.fls
         assert np.any(self.fls['TE'] != 0) == np.any(self.fls2['TE'] != 0), (

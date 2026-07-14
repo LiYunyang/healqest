@@ -17,7 +17,7 @@ import string
 import shutil
 import sys
 from itertools import combinations
-from typing import Union, Tuple, get_type_hints
+from typing import Callable, Union, Tuple, get_type_hints
 import warnings
 
 import numpy as np
@@ -306,7 +306,7 @@ class Config:
     def as_list(x):
         if isinstance(x, list):
             return x
-        elif isinstance(x, str):
+        elif isinstance(x, (str, dict)):
             return [x]
         else:
             raise NotImplementedError(f"turning {type(x)} into list is not implemented")
@@ -542,12 +542,22 @@ class Config:
             return None
         raise NotImplementedError("the functionality of tf1d should be replaced by tf2d.")
 
-    def parse_profile(self, profile: str):
+    def parse_profile(self, profile: str | dict | Callable):
         # assert self.profile in ['src', 'tsz']
         if isinstance(profile, np.ndarray):
             return profile[: self.lmax + 1]
         elif callable(profile):
             return profile(self.lmax)
+        elif isinstance(profile, dict):
+            from healqest import profiles as profile_module
+
+            kw = profile.copy()
+            cls_name = kw.pop("class")
+            try:
+                cls = getattr(profile_module, cls_name)
+            except AttributeError as e:
+                raise ValueError(f"profile class {cls_name!r} not found in healqest.profiles") from e
+            return cls(**kw)(self.lmax)
         elif profile == 'src':
             return np.ones(self.lmax + 1)
         elif isinstance(profile, str):

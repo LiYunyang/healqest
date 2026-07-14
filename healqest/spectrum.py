@@ -35,7 +35,7 @@ class ClsDB:
     def __init__(self, path, table):
         self.path = path
         self.table = table
-        self.QUERY_SQL = f"SELECT cl FROM {self.table} WHERE l1=? AND l2=? AND l3=? AND l4=?"
+        self.QUERY_SQL = f"SELECT cl FROM {self.table} WHERE l1 IS ? AND l2 IS ? AND l3 IS ? AND l4 IS ?"
         self.WRITE_SQL = f"INSERT OR REPLACE INTO {self.table} (l1, l2, l3, l4, cl) VALUES (?, ?, ?, ?, ?)"
         self._conn = None
 

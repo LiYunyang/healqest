@@ -63,7 +63,6 @@ class Config:
     # === base ===
     outdir: str
     recdir: str = None  # output directory for lensing rec. Default to outdir
-    save_as_map: bool = False  # save plm as map, otherwise as alm.
     nbundle: int = None  # number of bundles, if any.
 
     # === ilc ===
@@ -687,19 +686,13 @@ class Config:
         subdir = 'lensrec_N1' if N1 else 'lensrec'
         if bundle is not None and not N1:  # MF and N1 don't do bundle
             subdir = f"{subdir}/{self.bundle2str(bundle)}"
-        if self.save_as_map:
-            suffix = 'npy' if not stack_type else 'fits'
-        else:
-            suffix = 'npz'
+        suffix = 'npy' if not stack_type else 'fits'
         if ktype is not None:
             assert seed2 is None
             assert cmbset2 is None
             seed1, seed2, cmbset1, cmbset2 = self.ktype2ij(ktype, i=seed1, j=None, cmbset=cmbset)
         if not stack_type:
-            if self.save_as_map:
-                fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
-            else:
-                fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
+            fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
         else:
             subdir = f"{subdir}/stack"
             if stack_type in ['xx', 'xy', 'yx', 'x0', '0x']:

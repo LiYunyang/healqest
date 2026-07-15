@@ -21,18 +21,13 @@ logger = log.get_logger(__name__)
 
 def load(tag, i, ktype, cmbset, N1=False, bundle=None):
     s1, s2, c1, c2 = config.ktype2ij(ktype, i, j=None, cmbset=cmbset)
-    if config.save_as_map:
-        fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)
-        out = healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1), return_cosmo=False)
-        # make sure consistent UNSEEN pixel
-        out[:, ~config.mask_boundary] = hp.UNSEEN
-        out = hp.ma(out)
-        return out
-    else:
-        fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)
-        loaded = np.load(fname)
-        glm, clm = loaded['glm'], loaded['clm']
-        return glm, clm
+
+    fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)
+    out = healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1), return_cosmo=False)
+    # make sure consistent UNSEEN pixel
+    out[:, ~config.mask_boundary] = hp.UNSEEN
+    out = hp.ma(out)
+    return out
 
 
 def main(tag, key, bundle, cmbset):
@@ -67,38 +62,23 @@ def main(tag, key, bundle, cmbset):
     # write to disk
     mf_grad = mf1_grad + mf2_grad
     mf_curl = mf1_curl + mf2_curl
-    if config.save_as_map:
-        maps_out = np.ma.array(
-            [mf_grad, mf1_grad, mf2_grad, mf_curl, mf1_curl, mf2_curl], fill_value=hp.UNSEEN
-        )
-        hp.write_map(
-            fname,
-            maps_out,
-            overwrite=True,
-            dtype=np.float32,
-            partial=True,
-            column_names=['gmf', 'gmf1', 'gmf2', 'cmf', 'cmf1', 'cmf2'],
-            extra_header=[
-                ('NSIM', nsim1 + nsim2, "Number of sims in total"),
-                ('NSIM1', nsim1, "Number of sims in MF group 1"),
-                ('NSIM2', nsim2, "Number of sims in MF group 2"),
-                ('SPLITIDX', spl_i, "Index that splits two MF groups"),
-            ],
-        )
-    else:
-        np.savez(
-            fname,
-            gmf1=mf1_grad,
-            gmf2=mf2_grad,
-            gmf=mf_grad,
-            cmf1=mf1_curl,
-            cmf2=mf2_curl,
-            cmf=mf_curl,
-            nsim1=nsim1,
-            nsim2=nsim2,
-            nsim=nsim1 + nsim2,
-            split_i=spl_i,
-        )
+
+    maps_out = np.ma.array([mf_grad, mf1_grad, mf2_grad, mf_curl, mf1_curl, mf2_curl], fill_value=hp.UNSEEN)
+    hp.write_map(
+        fname,
+        maps_out,
+        overwrite=True,
+        dtype=np.float32,
+        partial=True,
+        column_names=['gmf', 'gmf1', 'gmf2', 'cmf', 'cmf1', 'cmf2'],
+        extra_header=[
+            ('NSIM', nsim1 + nsim2, "Number of sims in total"),
+            ('NSIM1', nsim1, "Number of sims in MF group 1"),
+            ('NSIM2', nsim2, "Number of sims in MF group 2"),
+            ('SPLITIDX', spl_i, "Index that splits two MF groups"),
+        ],
+    )
+
     logger.info(f"stacking: {tag}-{key}-{bundle} completed.")
 
 
@@ -129,10 +109,7 @@ if __name__ == "__main__":
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
-    if config.save_as_map:
-        tags = config.mvtypes
-    else:
-        tags = config.qes
+    tags = config.mvtypes
 
     keys = []
     if args.std:

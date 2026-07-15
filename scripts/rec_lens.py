@@ -17,7 +17,9 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
     else:
         b1, b2 = bundle_pair
 
-    if config.save_as_map and args.skip:
+    mvtypes = config.mvtypes
+    qes = config.qes
+    if args.skip:
         qes = list()
         mvtypes = list()
         for mvtype in config.mvtypes:
@@ -37,10 +39,6 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                 qes += hq.mvtype2qe(mvtype)
                 mvtypes.append(mvtype)
         qes = list(set(qes))
-
-    else:
-        qes = config.qes
-        mvtypes = config.mvtypes
 
     if not qes:
         logger.warning(
@@ -108,21 +106,6 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
             alms_curls[qe] += clm / ilc_norm
             aresp_grads[qe] += aresp_g / ilc_norm
             aresp_curls[qe] += aresp_c / ilc_norm
-
-    if not config.save_as_map:
-        for qe in qes:
-            file_plm = config.p_plm(
-                tag=qe, seed1=seed1, cmbset1=cmbset1, seed2=seed2, cmbset2=cmbset2, N1=N1, bundle=bundle_pair
-            )
-            os.makedirs(os.path.dirname(file_plm), exist_ok=True)
-            np.savez(
-                file_plm,
-                glm=alms_grads[qe],
-                clm=alms_curls[qe],
-                grad_resp=aresp_grads[qe],
-                curl_resp=aresp_curls[qe],
-            )
-        return
 
     # create the common partial index file
     partial_index = np.where(config.mask_boundary > 0)[0]

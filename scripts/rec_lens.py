@@ -76,7 +76,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
     ilc_pair = list(zip(config.ilcs, config.ilcs[::-1]))
     ilc_norm = len(ilc_pair)
 
-    do_ph = any(qe.endswith('ph') for qe in qes)
+    do_ph = any(qe in qest.Qest.__PH_ESTIMATORS__ for qe in qes)
     for ilc1, ilc2 in ilc_pair:
         almbars1, flms1 = func(cmbset1, seed1, b1, ilc1)
         almbars2, flms2 = func(cmbset2, seed2, b2, ilc2)
@@ -96,11 +96,11 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
         if do_ph:
             estimator.init_harden(config.profile_u, almbars1, almbars2)
         for qe in qes:
-            _qe = qe.removesuffix('ph')
+            _qe = qest.Qest.ph2qe(qe)
             if _qe not in qe_cache:
                 qe_cache[_qe] = estimator.rec_and_resp(_qe, almbars1, almbars2, type1='lens')
             (glm, clm), (aresp_g, aresp_c) = qe_cache[_qe]
-            if qe.endswith('ph'):
+            if qest.Qest.isph(qe):
                 glm, aresp_g = estimator.profile_harden(_qe, glm, aresp_g, type1='lens')
             alms_grads[qe] += glm / ilc_norm
             alms_curls[qe] += clm / ilc_norm

@@ -102,6 +102,14 @@ class Qest:
                 _slm = self.eval('TT', almbars1[0], almbars2[0], u=_u, distortion='prf')[0]
                 self.slm_cache.append(_slm)
 
+    @classmethod
+    def isph(cls, qe: str):
+        return qe in cls.__PH_ESTIMATORS__
+
+    @classmethod
+    def ph2qe(cls, qe: str):
+        return qe.removesuffix('ph') if cls.isph(qe) else qe
+
     @staticmethod
     def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None, g=None):
         """Convert a spin-0 alm into a complex spin field (Q +/- iU): out = Q, +/-U."""
@@ -301,10 +309,7 @@ class Qest:
         i1 = 'teb'.index(qe[0].lower())
         i2 = 'teb'.index(qe[1].lower())
 
-        if qe.endswith('ph'):
-            _qe = qe.removesuffix('ph')
-        else:
-            _qe = qe
+        _qe = self.ph2qe(qe)
         if almbars1 is not None:
             glm, clm = self.eval(_qe, almbars1[i1], almbars2[i2], distortion=type1)
         else:
@@ -318,7 +323,7 @@ class Qest:
         else:
             aresp_g = aresp_c = None
 
-        if qe.endswith('ph'):
+        if self.isph(qe):
             glm, aresp_g = self.profile_harden(_qe, glm, aresp_g, type1=type1, curl=False)
             # skip curl by default
             # clm, aresp_c = self.profile_harden(_qe, clm, aresp_c, type1=type1, curl=False)
@@ -326,7 +331,7 @@ class Qest:
 
     def profile_harden(self, qe: str, klm, aresp, type1='lens', curl=False):
         # do the source harden stuff
-        _qe = qe.removesuffix('ph')
+        _qe = self.ph2qe(qe)
         assert self.harden_cache is not None, "Need HardenCache to compute this estimator"
         assert klm is None or self.slm_cache is not None, "Need source template cache to harden alms"
         if not self.gmv:
@@ -405,11 +410,11 @@ class HardenCache:
         if i == j == 0:
             # phi-phi (lensing response)
             assert qe is not None
-            return self._get_R00(qe=qe.removesuffix('ph'), type1=type1, curl=curl)
+            return self._get_R00(qe=self.qest.ph2qe(qe), type1=type1, curl=curl)
         elif i == 0:
             # phi-source terms, used to determine weights (i.e. how much source contribute to lensing)
             assert qe is not None
-            return self._get_R0j(j, qe=qe.removesuffix('ph'), type1=type1, curl=curl)
+            return self._get_R0j(j, qe=self.qest.ph2qe(qe), type1=type1, curl=curl)
         elif j == 0:
             # source-phi terms, used only for response (i.e., how much the source over subtracts lensing)
             # note that this is assymetric and has additional summation over lensing QE types.

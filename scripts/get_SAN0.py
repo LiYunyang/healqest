@@ -1,7 +1,6 @@
 from collections import defaultdict
 from functools import lru_cache
 from itertools import product
-from typing import Optional
 import numpy as np
 import healpy as hp
 from healqest import weights, resp, startup, healqest_utils as hq, qest, log
@@ -47,7 +46,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
     else:
         logger.info(f"Performing SAN0: {mvtypes} QE: {qes}")
 
-    do_ph = any([qe.endswith('ph') for qe in qes])
+    do_ph = any(qe in qest.Qest.__PH_ESTIMATORS__ for qe in qes)
     if do_ph:
         assert len(config.ilcs) == 1, "Unlikely you want to do profile-hardening with multiple ilc pairs!"
 
@@ -90,7 +89,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         almbars[ilc], fls[ilc] = func(cmbset, seed=seed, bundle=b1, as_dict=True, ilc_type=ilc)
 
     @lru_cache(maxsize=None)
-    def get_estimator(ilc1, ilc2):
+    def get_estimator(ilc_pair: tuple):
         out = qest.Qest(
             lmax=config.lmax,
             g=config.g,
@@ -99,15 +98,15 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
             flT=config.flT,
             flP=config.flP,
             fast=True,
-            fls=fls[ilc1],
-            fls2=fls[ilc2],
+            fls=fls[ilc_pair[0]],
+            fls2=fls[ilc_pair[1]],
         )
         if do_ph:
             out.init_harden(config.profile_u)
         return out
 
     @lru_cache(maxsize=None)
-    def get_clqq(qe1: str, qe2: str, pair1: tuple, pair2: tuple, u1_idx: int = None, u2_idx: int = None):
+    def get_clqq(qe1: str, qe2: str, pair1: tuple, pair2: tuple, u1_idx=None, u2_idx=None):
         """Get the response for a single pair of ilc combination.
 
         Parameters
@@ -117,31 +116,35 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         pair1, pair2: tuple.
             The ilc pair for the two estimators. e.g., ('mv', 'tszfree')
         u1_idx,u2_idx: int, optional.
-            Profile indices. The presence of u1,u2 determines if the calculation is for a hardened
-            calculation or not. For example, for TT-TTprf, if u2 is provided, then the cross between TT and \
-            the source estimator is performed. Otherwise, the estimator is dispatched to two calculations:
+            Profile indices. The presence of u1,u2 determines if the calculation is for a hardened calculation
+            or not. For example, for TT-TTprf, if u2 is provided, then the cross between TT and the source
+            estimator is performed. Otherwise, the estimator is dispatched to two calculations:
             `get_clqq('TT', 'TTprf', None, j)` and `get_clqq('TT', 'TT', None, None)` and combined.
         """
-        if qe1 in qest.Qest.__PH_ESTIMATORS__ and u1_idx is None:
-            qest1 = get_estimator(pair1[0], pair1[1])
-            out = get_clqq(qe1.removesuffix('ph'), qe2, pair1, pair2, u1_idx=None, u2_idx=u2_idx).copy()
+        if qest.Qest.isph(qe1):
+            assert u1_idx is None
+            qest1 = get_estimator(pair1)
+            _qe1 = qest1.ph2qe(qe1)
+            out = get_clqq(_qe1, qe2, pair1, pair2, u1_idx=None, u2_idx=u2_idx).copy()
             for j, _u in enumerate(qest1.u):
                 clqq_prf_j = get_clqq('TT', qe2, pair1, pair2, u1_idx=j, u2_idx=u2_idx)
-                w = qest1.get_harden_weights(qe1.removesuffix('ph'), j, curl=args.curl)
+                w = qest1.get_harden_weights(_qe1, j, curl=args.curl)
                 out += w * clqq_prf_j
             return out
 
-        if qe2 in qest.Qest.__PH_ESTIMATORS__ and u2_idx is None:
-            qest2 = get_estimator(pair2[0], pair2[1])
-            out = get_clqq(qe1, qe2.removesuffix('ph'), pair1, pair2, u1_idx=u1_idx, u2_idx=None).copy()
+        if qest.Qest.isph(qe2):
+            assert u2_idx is None
+            qest2 = get_estimator(pair2)
+            _qe2 = qest2.ph2qe(qe2)
+            out = get_clqq(qe1, _qe2, pair1, pair2, u1_idx=u1_idx, u2_idx=None).copy()
             for j, _u in enumerate(qest2.u):
                 clqq_prf_j = get_clqq(qe1, 'TT', pair1, pair2, u1_idx=u1_idx, u2_idx=j)
-                w = qest2.get_harden_weights(qe2.removesuffix('ph'), j, curl=args.curl)
+                w = qest2.get_harden_weights(_qe2, j, curl=args.curl)
                 out += w * clqq_prf_j
             return out
 
-        u1 = None if u1_idx is None else get_estimator(pair1[0], pair1[1]).u[u1_idx]
-        u2 = None if u2_idx is None else get_estimator(pair2[0], pair2[1]).u[u2_idx]
+        u1 = None if u1_idx is None else get_estimator(pair1).u[u1_idx]
+        u2 = None if u2_idx is None else get_estimator(pair2).u[u2_idx]
         kw = dict(curl=args.curl, cls=config.cmbcl, lmax=config.lmax)
         qeXY = weights.WeightsPlus(qe1, u=u1, distortion='lens' if u1_idx is None else 'prf', **kw)
         qeZA = weights.WeightsPlus(qe2, u=u2, distortion='lens' if u2_idx is None else 'prf', **kw)

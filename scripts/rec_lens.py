@@ -76,6 +76,9 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
     aresp_curls = defaultdict(lambda: 0)
 
     ilc_pair = list(zip(config.ilcs, config.ilcs[::-1]))
+    ilc_norm = len(ilc_pair)
+
+    do_ph = any(qe.endswith('ph') for qe in qes)
     for ilc1, ilc2 in ilc_pair:
         almbars1, flms1 = func(cmbset1, seed1, b1, ilc1)
         almbars2, flms2 = func(cmbset2, seed2, b2, ilc2)
@@ -91,14 +94,20 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
             fls=flms1,
             fls2=flms2,
         )
-        if any([qe.endswith('ph') for qe in qes]):
+        qe_cache = {}
+        if do_ph:
             estimator.init_harden(config.profile_u, almbars1, almbars2)
         for qe in qes:
-            (glm, clm), (aresp_g, aresp_c) = estimator.rec_and_resp(qe, almbars1, almbars2, type1='lens')
-            alms_grads[qe] += glm / len(ilc_pair)
-            alms_curls[qe] += clm / len(ilc_pair)
-            aresp_grads[qe] += aresp_g / len(ilc_pair)
-            aresp_curls[qe] += aresp_c / len(ilc_pair)
+            _qe = qe.removesuffix('ph')
+            if _qe not in qe_cache:
+                qe_cache[_qe] = estimator.rec_and_resp(_qe, almbars1, almbars2, type1='lens')
+            (glm, clm), (aresp_g, aresp_c) = qe_cache[_qe]
+            if qe.endswith('ph'):
+                glm, aresp_g = estimator.profile_harden(_qe, glm, aresp_g, type1='lens')
+            alms_grads[qe] += glm / ilc_norm
+            alms_curls[qe] += clm / ilc_norm
+            aresp_grads[qe] += aresp_g / ilc_norm
+            aresp_curls[qe] += aresp_c / ilc_norm
 
     if not config.save_as_map:
         for qe in qes:

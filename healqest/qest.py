@@ -97,11 +97,10 @@ class Qest:
         if almbars1 is not None:
             if not np.allclose(almbars1, almbars2):
                 logger.warning("Using diff legs for profile hardening is ill-defined. Be cautious.")
-            key = (id(almbars1), id(almbars2))
-            self.slm_cache = {key: []}
+            self.slm_cache = []
             for j, _u in enumerate(np.atleast_2d(u)):
                 _slm = self.eval('TT', almbars1[0], almbars2[0], u=_u, distortion='prf')[0]
-                self.slm_cache[key].append(_slm)
+                self.slm_cache.append(_slm)
 
     @staticmethod
     def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None, g=None):
@@ -320,32 +319,28 @@ class Qest:
             aresp_g = aresp_c = None
 
         if qe.endswith('ph'):
-            key = (id(almbars1), id(almbars2))
-            slm_cache = self.slm_cache.get(key) if self.slm_cache is not None else None
-            self.profile_harden(_qe, glm, clm, aresp_g, aresp_c, slm_cache, type1=type1, harden_curl=False)
+            glm, aresp_g = self.profile_harden(_qe, glm, aresp_g, type1=type1, curl=False)
+            # skip curl by default
+            # clm, aresp_c = self.profile_harden(_qe, clm, aresp_c, type1=type1, curl=False)
         return [glm, clm], [aresp_g, aresp_c]
 
-    def profile_harden(self, qe: str, glm, clm, aresp_g, aresp_c, slm_cache, type1='lens', harden_curl=False):
+    def profile_harden(self, qe: str, klm, aresp, type1='lens', curl=False):
         # do the source harden stuff
         _qe = qe.removesuffix('ph')
         assert self.harden_cache is not None, "Need HardenCache to compute this estimator"
+        assert klm is None or self.slm_cache is not None, "Need source template cache to harden alms"
         if not self.gmv:
             assert _qe == 'TT', f"We only harden for 'TT' for SQE, got: {qe}"
+        klm_ph = klm.copy() if klm is not None else None
+        aresp_ph = aresp.copy() if aresp is not None else None
         for j, _u in enumerate(self.harden_cache.u):
-            _w = self.harden_cache.get_harden_weights(_qe, j, curl=False, type1=type1)
-            if glm is not None:
-                glm += hp.almxfl(slm_cache[j], _w)
-            if aresp_g is not None:
-                _r = self.harden_cache.get_harden_response(j, curl=False, type1=type1)
-                aresp_g += _r * _w
-            if type1 == 'lens' and harden_curl:
-                _w = self.harden_cache.get_harden_weights(_qe, j, curl=True, type1=type1)
-                if clm is not None:
-                    clm += hp.almxfl(slm_cache[j], _w)
-                if aresp_c is not None:
-                    _r = self.harden_cache.get_harden_response(j, curl=True, type1=type1)
-                    aresp_c += _r * _w
-        return glm, clm, aresp_g, aresp_c
+            _w = self.harden_cache.get_harden_weights(_qe, j, curl=curl, type1=type1)
+            if klm is not None:
+                klm_ph += hp.almxfl(self.slm_cache[j], _w)
+            if aresp is not None:
+                _r = self.harden_cache.get_harden_response(j, curl=curl, type1=type1)
+                aresp_ph += _r * _w
+        return klm_ph, aresp_ph
 
     def get_harden_weights(self, qe: str, j: int, curl: bool = False, type1: str = 'lens'):
         if self.harden_cache is None:

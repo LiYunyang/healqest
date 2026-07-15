@@ -1,7 +1,5 @@
-from functools import partial
 import re
 import numpy as np
-import multiprocessing
 import operator
 from healqest import log
 
@@ -88,73 +86,6 @@ def bin_Cls(Cls, bins):
     return x, np.mean(Cbs, axis=0), err, cov
 
 
-def load_Cls(i, config, mvtype, cross=False, average=True, coadd=False, cmbset='a', curl=False):
-    """Load the data (xx-type) Cls."""
-    ktype2 = None if cross else 'xx'
-    fname = config.p_cls(
-        tag=mvtype, seed1=i, seed2=None, ktype1='xx', ktype2=ktype2, coadd=coadd, cmbset=cmbset, curl=curl
-    )
-    Cls = np.loadtxt(fname)
-    if average:
-        return np.mean(Cls[:, 1:], axis=-1)
-    else:
-        return Cls[:, -1]
-
-
-def load_Cls_ab(i, config, mvtype, average=True, coadd=False, curl=False):
-    Cls = np.loadtxt(config.p_cls(mvtype, i, None, 'aa', 'bb', N1=True, coadd=coadd, curl=curl))
-    if average:
-        return np.mean(Cls[:, 1:], axis=-1)
-    else:
-        return Cls[:, -1]
-
-
-def load_N0(i, config, mvtype, average=True, SAN0=False, coadd=False, cmbset='a', curl=False):
-    if SAN0:
-        Cls = np.loadtxt(config.p_cls(mvtype, i, i, 'xx', 'xx', SAN0=True, curl=curl))
-        return Cls[:, -1]
-    _ = 0
-    Cls_xyxy = np.loadtxt(config.p_cls(mvtype, i, None, 'xy', 'xy', coadd=coadd, cmbset=cmbset, curl=curl))
-    Cls_xyyx = np.loadtxt(config.p_cls(mvtype, i, None, 'xy', 'yx', coadd=coadd, cmbset=cmbset, curl=curl))
-    if average:
-        _ += np.mean(Cls_xyxy[:, 1:], axis=-1)
-        _ += np.mean(Cls_xyyx[:, 1:], axis=-1)
-    else:
-        _ = Cls_xyxy[:, -1] + Cls_xyyx[:, -1]
-    return _
-
-
-def load_RDN0(i, config, mvtype, average=True, coadd=False, cmbset='a', curl=False):
-    def load(fname):
-        dat = np.loadtxt(fname)
-        if average:
-            return np.mean(dat[:, 1:], axis=-1)
-        else:
-            return dat[:, -1]
-
-    tot = load(config.p_cls(mvtype, i, None, 'x0', 'x0', coadd=coadd, cmbset=cmbset, curl=curl))
-    tot += load(config.p_cls(mvtype, i, None, 'x0', '0x', coadd=coadd, cmbset=cmbset, curl=curl))
-    tot += load(config.p_cls(mvtype, i, None, '0x', '0x', coadd=coadd, cmbset=cmbset, curl=curl))
-    tot += load(config.p_cls(mvtype, i, None, '0x', 'x0', coadd=coadd, cmbset=cmbset, curl=curl))
-    return tot
-
-
-def load_N1(i, config, mvtype, average=True, coadd=False, curl=False):
-    Cls_xyxy = np.loadtxt(config.p_cls(mvtype, i, None, 'xy', 'xy', N1=True, coadd=coadd, curl=curl))
-    Cls_xyyx = np.loadtxt(config.p_cls(mvtype, i, None, 'xy', 'yx', N1=True, coadd=coadd, curl=curl))
-    if average:
-        N0 = np.mean(Cls_xyxy[:, 1:] + Cls_xyyx[:, 1:], axis=-1)
-    else:
-        N0 = Cls_xyxy[:, -1] + Cls_xyyx[:, -1]
-    Cls_abab = np.loadtxt(config.p_cls(mvtype, i, None, 'ab', 'ab', N1=True, coadd=coadd, curl=curl))
-    Cls_abba = np.loadtxt(config.p_cls(mvtype, i, None, 'ab', 'ba', N1=True, coadd=coadd, curl=curl))
-    if average:
-        _ = np.mean(Cls_abab[:, 1:] + Cls_abba[:, 1:], axis=-1)
-    else:
-        _ = Cls_abab[:, -1] + Cls_abba[:, -1]
-    return _ - N0, N0
-
-
 def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, **kw):
     """
     Load spectra from the sqlite database and performs specific coadding procedure.
@@ -222,7 +153,6 @@ class LensingSpectra:
         do_RDN0=False,
         do_data=False,
         curl=False,
-        sql=True,
     ):
         """Lensing spectra object.
 
@@ -243,14 +173,11 @@ class LensingSpectra:
         coadd: bool
             Special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing
             reconstruction map is coadded before taking spectra.
-        sql: bool=True
-            If True, load the spectra from the SQLite database instead of txt files.
         """
         self.config = config
         self.cmbset = cmbset
         self.curl = curl
         self.average = average
-        self.sql = sql
         if Lmax is None:
             self.Lmax = self.config.Lmax
         else:
@@ -302,7 +229,7 @@ class LensingSpectra:
 
     @property
     def clkk(self):
-        return np.loadtxt(self.config.path(self.config.clkk_in))[: self.Lmax + 1]
+        return self.config.clkk
 
     @property
     def N0(self):
@@ -318,27 +245,16 @@ class LensingSpectra:
     def load_resp(self, resp_smooth=None):  # noqa: C901
         if self.resp_type == 'auto':
             if self.N_N1 > 0:
-                if not self.sql:
-                    _f = partial(
-                        load_Cls_ab,
-                        config=self.config,
-                        mvtype=self.mvtype,
-                        average=self.average,
-                        coadd=self.coadd,
-                    )
-                    Cls_ab = np.array(list(map(_f, range(1, self.N_N1 + 1))))
-                    Cls_ab = Cls_ab[:, : self.Lmax + 1]
-                else:
-                    Cls_ab = load_sql(
-                        range(1, self.N_N1 + 1),
-                        config=self.config,
-                        spec_type='n1',
-                        mvtype=self.mvtype,
-                        curl=self.curl,
-                        ops='aabb',
-                        N1=True,
-                        Lmax=self.Lmax,
-                    )
+                Cls_ab = load_sql(
+                    range(1, self.N_N1 + 1),
+                    config=self.config,
+                    spec_type='n1',
+                    mvtype=self.mvtype,
+                    curl=self.curl,
+                    ops='aabb',
+                    N1=True,
+                    Lmax=self.Lmax,
+                )
                 self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
                 self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
             else:
@@ -384,97 +300,20 @@ class LensingSpectra:
         snr = np.sqrt(np.sum(np.linalg.inv(self.cov) / self.hartlap))
         return snr
 
-    def load(self):  # noqa: C901
+    def load(self):
         self.offload()
 
-        if not self.sql:
-            with multiprocessing.Pool(10) as p:
-                map = p.map
-                if self.N_N1 > 0:
-                    loop = range(1, self.N_N1 + 1)
-                    _f = partial(
-                        load_N1,
-                        config=self.config,
-                        mvtype=self.mvtype,
-                        average=self.average,
-                        coadd=self.coadd,
-                        curl=self.curl,
-                    )
-                    N1s, N1N0s = np.transpose(np.array(list(map(_f, loop))), (1, 0, 2))
+        kw = dict(Lmax=self.Lmax, curl=self.curl, mvtype=self.mvtype, config=self.config)
+        N0_loop = range(1, self.N + 1)
+        N1_loop = range(1, self.N_N1 + 1) if self.N_N1 > 0 else []
 
-                loop = range(1, self.N + 1)
-                _f = partial(
-                    load_N0,
-                    config=self.config,
-                    mvtype=self.mvtype,
-                    average=self.average,
-                    SAN0=False,
-                    coadd=self.coadd,
-                    cmbset=self.cmbset,
-                    curl=self.curl,
-                )
-                N0s = np.array(list(map(_f, loop)))
-
-                if self.do_SAN0:
-                    _f = partial(
-                        load_N0,
-                        config=self.config,
-                        mvtype=self.mvtype,
-                        average=self.average,
-                        SAN0=True,
-                        coadd=self.coadd,
-                        cmbset=self.cmbset,
-                        curl=self.curl,
-                    )
-                    SAN0s = np.array(list(map(_f, loop)))
-
-                if self.do_RDN0:
-                    _f = partial(
-                        load_RDN0,
-                        config=self.config,
-                        mvtype=self.mvtype,
-                        average=self.average,
-                        coadd=self.coadd,
-                        cmbset=self.cmbset,
-                        curl=self.curl,
-                    )
-                    RDN0s = np.array(list(map(_f, loop))) - N0s
-
-                _f = partial(
-                    load_Cls,
-                    config=self.config,
-                    mvtype=self.mvtype,
-                    average=self.average,
-                    coadd=self.coadd,
-                    cmbset=self.cmbset,
-                    curl=self.curl,
-                )
-                Cls_hat = np.array(list(map(_f, loop)))
-
-                if self.do_data:
-                    Cl0 = _f(0)
-
-        else:
-            kw = dict(Lmax=self.Lmax, curl=self.curl, mvtype=self.mvtype, config=self.config)
-            N0_loop = range(1, self.N + 1)
-            N1_loop = range(1, self.N_N1 + 1) if self.N_N1 > 0 else []
-            N0s = load_sql(N0_loop, spec_type='n0', ops='xyxy+xyyx', cmbset=self.cmbset, **kw)
-            if self.N_N1 > 0:
-                N1s = load_sql(N1_loop, spec_type='n1', ops='abab+abba-xyxy-xyyx', cmbset='a', N1=True, **kw)
-            if self.do_SAN0:
-                SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, SAN0=True, **kw)
-            if self.do_RDN0:
-                RDN0s = load_sql(
-                    N0_loop, spec_type='rdn0', ops='x0x0+x00x+0xx0+0x0x', cmbset=self.cmbset, **kw
-                )
-                RDN0s -= N0s
-            Cls_hat = load_sql(N0_loop, spec_type='n0', ops='xxxx', cmbset=self.cmbset, **kw)
-            if self.do_data:
-                Cl0 = load_sql([0], spec_type='rdn0', ops='xxxx', cmbset=self.cmbset, **kw)[0]
+        N0s = load_sql(N0_loop, spec_type='n0', ops='xyxy+xyyx', cmbset=self.cmbset, **kw)
+        Cls_hat = load_sql(N0_loop, spec_type='n0', ops='xxxx', cmbset=self.cmbset, **kw)
 
         self.N0s = N0s[:, : self.Lmax + 1] / self.resp2
 
         if self.N_N1 > 0:
+            N1s = load_sql(N1_loop, spec_type='n1', ops='abab+abba-xyxy-xyyx', cmbset='a', N1=True, **kw)
             self.N1s = N1s[:, : self.Lmax + 1] / self.resp2
         else:
             self.N1s = None
@@ -482,9 +321,12 @@ class LensingSpectra:
         self.Cls = Cls_hat[:, : self.Lmax + 1] / self.resp2 - self.N0 - self.N1
 
         if self.do_RDN0:
+            RDN0s = load_sql(N0_loop, spec_type='rdn0', ops='x0x0+x00x+0xx0+0x0x', cmbset=self.cmbset, **kw)
+            RDN0s -= N0s
             self.RDN0 = np.mean(RDN0s[:, : self.Lmax + 1] / self.resp2, axis=0)
 
         if self.do_data:
+            Cl0 = load_sql([0], spec_type='rdn0', ops='xxxx', cmbset=self.cmbset, **kw)[0]
             self.Cl0 = Cl0[: self.Lmax + 1] / self.resp2
             if self.do_RDN0:
                 self.Cl0 -= self.RDN0 + self.N1
@@ -492,6 +334,7 @@ class LensingSpectra:
                 self.Cl0 -= self.N0 + self.N1
 
         if self.do_SAN0:
+            SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, SAN0=True, **kw)
             self.SAN0s = SAN0s[:, : self.Lmax + 1] / self.resp2
             logger.info("calibrate SAN0 by N0")
             self.SAN0s *= self.N0 / np.mean(self.SAN0s, axis=0)

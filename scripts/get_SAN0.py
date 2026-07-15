@@ -48,20 +48,15 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         logger.info(f"Performing SAN0: {mvtypes} QE: {qes}")
 
     def func(cmbset, seed, bundle, ilc_type, as_dict=False):
-        if not cinv:
-            dm = hq.load_module("healqest.data_module", args.module_path)
-            sims = dm.Data(config=config, N1=False, ilc_type=ilc_type)
-            almbars, flms = sims.naive_cinv(config, seed=seed, cmbset=cmbset, bundle=bundle, add_noise=True)
-        else:
-            _maps, flms = hq.cinv_io(
-                config.p_cinv(seed=seed, cmbset=cmbset, ilc_type=ilc_type, N1=False, bundle=bundle)
-            )
-            _maps[0] *= config.mask_qe['t']
-            _maps[1:] *= config.mask_qe['p']
-            almbars = config.g.map2alm(_maps, lmax=config.lmax, check=False).astype(np.complex128)
+        _maps, flms = hq.cinv_io(
+            config.p_cinv(seed=seed, cmbset=cmbset, ilc_type=ilc_type, N1=False, bundle=bundle)
+        )
+        _maps[0] *= config.mask_qe['t']
+        _maps[1:] *= config.mask_qe['p']
+        almbars = config.g.map2alm(_maps, lmax=config.lmax, check=False).astype(np.complex128)
 
-            flms = flms[:, : config.lmax + 1]
-            del _maps
+        flms = flms[:, : config.lmax + 1]
+        del _maps
 
         # apply the lmin, lmax selection for QE
         hp.almxfl(almbars[0], config.flT, inplace=True)
@@ -242,8 +237,6 @@ if __name__ == "__main__":
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
     assert comm.size > 1, f"{__name__} only works in MPI mode."
-
-    cinv = config.rectype != 'naive'
 
     _loop = np.arange(args.i1, args.i2 + 1)
     if config.nbundle is None or args.bundle is None:

@@ -1,5 +1,4 @@
 # distutils: language = c
-# distutils: sources = healqest/src/wignerd.c
 # cython: cdivision=True
 
 

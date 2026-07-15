@@ -22,10 +22,10 @@ Install
 
 If you want to install the package, you can do it by running::
 
-    python setup.py build_ext # (optional for analytic response calculation)
     pip install [-e] ./
 
-Currently, ``build_ext`` is not working with ``pip``, so one has to compile it manually before installation.
+The Wigner-d extension is built from the Cython wrapper and C source during installation. The old f2py
+``.pyf`` build path is no longer required.
 
 Development
 -----------

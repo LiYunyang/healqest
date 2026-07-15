@@ -2,7 +2,7 @@ from typing import TypedDict, Callable, Optional
 
 import numpy as np
 import healpy as hp
-from healqest import healqest_utils as utils
+from healqest import healqest_utils as hq
 from healqest import weights, resp, log, ducc_sht
 from functools import lru_cache, partial
 
@@ -73,7 +73,7 @@ class Qest:
 
         self.cls = Cls
         if g is None:
-            nside = utils.get_nside(lmax)
+            nside = hq.get_nside(lmax)
             g = ducc_sht.Geometry(nside=nside)
         self.g = g
         self.nside = g.nside
@@ -515,11 +515,11 @@ def coadd_qe_alm(mvtype: str, alms: dict, response: dict, Lmax: int):
     alm = np.zeros(hp.Alm.getsize(Lmax), dtype=complex)
     aresp = np.zeros(Lmax + 1, dtype=float)
 
-    for qe in Config.mvtype2qe(mvtype):
+    for qe in hq.mvtype2qe(mvtype):
         alm += alms[qe]
         aresp += response[qe]
 
-    w = l * (l + 1) * utils.cli(aresp) / 2
+    w = l * (l + 1) * hq.cli(aresp) / 2
     # noinspection PyTypeChecker
     alm = hp.almxfl(alm, w)
     return alm, aresp

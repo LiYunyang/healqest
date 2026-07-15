@@ -81,45 +81,38 @@ def get_unlensedcls(file, lmax=2000):
     return ell, *cls
 
 
-def get_qes(qeset):
-    """Retrieve the estimators needed to compute a given QE set.
+def mvtype2qe(mvtype) -> list:
+    """Retrieve the QEs needed to compute a "mv"-combination of estimator."""
+    from healqest.qest import Qest
 
-    Parameters
-    ----------
-    qeset : str
-        A string representing the QE set.
-
-    Returns
-    -------
-    list or None
-        A list of estimators neesed.
-    """
     single = {"TT", "EE", "TE", "EB", "TB", "ET", "BE", "BT"}
-
     composite = {
-        "GMV": ["TT", "EE", "EB", "TE", "TB", "EB", "TE", "TB"],
-        "GMVTTEETE": ["TT", "EE", "TE", "ET"],
-        "GMVTBEB": ["TB", "BT", "EB", "BE"],
         "MV": ["TT", "EE", "EB", "TE", "TB", "BE", "ET", "BT"],
-        "MVnoTT": ["EE", "EB", "TE", "TB", "EB", "TE", "TB"],
-        "MVnoEB": ["EE", "TE", "TB", "TE", "TB"],
-        "TTEETE": ["TT", "EE", "TE", "ET"],
-        "TBEB": ["TB", "BT", "EB", "BE"],
         "PP": ["EE", "EB", "BE"],
+        "TTEETE": ["TT", "EE", "TE", "ET"],
+        # "MVnoTT": ["EE", "EB", "TE", "TB", "EB", "TE", "TB"],
+        # "MVnoEB": ["EE", "TE", "TB", "TE", "TB"],
+        "TBEB": ["TB", "BT", "EB", "BE"],
         "TEET": ["TE", "ET"],
         "EBBE": ["EB", "BE"],
         "TBBT": ["TB", "BT"],
     }
-
-    if qeset in composite:
-        return composite[qeset]
-
-    # For any qetype that is one of the single entry codes.
-    elif qeset in single:
-        return [qeset]
-
+    if mvtype in single:
+        return [mvtype]
+    elif mvtype in composite:
+        return composite[mvtype]
+    elif mvtype in Qest.__PH_ESTIMATORS__:  # single ph estimators
+        return [mvtype]
+    elif mvtype in ['MVph', 'TTEETEph']:  # compund profile-harden estimators for SQE
+        qes = mvtype2qe(mvtype.removesuffix('ph'))
+        qes[qes.index('TT')] = 'TTph'
+        return qes
+    elif mvtype in ['GMVph', 'GTTEETEph', 'GTBEBph']:  # compund profile-harden estimators for GMV
+        _qes = mvtype2qe(mvtype.removesuffix('ph').removeprefix('G'))
+        qes = [_ + 'ph' if _ + 'ph' in Qest.__PH_ESTIMATORS__ else _ for _ in _qes]
+        return qes
     else:
-        raise ValueError(f"Unknown QE set: {qeset}")
+        raise ValueError(f'Undefined mvtype: {mvtype}')
 
 
 def map_or_alm(m):

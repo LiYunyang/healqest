@@ -53,30 +53,6 @@ def get_git_version():
         return "unknown"
 
 
-class PartialFormatter(string.Formatter):
-    """Allow delayed formatting of values in strings."""
-
-    def get_value(self, key, args, kwargs):
-        # Try to resolve the key
-        try:
-            return super().get_value(key, args, kwargs)
-        except (KeyError, IndexError):
-            # Preserve the original placeholder if value is missing
-            if isinstance(key, str):
-                return "{" + key + "}"
-            return super().get_value(key, args, kwargs)
-
-    def format_field(self, value, format_spec):
-        if isinstance(value, str) and value.startswith("{") and value.endswith("}"):
-            v = value[1:-1]
-            # If value is a placeholder, return it with its format spec untouched
-            return f"{{{v}:{format_spec}}}" if format_spec else value
-        try:
-            return super().format_field(value, format_spec)
-        except (ValueError, TypeError):
-            return f"{value}:{format_spec}"
-
-
 class Config:
     __keywords__ = ['base', 'ilc', 'lensrec', 'inputs', 'pspec', 'cinv']
 
@@ -95,7 +71,6 @@ class Config:
     fmask_ilc: Union[str, list[str]] = None  # path(s) to mask used for ilc
 
     # === cinv ===
-
     eps_t: float  # convergence threshold for cinv T component
     eps_p: float  # convergence threshold for cinv Pol component
     cinv_lmax: int  # maximum l for cinv
@@ -104,7 +79,7 @@ class Config:
     file_bl: Union[str, float] = None  # path to beam file or gaussian beam size in arcmin FWHM
     file_tf1d: Union[str, int] = None  # path to tf1d file.
     # If a integer is given, this is interpreted as a l_cut.
-    file_tf2d: Union[str, list] = None  # path to tf2d file.
+    file_tf2d: str = None  # path to tf2d file.
     mtheta: dict = None  # configuration of the mtheta filter
     file_cambcmb: str  # path to the camb cls file for cinv (relative to healqest/camb)
     file_noisefg: str  # path to the noise + foreground (tf2d+beam-ed)
@@ -353,30 +328,6 @@ class Config:
             raise TypeError(f'Undefined ktype {ktype}')
         return seed1, seed2, cmbset1, cmbset2
 
-    @staticmethod
-    def mvtype2qe(mvtype):
-        # SQE type MVs
-        from healqest.qest import Qest
-
-        if mvtype in ['MV', 'qMV', 'PP', 'qPP', 'TTEETE', 'qTTEETE']:
-            return hq.get_qes(mvtype)
-        elif mvtype in ['TT', 'TE', 'TB', 'EE', 'EB', 'ET', 'BT', 'BE']:
-            return hq.get_qes(mvtype)
-        elif mvtype in ['TBEB', 'qTBEB', 'TEET', 'EBBE']:
-            return hq.get_qes(mvtype)
-        elif mvtype in Qest.__PH_ESTIMATORS__:  # single ph estimators
-            return [mvtype]
-        elif mvtype in ['MVph', 'TTEETEph']:  # compund profile-harden estimators for SQE
-            qes = hq.get_qes(mvtype.removesuffix('ph'))
-            qes[qes.index('TT')] = 'TTph'
-            return qes
-        elif mvtype in ['GMVph', 'GTTEETEph', 'GTBEBph']:  # compund profile-harden estimators for GMV
-            _qes = hq.get_qes(mvtype.removesuffix('ph').removeprefix('G'))
-            qes = [_ + 'ph' if _ + 'ph' in Qest.__PH_ESTIMATORS__ else _ for _ in _qes]
-            return qes
-        else:
-            raise ValueError(f'Undefined mvtype: {mvtype}')
-
     @property
     def ilcs(self):
         """Return the list of ILC type(s) needed for lensrec."""
@@ -394,7 +345,7 @@ class Config:
         """Return qes for lensrec."""
         qes = list()
         for mvtype in self.mvtypes:
-            qes += self.mvtype2qe(mvtype)
+            qes += hq.mvtype2qe(mvtype)
         return list(set(qes))
 
     @property
@@ -543,7 +494,7 @@ class Config:
         raise NotImplementedError("the functionality of tf1d should be replaced by tf2d.")
 
     def parse_profile(self, profile: str | dict | Callable):
-        # assert self.profile in ['src', 'tsz']
+        """Parse a profile into a 1d array of length lmax+1."""
         if isinstance(profile, np.ndarray):
             return profile[: self.lmax + 1]
         elif callable(profile):
@@ -833,60 +784,8 @@ class Config:
 
     @property
     def p_index(self):
-        """Path the the parital map index array."""
+        """Path to the parital map index array."""
         return self.path(self.recdir, 'index.npz')
-
-    @staticmethod
-    def f_tmp(
-        tag,
-        seed1=None,
-        seed2=None,
-        cmbset1=None,
-        cmbset2=None,
-        ktype=None,
-        N1=False,
-        mf_group=0,
-        bundle=None,
-        curl=False,
-    ):
-        """
-        Return file name of a temprary file for kappa maps.
-
-        Parameters
-        ----------
-        tag: str
-            qe or a mvtype, e.g. "TT"/"qMV"/"GMV"/"PP"
-        seed1, seed2: int
-        cmbset1, cmbset2: str
-        ktype: str
-            2-letter string
-        N1: bool=False
-            Indicator for N1-type maps.
-        mf_group: int=0
-        bundle: int=None
-        curl: bool=False
-        """
-        bundle_tag = f'_{Config.bundle2str(bundle)}' if bundle is not None else ''
-        N1_tag = '_N1' if N1 else ''
-        prefix = 'kmap_grad' if not curl else 'kmap_curl'
-        return (
-            f"{prefix}_{tag}{bundle_tag}_{seed1}{cmbset1}_{seed2}{cmbset2}"
-            f"_mfgroup{mf_group}_{ktype}{N1_tag}.tmp"
-        )
-
-    def unpack(self, dir='cls'):
-        import tarfile
-
-        for ext in ['tar.gz', 'tar']:
-            fname = self.path(self.outdir, f"{dir}.{ext}")
-            if os.path.exists(fname):
-                logger.info(f"unpack the tarball: {fname}")
-                with tarfile.open(fname, "r") as tar:
-                    tar.extractall(path=self.path(self.outdir))
-                os.remove(fname)
-                logger.info(f"Removing the tarball: {fname}")
-        else:
-            logger.info(f"tarball not found!")
 
 
 def parser():

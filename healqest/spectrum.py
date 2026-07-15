@@ -612,17 +612,12 @@ class KappaMap:
             fname = f"kappa_in_{self.i:03d}.fits"
         else:
             s1, s2, cmbset1, cmbset2 = self.config.ktype2ij(self.ktype, self.i, j=None, cmbset=self.cmbset)
-            fname = self.config.f_tmp(
-                tag=self.mvtype,
-                seed1=s1,
-                seed2=s2,
-                ktype=self.ktype,
-                N1=self.N1,
-                mf_group=self.mf_group,
-                bundle=bundle_key,
-                cmbset1=cmbset1,
-                cmbset2=cmbset2,
-                curl=self.curl,
+            bundle_tag = f'_{self.config.bundle2str(bundle_key)}' if bundle_key is not None else ''
+            N1_tag = '_N1' if self.N1 else ''
+            prefix = 'kmap_grad' if not self.curl else 'kmap_curl'
+            fname = (
+                f"{prefix}_{self.mvtype}{bundle_tag}_{s1}{cmbset1}_{s2}{cmbset2}_"
+                f"mfgroup{self.mf_group}_{self.ktype}{N1_tag}.tmp"
             )
         return os.path.join(self.outdir, fname)
 

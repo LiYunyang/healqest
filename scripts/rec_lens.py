@@ -34,7 +34,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                 logger.warning(f"skipping QE: {mvtype}, existing file: {file_plm}", extra={"force": True})
                 continue
             else:
-                qes += config.mvtype2qe(mvtype)
+                qes += hq.mvtype2qe(mvtype)
                 mvtypes.append(mvtype)
         qes = list(set(qes))
 

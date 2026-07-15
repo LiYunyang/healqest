@@ -34,7 +34,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
                 logger.info(f"skipping {mvtype} for seed {seed}", extra={'force': True})
                 continue
             else:
-                qes += config.mvtype2qe(mvtype)
+                qes += hq.mvtype2qe(mvtype)
                 mvtypes.append(mvtype)
         qes = list(set(qes))
     else:
@@ -150,8 +150,8 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
 
     san0_keys = list()
     for j, mvtype in enumerate(mvtypes):
-        for q1 in config.mvtype2qe(mvtype):
-            for q2 in config.mvtype2qe(mvtype):
+        for q1 in hq.mvtype2qe(mvtype):
+            for q2 in hq.mvtype2qe(mvtype):
                 san0_keys.append((q1, q2))
     san0_keys = set(san0_keys)
 
@@ -192,8 +192,8 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
 
     for j, mvtype in enumerate(mvtypes):
         N0 = 0
-        for q1 in config.mvtype2qe(mvtype):
-            for q2 in config.mvtype2qe(mvtype):
+        for q1 in hq.mvtype2qe(mvtype):
+            for q2 in hq.mvtype2qe(mvtype):
                 N0 += clqq[f'{q1}{q2}'].real
 
         file_resp = config.p_resp(tag=mvtype, bundle=bundle_pair)

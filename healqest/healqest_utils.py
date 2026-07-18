@@ -416,6 +416,14 @@ def verify_fits(fname, nhdu=1):
     return True
 
 
+def verify_npy(fname):
+    try:
+        np.load(fname, mmap_mode='r')
+    except Exception as e:
+        raise e from FileExistsError(f"{fname} is not a valid NPY file or has a corrupted data.")
+    return True
+
+
 def lowpass_tf(lmax, power=6, lc=6144):
     """
     Compute the low-pass transfer function, in field units, as a function of l.

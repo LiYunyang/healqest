@@ -33,8 +33,13 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                 bundle=bundle_pair,
             )
             if os.path.exists(file_plm):
-                logger.warning(f"skipping QE: {mvtype}, existing file: {file_plm}", extra={"force": True})
-                continue
+                try:
+                    hq.verify_npy(file_plm)
+                except Exception:
+                    logger.error(f"{file_plm} exists but is corrupted, redoing it.")
+                else:
+                    logger.warning(f"skipping QE: {mvtype}, existing file: {file_plm}", extra={"force": True})
+                    continue
             else:
                 qes += hq.mvtype2qe(mvtype)
                 mvtypes.append(mvtype)

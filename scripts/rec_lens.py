@@ -36,13 +36,12 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                 try:
                     hq.verify_npy(file_plm)
                 except Exception:
-                    logger.error(f"{file_plm} exists but is corrupted, redoing it.")
+                    logger.error(f"{file_plm} exists but is corrupted, redoing it.", extra={"force": True})
                 else:
                     logger.warning(f"skipping {mvtype}: {os.path.basename(file_plm)}", extra={"force": True})
                     continue
-            else:
-                qes += hq.mvtype2qe(mvtype)
-                mvtypes.append(mvtype)
+            qes += hq.mvtype2qe(mvtype)
+            mvtypes.append(mvtype)
         qes = list(set(qes))
 
     if not qes:

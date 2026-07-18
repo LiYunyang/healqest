@@ -38,7 +38,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                 except Exception:
                     logger.error(f"{file_plm} exists but is corrupted, redoing it.")
                 else:
-                    logger.warning(f"skipping QE: {mvtype}, existing file: {file_plm}", extra={"force": True})
+                    logger.warning(f"skipping {mvtype}: {os.path.basename(file_plm)}", extra={"force": True})
                     continue
             else:
                 qes += hq.mvtype2qe(mvtype)

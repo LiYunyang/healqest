@@ -48,7 +48,7 @@ class MPIAwareFormatter(logging.Formatter):
         name = record.name.split(".")[-1][:8].rjust(8)
         name_colored = f"{self.FAINT}{name}{self.RESET}" if self.use_colors else name
 
-        rank_str = f"{rank:2d}"
+        rank_str = f"{rank:3d}"
         rank_colored = f"{self.FAINT}{rank_str}{self.RESET}" if self.use_colors else rank_str
 
         # Time colored by log level

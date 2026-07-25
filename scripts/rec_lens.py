@@ -227,8 +227,10 @@ if __name__ == "__main__":
                 [args.set2, _loop, args.set, np.zeros_like(_loop)],  # x0
             ]
         else:
+            # _loop1 = np.concatenate([_loop, [args.i2+1]])
             loops = [
                 [args.set, _loop, args.set, _loop],  # xx
+                # [args.set, _loop1, args.set, _loop1],  # xx+yy
                 [args.set, _loop, args.set2, _loop + 1],  # xy
                 [args.set2, _loop + 1, args.set, _loop],  # yx
             ]

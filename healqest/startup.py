@@ -301,7 +301,7 @@ class Config:
             'a' for standard N0/N1-type. In special cases where the two leges belong to different sets
             (e.g., xy/XY vs yx/Yx), this can be used to specify the set for the first leg.
         """
-        if ktype in ['xx', 'xy', 'yx', 'x0', '0x']:
+        if ktype in ['xx', 'xy', 'yx', 'x0', '0x', 'yy']:
             # N0 and RDN0-type combinations.
             if len(cmbset) == 1:
                 cmbset1, cmbset2 = cmbset, cmbset
@@ -695,9 +695,11 @@ class Config:
             fname = f'plm_{tag}_{seed1}{cmbset1}_{seed2}{cmbset2}.{suffix}'
         else:
             subdir = f"{subdir}/stack"
-            if stack_type in ['xx', 'xy', 'yx', 'x0', '0x']:
+            if stack_type in ['xx', 'xy', 'yx', 'x0', '0x', 'yy']:
                 assert cmbset is not None, "cmbset has to be specified for stack types: ['xx', 'xy', 'yx']"
                 # specify the actual cmbset if using the "xy" notation.
+                if stack_type == 'yy':
+                    stack_type = 'xx'  # yy and xx uses the same stack file
                 fname = f'plmstack_{tag}_{stack_type}_{cmbset}.{suffix}'
             else:
                 fname = f'plmstack_{tag}_{stack_type}.{suffix}'

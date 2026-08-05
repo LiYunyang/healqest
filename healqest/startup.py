@@ -68,6 +68,7 @@ class Config:
     # === ilc ===
     file_ilc: str = None  # path to the ILC weight file (.npz)
     fmask_ilc: Union[str, list[str]] = None  # path(s) to mask used for ilc
+    vtemplate: str = None  # version of the template for residual foregrounds, e.g., v1, v2, v3
 
     # === cinv ===
     eps_t: float  # convergence threshold for cinv T component

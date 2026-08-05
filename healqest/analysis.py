@@ -248,7 +248,7 @@ class LensingSpectra:
 
     def load_resp(self, resp_smooth=None):  # noqa: C901
         if self.resp_type == 'auto':
-            if self.N_N1 > 0:
+            if self.N_N1 > 0 and not self.curl:
                 Cls_ab = load_sql(
                     range(1, self.N_N1 + 1),
                     config=self.config,
@@ -262,6 +262,8 @@ class LensingSpectra:
                 self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
                 self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
             else:
+                if self.N_N1 > 0 and self.curl:
+                    logger.warning("Ignoring resp for curl mode.")
                 logger.info("not loading resp function due to no N1 sims")
                 self.resp2 = np.ones(self.Lmax + 1)
                 return
@@ -363,8 +365,8 @@ class LensingSpectra:
         if self.do_data:
             self.y0 = bin_Cls(self.Cl0 * fac, bins=bins)[1]
 
-        self.cov_sys = np.zeros_like(self.cov)
         self.y, _, self.cov = bin_Cls(self.Cls * fac, bins=bins)[1:]
+        self.cov_sys = np.zeros_like(self.cov)
         # because of SAN0 normalization, the sim-mean cov is always from Cls-N0s
         self.cov_sm = bin_Cls((self.Cls_hat - self.N0s) * fac, bins=bins)[3] / self.N
 

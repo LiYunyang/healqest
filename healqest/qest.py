@@ -325,8 +325,7 @@ class Qest:
 
         if self.isph(qe):
             glm, aresp_g = self.profile_harden(_qe, glm, aresp_g, type1=type1, curl=False)
-            # skip curl by default
-            # clm, aresp_c = self.profile_harden(_qe, clm, aresp_c, type1=type1, curl=False)
+            clm, aresp_c = self.profile_harden(_qe, clm, aresp_c, type1=type1, curl=True)
         return [glm, clm], [aresp_g, aresp_c]
 
     def profile_harden(self, qe: str, klm, aresp, type1='lens', curl=False):

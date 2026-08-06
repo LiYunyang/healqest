@@ -108,6 +108,10 @@ class Config:
     file_cmb: str  # Path to cmb spectrum used for lensrec
     fmask_qe: Union[str, list[str]] = None  # path(s) to mask used for lensrec
     profile: Union[str, list[str]] = None  # profile type for hardened estimator for TT.
+    harden_curl: bool = False
+    # whether to harden the curl modes. If set to false, the curl reconstruction will not be hardenened, but
+    # the SAN0 will still be computed for the hardened version, thus creating inconsistency. This should only
+    # be used when curl is not of interest, and only for performance.
 
     # === inputs ===
     sim_range: list[int]  # index range (inclusive) of the input alms files

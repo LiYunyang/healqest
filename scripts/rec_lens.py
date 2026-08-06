@@ -105,7 +105,9 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                 qe_cache[_qe] = estimator.rec_and_resp(_qe, almbars1, almbars2, type1='lens')
             (glm, clm), (aresp_g, aresp_c) = qe_cache[_qe]
             if qest.Qest.isph(qe):
-                glm, aresp_g = estimator.profile_harden(_qe, glm, aresp_g, type1='lens')
+                glm, aresp_g = estimator.profile_harden(_qe, glm, aresp_g, type1='lens', curl=False)
+                if config.harden_curl:
+                    clm, aresp_c = estimator.profile_harden(_qe, clm, aresp_c, type1='lens', curl=True)
             alms_grads[qe] += glm / ilc_norm
             alms_curls[qe] += clm / ilc_norm
             aresp_grads[qe] += aresp_g / ilc_norm

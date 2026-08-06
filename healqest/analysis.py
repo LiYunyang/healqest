@@ -401,6 +401,7 @@ class LensingSpectra:
             setattr(new, key, getattr(self, key))
 
         new.config = self.config
+        new.Cls_hat = op(self.Cls_hat, other.Cls_hat)
         new.N0s = op(self.N0s, other.N0s)
         new.Cls = op(self.Cls, other.Cls)
         if self.N_N1 > 0:

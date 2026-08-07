@@ -58,6 +58,7 @@ class Config:
 
     # === command-line parameters ===
     field: str = None  # SPT field name, used for output/fname parsing and mask selection
+    split: str = None  # split name, used for output/fname parsing and split-dependent mask selection
 
     """Config should be specified in a yaml file with these keywords. """
     # === base ===
@@ -67,7 +68,7 @@ class Config:
 
     # === ilc ===
     file_ilc: str = None  # path to the ILC weight file (.npz)
-    fmask_ilc: Union[str, list[str]] = None  # path(s) to mask used for ilc
+    fmask_ilc: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for ilc
     vtemplate: str = None  # version of the template for residual foregrounds, e.g., v1, v2, v3
 
     # === cinv ===
@@ -91,7 +92,7 @@ class Config:
     add_noise: bool = True  # whether to add noise in simulations.
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
     cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
-    fmask_cinv: Union[str, list[str]] = None  # path(s) to mask used for cinv
+    fmask_cinv: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for cinv
 
     # === lensrec ===
     rectype: str  # [sqe,gmv]
@@ -106,7 +107,7 @@ class Config:
     lmax: int = None  # default lmax if lmaxT/P is not specified
     Lmax: int  # maximum reconstruction L
     file_cmb: str  # Path to cmb spectrum used for lensrec
-    fmask_qe: Union[str, list[str]] = None  # path(s) to mask used for lensrec
+    fmask_qe: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for lensrec
     profile: Union[str, list[str]] = None  # profile type for hardened estimator for TT.
     harden_curl: bool = False
     # whether to harden the curl modes. If set to false, the curl reconstruction will not be hardenened, but
@@ -121,8 +122,8 @@ class Config:
 
     # === pspec ===
     mfsplit: bool = True  # split mean-field sims by halves for auto spectra
-    fmask_ps: Union[str, list[str]] = None  # path(s) to mask used for clpp
-    fmask_resp: Union[str, list[str]] = None  # path(s) to mask used for MC resp
+    fmask_ps: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for clpp
+    fmask_resp: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for MC resp
     spice_kwargs: dict = None  # polspice settings
 
     def __init__(self, **kwargs):
@@ -132,9 +133,9 @@ class Config:
         self._bl = None  # this is a cached property that can be overridden later.
 
     @classmethod
-    def from_yaml(cls, fname, field=None):
+    def from_yaml(cls, fname, field=None, split=None):
         params = yaml.safe_load(open(fname, "r"))
-        config_dict = dict(field=field)
+        config_dict = dict(field=field, split=split)
         for group_key in cls.__keywords__:
             subdict = params.pop(group_key, None)
             if subdict:
@@ -148,7 +149,7 @@ class Config:
     @classmethod
     def from_args(cls, args):
         fname = args.config
-        obj = cls.from_yaml(fname, field=args.field)
+        obj = cls.from_yaml(fname, field=args.field, split=args.split)
 
         # calling script
         script = sys._getframe(1).f_globals['__file__']
@@ -220,10 +221,9 @@ class Config:
             self.recdir = self.outdir
         if self.cinvdir is None:
             self.cinvdir = self.recdir
-        if self.field is not None:
-            self.outdir = self.outdir.format(field=self.field)
-            self.recdir = self.recdir.format(field=self.field)
-            self.cinvdir = self.cinvdir.format(field=self.field)
+        self.outdir = self.outdir.format(field=self.field, split=self.split)
+        self.recdir = self.recdir.format(field=self.field, split=self.split)
+        self.cinvdir = self.cinvdir.format(field=self.field, split=self.split)
 
         # append a second level of directory to distinguish rectypes
         assert self.rectype in ['naive', 'sqe', 'gmv']
@@ -558,17 +558,37 @@ class Config:
         return ilc
 
     # === setup masks ===
+    def _iter_mask_items(self, item):
+        for _item in self.as_list(item):
+            if isinstance(_item, dict):
+                if self.split is None:
+                    raise ValueError(
+                        f"Split-specific mask entry requires `split`; "
+                        f"available splits are {list(_item.keys())}."
+                    )
+                if self.split not in _item:
+                    raise ValueError(
+                        f"Split {self.split!r} not found in split-specific mask entry; "
+                        f"available splits are {list(_item.keys())}."
+                    )
+                yield from self._iter_mask_items(_item[self.split])
+            else:
+                if not isinstance(_item, str):
+                    raise TypeError(f"Mask entries must be strings or split-keyed dicts, got {type(_item)}.")
+                yield _item
+
     def _load_mask(self, item, field=0):
         mask = None
         if item is None:
             logger.warning("path(s) to mask not given, using full-sky mask.")
             return np.ones(hp.nside2npix(self.nside))
-        for _ in self.as_list(item):
+        for _ in self._iter_mask_items(item):
+            mask_path = self.path(_, field=self.field)
             try:
-                _mask = hq.read_map(self.path(_, field=self.field), field=field, return_cosmo=False)
+                _mask = hq.read_map(mask_path, field=field, return_cosmo=False)
             except IndexError:
-                _mask = hq.read_map(self.path(_, field=self.field), field=0, return_cosmo=False)
-                logger.warning(f"field {field} not found in mask file {self.path(_)}, using field 0 instead.")
+                _mask = hq.read_map(mask_path, field=0, return_cosmo=False)
+                logger.warning(f"field {field} not found in mask file {mask_path}, using field 0 instead.")
             if mask is None:
                 mask = _mask
             else:
@@ -799,6 +819,7 @@ def parser():
 
     p.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
     p.add_argument('-f', '--field', default=None, type=none_str, help='SPT field')
+    p.add_argument('-s', '--split', default=None, type=none_str, help='Data split')
 
     # bundle and n1 are mutually exclusive: N1-type calculations should be the same for all bundles.
     group = p.add_mutually_exclusive_group()

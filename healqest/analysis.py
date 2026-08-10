@@ -71,19 +71,22 @@ def unbin_spectrum(Clb, bins, lmax):
     return out
 
 
-def bin_Cls(Cls, bins):
+def bin_Cls(Cls, bins, return_ensemble=False):
     """Return bin center, bined Cls, error on the mean and cov.
 
     Parameters
     ----------
     Cls: np.ndarray
         shape (nspec, nell) or (nell, )
+    bins: np.ndarray
+        shape (nbin+1, )
+    return_ensemble: bool=False
+        If True, return the binned Cls for each realization, otherwise return the mean.
     """
     x = (bins[1:] + bins[:-1]) / 2
     Cbs = np.array([bin_spectrum(_, bins=bins, verbose=False)[1] for _ in np.atleast_2d(Cls)])
     cov = np.cov(Cbs, rowvar=False)
-    err = np.std(Cbs, axis=0) / np.sqrt(Cls.shape[0])
-    return x, np.mean(Cbs, axis=0), err, cov
+    return x, Cbs if return_ensemble else np.mean(Cbs, axis=0), cov
 
 
 def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, **kw):
@@ -156,6 +159,7 @@ class LensingSpectra:
         do_RDN0=False,
         do_data=False,
         curl=False,
+        calibrate_SAN0=True,
     ):
         """Lensing spectra object.
 
@@ -176,10 +180,19 @@ class LensingSpectra:
         coadd: bool
             Special case to load spectrum from `cls_coadd/` instead of `cls/`, where the lensing
             reconstruction map is coadded before taking spectra.
+        do_SAN0: bool
+            If True, load SAN0 spectra and subtract it from the sims spectra.
+        do_RDN0: bool
+            If True, load RDN0 spectra and subtract it from the data spectrum.
+        do_data: bool
+            If True, load the data spectrum and subtract N0 and N1 from it.
+        calibrate_SAN0: bool
+            If True, calibrate the SAN0 spectra by N0.
         """
         self.config = config
         self.cmbset = cmbset
         self.curl = curl
+        self.calibrate_SAN0 = calibrate_SAN0
         self.average = average
         if Lmax is None:
             self.Lmax = self.config.Lmax
@@ -212,6 +225,7 @@ class LensingSpectra:
         self.x = None  # binned ell
         self.y0 = None  # binned data spectrum
         self.y = None  # binned sims spectrum
+        self.ys = None  # binned sims spectrum for each realization
         self.cov = None  # total covariance
         self.cov_sys = None  # systematic part of the covariance
         self.cov_sm = None  # covariance cor sim-mean
@@ -341,8 +355,9 @@ class LensingSpectra:
         if self.do_SAN0:
             SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, SAN0=True, **kw)
             self.SAN0s = SAN0s[:, : self.Lmax + 1] / self.resp2
-            logger.info("calibrate SAN0 by N0")
-            self.SAN0s *= self.N0 / np.mean(self.SAN0s, axis=0)
+            if self.calibrate_SAN0:
+                logger.info("calibrate SAN0 by N0")
+                self.SAN0s *= self.N0 / np.mean(self.SAN0s, axis=0)
             self.Cls = self.Cls_hat - self.SAN0s - self.N1
         else:
             self.Cls = self.Cls_hat - self.N0 - self.N1
@@ -356,19 +371,21 @@ class LensingSpectra:
             fac = 1
 
         self.x = (bins[1:] + bins[:-1]) / 2
-        N0cov = bin_Cls(self.N0s * fac, bins)[3]
+        N0cov = bin_Cls(self.N0s * fac, bins)[-1]
         if self.N_N1 > 0:
-            N1cov = bin_Cls(self.N1s * fac, bins)[3]
+            N1cov = bin_Cls(self.N1s * fac, bins)[-1]
         else:
             N1cov = np.diag(np.zeros(len(self.x)))
 
         if self.do_data:
             self.y0 = bin_Cls(self.Cl0 * fac, bins=bins)[1]
 
-        self.y, _, self.cov = bin_Cls(self.Cls * fac, bins=bins)[1:]
+        self.ys, self.cov = bin_Cls(self.Cls * fac, bins=bins, return_ensemble=True)[1:]
+        self.y = np.mean(self.ys, axis=0)
+
         self.cov_sys = np.zeros_like(self.cov)
         # because of SAN0 normalization, the sim-mean cov is always from Cls-N0s
-        self.cov_sm = bin_Cls((self.Cls_hat - self.N0s) * fac, bins=bins)[3] / self.N
+        self.cov_sm = bin_Cls((self.Cls_hat - self.N0s) * fac, bins=bins)[-1] / self.N
 
         if not self.do_SAN0:
             logger.warning("cov might be overestimated because SAN0 is not subtracted")
@@ -383,7 +400,7 @@ class LensingSpectra:
             # var(y) = var(s)/<r>^2 + var(<r>)*s^2/<r>^4
             # the first term is the usual covariance, and the second term is:
             # var(<r>)*s^2/<r>^4 = var(r)/N * (y/<r>)^2
-            resp_bin, *_, resp_cov = bin_Cls(self.resp2_cls, bins=bins)[1:]
+            resp_bin, resp_cov = bin_Cls(self.resp2_cls, bins=bins)[1:]
             k = self.y / resp_bin
             resp_cov = np.einsum('ij,i,j->ij', resp_cov / self.N_N1, k, k)
             self.cov_sys += resp_cov

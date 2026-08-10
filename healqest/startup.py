@@ -228,12 +228,9 @@ class Config:
         # append a second level of directory to distinguish rectypes
         assert self.rectype in ['naive', 'sqe', 'gmv']
         assert self.xilctype in ['mv', 'xilc', 'tsz']
-        if self.xilctype == 'mv':
-            subname = f"{self.rectype}"
-        else:
-            subname = f"{self.rectype}_{self.xilctype}"
-        self.outdir = f"{self.outdir}/{subname}"
-        self.recdir = f"{self.recdir}/{subname}"
+
+        self.outdir = f"{self.outdir}/{self.rectype}"
+        self.recdir = f"{self.recdir}/{self.rectype}"
         # all three types of ILC ('mv', 'cibfree', 'tszfree') go into the same `cinvdir`
         self.cinvdir = f"{self.cinvdir}/{self.rectype}"
 

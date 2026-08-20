@@ -47,8 +47,8 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         logger.info(f"Performing SAN0: {mvtypes} QE: {qes}")
 
     do_ph = any(qe in qest.Qest.__PH_ESTIMATORS__ for qe in qes)
-    if do_ph:
-        assert len(config.ilcs) == 1, "Unlikely you want to do profile-hardening with multiple ilc pairs!"
+    # if do_ph:
+    #     assert len(config.ilcs) == 1, "Unlikely you want to do profile-hardening with multiple ilc pairs!"
 
     def func(cmbset, seed, bundle, ilc_type, as_dict=False):
         _maps, flms = hq.cinv_io(

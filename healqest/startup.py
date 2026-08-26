@@ -87,6 +87,7 @@ class Config:
     file_slm: str = None  # path to (beamed) signal alm files for std/N0-type sims.
     file_slm0: str = None  # path to data file, if differs from file_slm
     file_nlm: str = None  # path to noise alm files for std/N0-type sims.
+    file_pysm: str = None  # path to pysm maps to add to simulations.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
 
     add_noise: bool = True  # whether to add noise in simulations.
@@ -559,10 +560,8 @@ class Config:
         for _item in self.as_list(item):
             if isinstance(_item, dict):
                 if self.split is None:
-                    raise ValueError(
-                        f"Split-specific mask entry requires `split`; "
-                        f"available splits are {list(_item.keys())}."
-                    )
+                    logger.warning("Not specifying split.")
+                    continue  # skip split-specific mask entry if no split is specified
                 if self.split not in _item:
                     raise ValueError(
                         f"Split {self.split!r} not found in split-specific mask entry; "

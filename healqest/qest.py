@@ -111,36 +111,29 @@ class Qest:
         return qe.removesuffix('ph') if cls.isph(qe) else qe
 
     @staticmethod
-    def alm2map_spin(alm, fell, nside, spin, lmax, mmax=None, g=None):
-        """Convert a spin-0 alm into a complex spin field (Q +/- iU): out = Q, +/-U."""
+    def alm2map_spin(alm, fell, spin, lmax, g, maps, mmax=None):
+        """Convert a spin-0 alm into a complex spin field, writing Q and +/-U into maps."""
+        assert maps.shape == (2, hp.nside2npix(g.nside))
         if spin == 0:
             walm = hp.almxfl(alm, fell)
             # alm2map is recommended over alm2map_spin for spin=0
-            if g is None:
-                out = hp.alm2map(walm, nside=nside, lmax=lmax, mmax=mmax)
-            else:
-                out = g.alm2map(walm, lmax=lmax, mmax=mmax)
-            return out, 0
+            g.alm2map(walm, lmax=lmax, mmax=mmax, maps=maps[0])
+            maps[1].fill(0)
         else:
-            zero = np.zeros_like(alm)
             _fell = (-1) ** spin * np.conj(fell) if spin < 0 else fell
             _fell *= -1
+            EB = np.zeros((2, alm.size), dtype=np.complex128)
             if np.all(fell.imag == 0):
-                E = hp.almxfl(alm, _fell.real)
-                B = zero
+                np.copyto(EB[0], alm)
+                hp.almxfl(EB[0], _fell.real, inplace=True)
             elif np.all(fell.real == 0):
-                E = zero
-                B = hp.almxfl(alm, _fell.imag)
+                np.copyto(EB[1], alm)
+                hp.almxfl(EB[1], _fell.imag, inplace=True)
             else:
                 raise ValueError("Fell must be real or imaginary")
-            if g is None:
-                q, u = hp.alm2map_spin([E, B], nside=nside, spin=np.abs(spin), lmax=lmax, mmax=mmax)
-            else:
-                q, u = g.alm2map_spin([E, B], spin=np.abs(spin), lmax=lmax, mmax=mmax)
-            if spin > 0:
-                return q, u
-            else:
-                return q, -u
+            g.alm2map_spin(EB, spin=np.abs(spin), lmax=lmax, mmax=mmax, maps=maps)
+            if spin < 0:
+                maps[1] *= -1
 
     def eval(self, qe, almbar1, almbar2, u=None, distortion='lens'):
         """Compute quadratic estimator.
@@ -175,40 +168,57 @@ class Qest:
 
         logger.info(f'Running {distortion} reconstruction: {qe}')
 
-        retglm = 0
-        retclm = 0
+        retglm = np.zeros(hp.Alm.getsize(self.Lmax), dtype=np.complex128)
+        retclm = np.zeros(hp.Alm.getsize(self.Lmax), dtype=np.complex128)
+        alm_buffer = np.empty((2, hp.Alm.getsize(self.Lmax)), dtype=np.complex128)
+        xy_buffer = np.empty((2, hp.nside2npix(self.nside)), dtype=np.float64)
+        Xqu_buffer = np.empty_like(xy_buffer)
+        Yqu_buffer = np.empty_like(xy_buffer)
 
         assert q.ntrm % 2 == 0, f"Number of terms must be even: {q.ntrm}"
         for i in range(0, q.ntrm // 2):
             # skipping second half of reducant terms
             wX, wY, wP, sX, sY, sP = q.w[i][0], q.w[i][1], q.w[i][2], q.s[i][0], q.s[i][1], q.s[i][2]
 
-            Xq, Xu = self.alm2map_spin(almbar1, fell=wX, nside=self.nside, spin=sX, lmax=self.lmax, g=self.g)
-            Yq, Yu = self.alm2map_spin(almbar2, fell=wY, nside=self.nside, spin=sY, lmax=self.lmax, g=self.g)
-            XYq = Xq * Yq - Xu * Yu  # XY = X*Y
-            XYu = Xq * Yu + Yq * Xu  # XY = X*Y
+            self.alm2map_spin(almbar1, fell=wX, spin=sX, lmax=self.lmax, g=self.g, maps=Xqu_buffer)
+            self.alm2map_spin(almbar2, fell=wY, spin=sY, lmax=self.lmax, g=self.g, maps=Yqu_buffer)
+            Xq, Xu = Xqu_buffer
+            Yq, Yu = Yqu_buffer
 
             if np.all(wP.imag == 0):
                 _wP = wP
+                np.multiply(Xq, Yq, out=xy_buffer[0])
+                np.multiply(Xu, Yu, out=xy_buffer[1])
+                np.subtract(xy_buffer[0], xy_buffer[1], out=xy_buffer[0])  # Xq * Yq - Xu * Yu
+                np.multiply(Xq, Yu, out=xy_buffer[1])
+                np.multiply(Yq, Xu, out=Xq)
+                np.add(xy_buffer[1], Xq, out=xy_buffer[1])  # Xq * Yu + Yq * Xu
             elif np.all(wP.real == 0):
                 # swap grad/curl mode such that glm is curl and clm is grad
                 # wP has an -1j factor, here we move the factor from wP to XY.
                 _wP = wP * 1j
-                XYq, XYu = XYu, -XYq  # XY *=-1j
+                np.multiply(Xq, Yu, out=xy_buffer[0])
+                np.multiply(Yq, Xu, out=xy_buffer[1])
+                np.add(xy_buffer[0], xy_buffer[1], out=xy_buffer[0])  # Xq * Yu + Yq * Xu
+                np.multiply(Xq, Yq, out=xy_buffer[1])
+                np.multiply(Xu, Yu, out=Xq)
+                np.subtract(Xq, xy_buffer[1], out=xy_buffer[1])  # Xu * Yu - Xq * Yq
             else:
                 raise ValueError("wP must be real or imaginary")
+            del Xq, Xu, Yq, Yu
             if sP < 0:
                 # This is for the second half reduncant transform, we normally don't end up here.
                 # XY = np.conj(XY) * (-1) ** sP  # because wP has a (-1)**sP factor, here we are canceling it.
-                XYq *= (-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
-                XYu *= -((-1) ** sP)  # XY = np.conj(XY) * (-1) ** sP
+                xy_buffer[0] *= (-1) ** sP  # XY = np.conj(XY) * (-1) ** sP
+                xy_buffer[1] *= -((-1) ** sP)  # XY = np.conj(XY) * (-1) ** sP
 
-            glm, clm = self.g.map2alm_spin([XYq, XYu], spin=np.abs(sP), lmax=self.Lmax, check=False)
-            glm = hp.almxfl(glm, _wP)
-            clm = hp.almxfl(clm, _wP)  # for curl est, this will be -grad.
+            self.g.map2alm_spin(xy_buffer, spin=np.abs(sP), lmax=self.Lmax, check=False, alms=alm_buffer)
+            # The adjoint spin transform overwrites alm_buffer: alm_buffer is glm and clm.
+            hp.almxfl(alm_buffer[0], _wP, inplace=True)
+            hp.almxfl(alm_buffer[1], _wP, inplace=True)  # for curl est, this will be -grad.
 
-            retglm += glm
-            retclm += clm
+            np.add(retglm, alm_buffer[0], out=retglm)
+            np.add(retclm, alm_buffer[1], out=retclm)
 
         return retglm, retclm
 

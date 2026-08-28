@@ -392,24 +392,26 @@ class Geometry:
         nthreads=None,
         rtol=1e-5,
         check=True,
+        alms=None,
         **kwargs,
     ):
         if spin == 0:
-            return list(
-                -self.map2alm(
-                    maps,
-                    lmax=lmax,
-                    mmax=mmax,
-                    pol=False,
-                    iter=iter,
-                    use_weights=use_weights,
-                    use_pixel_weights=use_pixel_weights,
-                    nthreads=nthreads,
-                    rtol=rtol,
-                    check=check,
-                    **kwargs,
-                )
+            out = self.map2alm(
+                maps,
+                lmax=lmax,
+                mmax=mmax,
+                pol=False,
+                iter=iter,
+                use_weights=use_weights,
+                use_pixel_weights=use_pixel_weights,
+                nthreads=nthreads,
+                rtol=rtol,
+                check=check,
+                alms=alms,
+                **kwargs,
             )
+            np.negative(out, out=out)
+            return list(out)
         else:
             assert hp.get_nside(maps) == self.nside
             maps = self.format_maps(
@@ -420,9 +422,15 @@ class Geometry:
 
             kw = self.get_kwargs(lmax=lmax, mmax=mmax, nthreads=nthreads, iter=iter, rtol=rtol)
             func = ducc0.sht.pseudo_analysis if iter else ducc0.sht.adjoint_synthesis
-            alms = np.zeros(
-                (nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"])), dtype=ctype[maps.dtype]
-            )
+            shape = (nmaps, hp.Alm.getsize(lmax=kw["lmax"], mmax=kw["mmax"]))
+            if alms is None:
+                alms = np.zeros(shape, dtype=ctype[maps.dtype])
+            else:
+                alms = np.asarray(alms)
+                if alms.shape != shape:
+                    raise ValueError(f"alms buffer has shape {alms.shape}, expected {shape}")
+                if alms.dtype != ctype[maps.dtype]:
+                    raise TypeError(f"alms buffer has dtype {alms.dtype}, expected {ctype[maps.dtype]}")
             func(map=maps, spin=np.abs(spin), alm=alms, **kw, **kwargs)
             if not iter:
                 alms *= self.pixelarea

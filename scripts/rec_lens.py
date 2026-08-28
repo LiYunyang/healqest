@@ -81,6 +81,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
     ilc_norm = len(ilc_pair)
 
     do_ph = any(qe in qest.Qest.__PH_ESTIMATORS__ for qe in qes)
+
     for ilc1, ilc2 in ilc_pair:
         almbars1, flms1 = func(cmbset1, seed1, b1, ilc1)
         almbars2, flms2 = func(cmbset2, seed2, b2, ilc2)

@@ -14,6 +14,8 @@ class GaussLegendreQuadrature:
     ----------
     npoints : int
         Number of quadrature points.
+    omp : bool
+        If True, use the OpenMP Wigner-d implementation.
 
     Attributes
     ----------
@@ -25,16 +27,19 @@ class GaussLegendreQuadrature:
         Integration weights for the quadrature nodes.
     """
 
-    def __init__(self, npoints):
+    def __init__(self, npoints, omp=False):
         """Initialize quadrature nodes and weights.
 
         Parameters
         ----------
         npoints : int
             Number of quadrature points.
+        omp : bool
+            If True, use the OpenMP Wigner-d implementation.
         """
         self.npoints = npoints
-        self.zvec, self.wvec = cwignerd.init_gauss_legendre_quadrature(npoints)
+        self.omp = omp
+        self.zvec, self.wvec = cwignerd.init_gauss_legendre_quadrature(npoints, omp=omp)
 
     def cf_from_cl(self, s1, s2, cl):
         r"""Evaluate a correlation function from harmonic coefficients.
@@ -57,12 +62,12 @@ class GaussLegendreQuadrature:
 
         if np.iscomplexobj(cl):
             cl2d = np.concatenate([cl.real, cl.imag])
-            output = cwignerd.wignerd_cf_from_cl(s1, s2, 2, self.npoints, lmax, self.zvec, cl2d).reshape(
-                2, -1
-            )
+            output = cwignerd.wignerd_cf_from_cl(
+                s1, s2, 2, self.npoints, lmax, self.zvec, cl2d, omp=self.omp
+            ).reshape(2, -1)
             return output[0] + 1j * output[1]
 
-        return cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, cl)
+        return cwignerd.wignerd_cf_from_cl(s1, s2, 1, self.npoints, lmax, self.zvec, cl, omp=self.omp)
 
     def cl_from_cf(self, lmax, s1, s2, cf):
         r"""Integrate sampled correlation values into harmonic coefficients.
@@ -90,8 +95,10 @@ class GaussLegendreQuadrature:
         if np.iscomplexobj(cf):
             cf2d = np.concatenate([cf.real, cf.imag])
             output = cwignerd.wignerd_cl_from_cf(
-                s1, s2, 2, self.npoints, lmax, self.zvec, self.wvec, cf2d
+                s1, s2, 2, self.npoints, lmax, self.zvec, self.wvec, cf2d, omp=self.omp
             ).reshape(2, -1)
             return output[0] + 1j * output[1]
 
-        return cwignerd.wignerd_cl_from_cf(s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, cf)
+        return cwignerd.wignerd_cl_from_cf(
+            s1, s2, 1, self.npoints, lmax, self.zvec, self.wvec, cf, omp=self.omp
+        )

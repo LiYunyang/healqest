@@ -7,7 +7,7 @@ from healqest.weights import WeightsPlus
 logger = log.get_logger(__name__)
 
 
-def fill_resp_fullsky(qeXY, qeZA, buffer, fX, fY, fast=False):
+def fill_resp_fullsky(qeXY, qeZA, buffer, fX, fY, fast=False, omp=True):
     r"""Compute the response of this estimator to the stats anisotropy in the second estimator qeZA.
 
     Notes
@@ -30,14 +30,16 @@ def fill_resp_fullsky(qeXY, qeZA, buffer, fX, fY, fast=False):
         1D real arrays representing the filter functions for the X and Y fields.
     fast: bool=False
         If True, use the fast algorithm for computing the response.
+    omp: bool=True
+        If True, use the OpenMP Wigner-d transforms.
     """
     buffer[:] = 0.0
-    qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fX, fY, switch_ZA=False, conj_ZA=False, fast=fast)
+    qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fX, fY, switch_ZA=False, conj_ZA=False, fast=fast, omp=omp)
     buffer[:] *= 2.0  # multiply by 2 because qe_cov_fill_helper returns 1/2 the response.
     return buffer.real
 
 
-def fill_clq1q2_fullsky(qeXY, qeZA, buffer, fXZ, fYA, fXA, fYZ, fast=False):
+def fill_clq1q2_fullsky(qeXY, qeZA, buffer, fXZ, fYA, fXA, fYZ, fast=False, omp=True):
     r"""Same as fill_clqq_fullsky but for cross-estimator pairs qeXY and qeZA.
 
     X,Y,Z,A denote the input map (e.g. T,E,B).
@@ -60,14 +62,20 @@ def fill_clq1q2_fullsky(qeXY, qeZA, buffer, fXZ, fYA, fXA, fYZ, fast=False):
         1D real arrays representing the filter functions for the XZ, YA, XA, and YZ fields.
     fast: bool=False
         If True, use the fast algorithm for computing the response.
+    omp: bool=True
+        If True, use the OpenMP Wigner-d transforms.
     """
     buffer[:] = 0.0
-    qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fXZ, fYA, switch_ZA=False, conj_ZA=True, fast=fast)
-    qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fXA, fYZ, switch_ZA=True, conj_ZA=True, fast=fast)
+    qe_cov_fill_helper_fullsky(
+        qeXY, qeZA, buffer, fXZ, fYA, switch_ZA=False, conj_ZA=True, fast=fast, omp=omp
+    )
+    qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fXA, fYZ, switch_ZA=True, conj_ZA=True, fast=fast, omp=omp)
     return buffer
 
 
-def qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fX, fY, switch_ZA=False, conj_ZA=False, fast=False):
+def qe_cov_fill_helper_fullsky(
+    qeXY, qeZA, buffer, fX, fY, switch_ZA=False, conj_ZA=False, fast=False, omp=True
+):
     """A full-sky version of qe_cov_fill_helper_flatsky.
 
     Parameters
@@ -89,6 +97,8 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fX, fY, switch_ZA=False, conj
         `w->conj(w) (-1)^s` and `s->-s` wtr to the first half. Given the symmetry of the Wigner d matrix
         (djmm' = (-1)^(m-m') dj-m -m'), half of the computation can be omitted by applying the correct parity
         factors based on the spins.
+    omp: bool=True
+        If True, use the OpenMP Wigner-d transforms.
     """
     if fast:
         logger.warning("Fast mode resp calc -- make sure `WeightsPlus` is used!")
@@ -103,7 +113,7 @@ def qe_cov_fill_helper_fullsky(qeXY, qeZA, buffer, fX, fY, switch_ZA=False, conj
     tl1max = np.min([qeXY.lmax, qeZA.lmax, lmax_fX])
     tl2max = np.min([qeXY.lmax, qeZA.lmax, lmax_fY])
 
-    glq = wignerd.GaussLegendreQuadrature((tl1max + tl2max + lmax) / 2 + 1)
+    glq = wignerd.GaussLegendreQuadrature((tl1max + tl2max + lmax) / 2 + 1, omp=omp)
     for i in range(0, qeXY.ntrm):
         for j in range(0, qeZA.ntrm if not fast else qeZA.ntrm // 2):
             # l1 part

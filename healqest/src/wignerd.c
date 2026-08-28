@@ -1,4 +1,4 @@
-// routines for wigner d-matrix sums and 
+// routines for wigner d-matrix sums and
 // integrals using Gauss-Legendre quadrature.
 //
 // copied from ist_gauss_legendre_pixelization
@@ -9,6 +9,7 @@
 #include <math.h>
 #include <assert.h>
 #include <memory.h>
+#include <omp.h>
 
 void init_gauss_legendre_quadrature(int n, double *x, double *w)
 {
@@ -17,7 +18,7 @@ void init_gauss_legendre_quadrature(int n, double *x, double *w)
     int     m = (n+1)/2;
 
     assert(n>0);
-    
+
     for (i = 0; i < m; i++) {
 	z = cos( M_PI * ((double)i + 0.75) / ((double)n + 0.5) );     /* initial guess for root */
 
@@ -31,7 +32,7 @@ void init_gauss_legendre_quadrature(int n, double *x, double *w)
 		p2 = p1;
 		p1 = ((2*l-1)*z*p2 - (l-1)*p3) / (double)l;
 	    }
-	    
+
 	    pp = n * (z*p1-p2) / (z*z - 1.0);                                        /* P'_l(z) */
 	    z1 = z;
 	    z  = z1-p1/pp;                                        /* update z (Newton's method) */
@@ -180,7 +181,7 @@ static void cl_fill(int l, int nfunc, int ntheta, int lmax, const double *wigd, 
 // integration_weights:  array of length ntheta
 // out_cl:               array of length (nfunc)-by-(lmax+1)
 // in_cf:                array of length (nfunc)-by-(ntheta)
-// 
+//
 void wignerd_cl_from_cf(int s1, int s2, int nfunc, int ntheta, int lmax, const double *cos_theta, const double *integration_weights, double *out_cl, const double *in_cf)
 {
     int i, l;
@@ -206,6 +207,149 @@ void wignerd_cl_from_cf(int s1, int s2, int nfunc, int ntheta, int lmax, const d
     }
 
     free(wigd_lo); free(wigd_hi);
+}
+
+#define WIGNERD_OMP_BLOCK_SIZE 256
+
+
+void init_gauss_legendre_quadrature_omp(int n, double *x, double *w)
+{
+    int m = (n+1)/2;
+
+    assert(n>0);
+
+    #pragma omp parallel for schedule(static)
+    for (int i = 0; i < m; i++) {
+        double z = cos(M_PI * ((double)i + 0.75) / ((double)n + 0.5));
+        double z1, p1, p2, p3, pp;
+        int l;
+
+        do {
+            p1 = 1.0;
+            p2 = 0.0;
+            for (l = 1; l <= n; l++) {
+                p3 = p2;
+                p2 = p1;
+                p1 = ((2*l-1)*z*p2 - (l-1)*p3) / (double)l;
+            }
+            pp = n * (z*p1-p2) / (z*z - 1.0);
+            z1 = z;
+            z = z1-p1/pp;
+        } while (fabs(z-z1) > 1.0e-15);
+
+        w[i] = w[n-1-i] = 2.0 / ((1-z*z)*pp*pp);
+        x[i] = -z;
+        x[n-1-i] = z;
+    }
+}
+
+
+int wignerd_cf_from_cl_omp(int s1, int s2, int nfunc, int ntheta, int lmax,
+                            const double *cos_theta, double *out_cf, const double *in_cl)
+{
+    memset(out_cf, 0, nfunc * ntheta * sizeof(double));
+
+    #pragma omp parallel for schedule(static)
+    for (int block = 0; block < ntheta; block += WIGNERD_OMP_BLOCK_SIZE) {
+        double wigd_lo[WIGNERD_OMP_BLOCK_SIZE] = {0.0};
+        double wigd_hi[WIGNERD_OMP_BLOCK_SIZE];
+        int block_size = ntheta-block < WIGNERD_OMP_BLOCK_SIZE ? ntheta-block : WIGNERD_OMP_BLOCK_SIZE;
+        int f, i;
+        int l = wiginit(s1, s2, block_size, cos_theta+block, wigd_hi);
+
+        if (l <= lmax) {
+            for (f = 0; f < nfunc; f++) {
+                double cl = in_cl[f*(lmax+1)+l];
+                #pragma omp simd
+                for (i = 0; i < block_size; i++)
+                    out_cf[f*ntheta+block+i] += cl * wigd_hi[i];
+            }
+        }
+
+        while (l < lmax) {
+            wigrec(l, s1, s2, block_size, cos_theta+block, wigd_hi, wigd_lo);
+            l++;
+            for (f = 0; f < nfunc; f++) {
+                double cl = in_cl[f*(lmax+1)+l];
+                #pragma omp simd
+                for (i = 0; i < block_size; i++)
+                    out_cf[f*ntheta+block+i] += cl * wigd_hi[i];
+            }
+        }
+    }
+
+    return 0;
+}
+
+
+int wignerd_cl_from_cf_omp(int s1, int s2, int nfunc, int ntheta, int lmax,
+                            const double *cos_theta, const double *integration_weights,
+                            double *out_cl, const double *in_cf)
+{
+    double *partial_cl;
+    int nthreads;
+    size_t nout;
+
+    nout = (size_t)nfunc * (size_t)(lmax+1);
+    memset(out_cl, 0, nout * sizeof(double));
+
+    nthreads = omp_get_max_threads();
+    partial_cl = (double *)calloc((size_t)nthreads * nout, sizeof(double));
+    if (partial_cl == NULL)
+        return -1;
+
+    #pragma omp parallel
+    {
+        int tid = omp_get_thread_num();
+        double *local_cl = partial_cl + (size_t)tid * nout;
+
+        #pragma omp for schedule(static)
+        for (int block = 0; block < ntheta; block += WIGNERD_OMP_BLOCK_SIZE) {
+            double wigd_lo[WIGNERD_OMP_BLOCK_SIZE] = {0.0};
+            double wigd_hi[WIGNERD_OMP_BLOCK_SIZE];
+            int block_size = ntheta-block < WIGNERD_OMP_BLOCK_SIZE ? ntheta-block : WIGNERD_OMP_BLOCK_SIZE;
+            int f, i;
+            int l = wiginit(s1, s2, block_size, cos_theta+block, wigd_hi);
+
+            #pragma omp simd
+            for (i = 0; i < block_size; i++)
+                wigd_hi[i] *= integration_weights[block+i];
+
+            if (l <= lmax) {
+                for (f = 0; f < nfunc; f++) {
+                    double cl = 0.0;
+                    #pragma omp simd reduction(+:cl)
+                    for (i = 0; i < block_size; i++)
+                        cl += wigd_hi[i] * in_cf[f*ntheta+block+i];
+                    local_cl[f*(lmax+1)+l] += cl;
+                }
+            }
+
+            while (l < lmax) {
+                wigrec(l, s1, s2, block_size, cos_theta+block, wigd_hi, wigd_lo);
+                l++;
+                for (f = 0; f < nfunc; f++) {
+                    double cl = 0.0;
+                    #pragma omp simd reduction(+:cl)
+                    for (i = 0; i < block_size; i++)
+                        cl += wigd_hi[i] * in_cf[f*ntheta+block+i];
+                    local_cl[f*(lmax+1)+l] += cl;
+                }
+            }
+        }
+    }
+
+    #pragma omp parallel for schedule(static)
+    for (size_t k = 0; k < nout; k++) {
+        double value = 0.0;
+        int t;
+        for (t = 0; t < nthreads; t++)
+            value += partial_cl[(size_t)t*nout+k];
+        out_cl[k] = value;
+    }
+
+    free(partial_cl);
+    return 0;
 }
 
 /*

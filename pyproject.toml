@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel", "Cython", "numpy"]
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-addopts = "-vs -q --tb=short -rsS -W ignore::DeprecationWarning"
+addopts = "-vs -q --tb=short -rsS -W ignore::DeprecationWarning -m \"not benchonly\""
 testpaths = ["tests"]
 pythonpath = ["."]
 filterwarnings = [
@@ -12,7 +12,7 @@ filterwarnings = [
 ]
 
 markers = [
-    "benchonly: mark test as benchmark-only, skipped unless --benchmark-only is used"
+    "benchonly: mark test as benchmark-only, selected with -m benchonly"
 ]
 
 [tool.ruff]

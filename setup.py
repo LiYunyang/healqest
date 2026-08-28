@@ -8,7 +8,8 @@ wignerd_ext = Extension(
     "healqest.cwignerd",
     sources=["healqest/cython/wignerd.pyx", "healqest/src/wignerd.c"],
     include_dirs=[os.path.join("healqest", "src"), np.get_include()],
-    extra_compile_args=["-O3"],
+    extra_compile_args=["-O3", "-fopenmp"],
+    extra_link_args=["-fopenmp"],
 )
 
 

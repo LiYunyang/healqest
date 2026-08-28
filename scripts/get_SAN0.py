@@ -121,10 +121,15 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
             estimator is performed. Otherwise, the estimator is dispatched to two calculations:
             `get_clqq('TT', 'TTprf', None, j)` and `get_clqq('TT', 'TT', None, None)` and combined.
         """
+        _qe1 = qest.Qest.ph2qe(qe1)
+        _qe2 = qest.Qest.ph2qe(qe2)
+        if _qe1.count('B') + _qe2.count('B') == 1:
+            # early skip the response calculation for odd-parity estimators.
+            return np.zeros(config.Lmax + 1, dtype=np.complex128)
+
         if qest.Qest.isph(qe1):
             assert u1_idx is None
             qest1 = get_estimator(pair1)
-            _qe1 = qest1.ph2qe(qe1)
             out = get_clqq(_qe1, qe2, pair1, pair2, u1_idx=None, u2_idx=u2_idx).copy()
             for j, _u in enumerate(qest1.u):
                 clqq_prf_j = get_clqq('TT', qe2, pair1, pair2, u1_idx=j, u2_idx=u2_idx)
@@ -135,7 +140,6 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         if qest.Qest.isph(qe2):
             assert u2_idx is None
             qest2 = get_estimator(pair2)
-            _qe2 = qest2.ph2qe(qe2)
             out = get_clqq(qe1, _qe2, pair1, pair2, u1_idx=u1_idx, u2_idx=None).copy()
             for j, _u in enumerate(qest2.u):
                 clqq_prf_j = get_clqq(qe1, 'TT', pair1, pair2, u1_idx=u1_idx, u2_idx=j)
@@ -160,7 +164,29 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         ret = np.zeros(config.Lmax + 1, dtype=np.complex128)
         return resp.fill_clq1q2_fullsky(qeXY, qeZA, ret, XZ, YA, XA, YZ, fast=True)
 
+    @lru_cache(maxsize=None)
+    def master_clqq(qe1, qe2, pair1, pair2):
+        return get_clqq(qe1, qe2, pair1, pair2, u1_idx=None, u2_idx=None)
+
+    def canonicalize(qe1, qe2, pair1, pair2):
+        def inv(qe):
+            _qe = qest.Qest.ph2qe(qe)
+            out = _qe[::-1]
+            if qest.Qest.isph(qe):
+                out += 'ph'
+            return out
+
+        # the following permutations should be the same.
+        candidates = [
+            (qe1, qe2, pair1, pair2),  #    XYZA
+            (qe2, qe1, pair2, pair1),  # = ZAYX
+            (inv(qe1), inv(qe2), pair1[::-1], pair2[::-1]),  # = YXAZ
+            (inv(qe2), inv(qe1), pair2[::-1], pair1[::-1]),  # = AZYX
+        ]
+        return min(candidates)
+
     san0_keys = list()
+    # symmetrized the keys to avoid "double counting" the off-diagonal terms. XYZA should be the same as ZAYX.
     for j, mvtype in enumerate(mvtypes):
         for q1 in hq.mvtype2qe(mvtype):
             for q2 in hq.mvtype2qe(mvtype):
@@ -175,7 +201,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
     for p1 in ilc_pair:
         for p2 in ilc_pair:
             for q1, q2 in san0_keys:
-                _clqq = get_clqq(q1, q2, p1, p2, u1_idx=None, u2_idx=None)
+                _clqq = master_clqq(*canonicalize(q1, q2, p1, p2))
                 clqq[f'{q1}{q2}'] += _clqq / ilc_pair_norm
 
     # build mv
@@ -185,7 +211,10 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         N0 = 0
         for q1 in hq.mvtype2qe(mvtype):
             for q2 in hq.mvtype2qe(mvtype):
-                N0 += clqq[f'{q1}{q2}'].real
+                key = f'{q1}{q2}'
+                if key not in clqq:
+                    key = f'{q2}{q1}'
+                N0 += clqq[key].real
 
         file_resp = config.p_resp(tag=mvtype, bundle=bundle_pair)
         aresp = np.load(file_resp)['grad_resp' if not args.curl else 'curl_resp']

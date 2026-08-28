@@ -99,30 +99,48 @@ def get_kmap_and_spec(config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset
             comm.send((db.path, db.table, local_results), dest=comm.size - 1)
 
 
-def main(i, mvtype, cmbset, curl=False, skip=False):
+def build_task_loop(args, config):
+    """Build the requested standard, RDN0, and N1 spectrum tasks."""
+    tasks = []
+
+    if args.std:
+        seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+        tasks.extend((seed, args.set, 'std') for seed in seeds)
+
+    if args.rdn0:
+        seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+        tasks.extend((seed, args.set, 'rdn0') for seed in np.unique(np.concatenate(([0], seeds))))
+
+    if args.n1:
+        seeds = np.arange(config.sim_range_N1[0], config.sim_range_N1[1] + 1)
+        assert 0 not in seeds, "N1-type spectra should not include seed0 (data)!"
+        tasks.extend((seed, 'a', 'n1') for seed in seeds)
+
+    if not tasks:
+        raise ValueError("select at least one spectrum mode: -std, -rdn0, or -n1")
+    return tasks
+
+
+def main(i, mvtype, cmbset, mode, curl=False, skip=False):
     mf_pair = [1, 2] if config.mfsplit else [0, 0]
     common_kw = dict(i=i, mvtype=mvtype, skip=skip, curl=curl, config=config)
-    if args.std:
-        if i == 0:
-            logger.warning(
-                'i=0 skipped for N0 set. use `-rdn0` flag to compute the data spectrum.',
-                extra={'force': True},
-            )
-        stypes = [] if i == 0 else ['xxxx', 'xyyx', 'xyxy']
+    if mode == 'std':
+        stypes = ['xxxx', 'xyyx', 'xyxy']
         get_kmap_and_spec(stypes=stypes, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
         if args.cross:
             get_kmap_and_spec(stypes=['xx'], N1=False, cmbset=cmbset, mf_pair=(0, 0), **common_kw)
 
-    elif args.rdn0:
-        # TODO: `do_bundle` for RDN0 hasn't been implemented (only the data spectrum i==0 has)
+    elif mode == 'rdn0':
         stypes = ['xxxx'] if i == 0 else ['x0x0', 'x00x', '0xx0', '0x0x']
         get_kmap_and_spec(stypes=stypes, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
 
-    elif args.n1:
-        stypes = [] if i == 0 else ['abba', 'abab', 'xyxy', 'xyyx', 'aabb']
+    elif mode == 'n1':
+        stypes = ['abba', 'abab', 'xyxy', 'xyyx', 'aabb']
         get_kmap_and_spec(stypes=stypes, N1=True, cmbset='a', mf_pair=mf_pair, **common_kw)
         if args.cross:
             get_kmap_and_spec(stypes=['aa'], N1=True, cmbset='a', mf_pair=(0, 0), **common_kw)
+    else:
+        raise ValueError(f"unknown spectrum mode: {mode}")
 
 
 if __name__ == "__main__":
@@ -136,16 +154,14 @@ if __name__ == "__main__":
 
     Examples
     --------
-    - standard N0-type spectra (i=0 will be ignored)
-    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -i1 1 -i2 $i2 -std [-curl]
-    - N1-type spectra (i=0 will be ignored)
-    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -i1 1 -i2 $i2 -n1 [-curl]
-    - RDN0-type (and data) spectra (i=0 is data).
-    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -i1 1 -i2 $i2 -rdn0 [-curl]
+    - standard N0-type spectra
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -std [-curl]
+    - N1-type spectra
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -n1 [-curl]
+    - RDN0-type spectra, including the seed-0 data spectrum
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -rdn0 [-curl]
     """
     parser = startup.parser()
-    parser.add_argument('-i1', default=1, type=int, help='seed start')
-    parser.add_argument('-i2', default=1, type=int, help='seed stop')
     parser.add_argument('-std', action='store_true', help='do standard Cls')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     parser.add_argument('-mvtype', default=None, type=str, help='MV type')
@@ -166,13 +182,16 @@ if __name__ == "__main__":
         hp.write_map(config.tmp_file_mask, config.mask_ps, dtype=np.float32, overwrite=True)
     comm.barrier()
 
-    loop = np.arange(args.i1, args.i2 + 1)
+    try:
+        task_loop = build_task_loop(args, config)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if comm.rank == comm.size - 1:
         ClsDB.mpi_write(comm)
     else:
-        for _i in loop[comm.rank :: (comm.size - 1)]:
-            main(_i, cmbset=args.set, mvtype=args.mvtype, curl=args.curl, skip=args.skip)
+        for _i, _cmbset, _mode in task_loop[comm.rank :: (comm.size - 1)]:
+            main(_i, cmbset=_cmbset, mode=_mode, mvtype=args.mvtype, curl=args.curl, skip=args.skip)
         comm.send(None, dest=comm.size - 1)
 
     comm.barrier()

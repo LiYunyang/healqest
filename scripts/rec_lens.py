@@ -155,6 +155,61 @@ def expand_loops(loops):
     return out
 
 
+def build_task_loop(args, config):
+    """Build the requested standard, RDN0, and N1 reconstruction tasks."""
+    tasks = []
+
+    def add_tasks(loops, N1):
+        task_loop = expand_loops(loops)
+        task = np.empty((len(task_loop), 5), dtype=object)
+        task[:, :4] = task_loop
+        task[:, 4] = N1
+        tasks.append(task)
+
+    if args.std:
+        sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+        add_tasks(
+            [
+                [args.set, sim_range, args.set, sim_range],  # xx
+                [args.set, sim_range, args.set2, sim_range + 1],  # xy
+                [args.set2, sim_range + 1, args.set, sim_range],  # yx
+            ],
+            N1=False,
+        )
+
+    if args.rdn0:
+        assert args.set == args.set2, "RDN0 requires matching cmbset values"
+        sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+        zeros = np.zeros_like(sim_range)
+        add_tasks(
+            [
+                [args.set, np.array([0]), args.set, np.array([0])],  # xx
+                [args.set, zeros, args.set2, sim_range],  # 0x
+                [args.set2, sim_range, args.set, zeros],  # x0
+            ],
+            N1=False,
+        )
+
+    if args.n1:
+        sim_range = np.arange(config.sim_range_N1[0], config.sim_range_N1[1] + 1)
+        assert 0 not in sim_range, "N1-type lensrec should not include seed0 (data)!"
+        add_tasks(
+            [
+                ['a', sim_range, 'b', sim_range],  # a1b1
+                ['b', sim_range, 'a', sim_range],  # b1a1
+                ['a', sim_range, 'a', sim_range + 1],  # xy
+                ['a', sim_range + 1, 'a', sim_range],  # yx
+                ['a', sim_range, 'a', sim_range],  # a1a1, optional for auto resp
+                ['b', sim_range, 'b', sim_range],  # b1b1, optional for auto resp
+            ],
+            N1=True,
+        )
+
+    if not tasks:
+        raise ValueError("select at least one reconstruction mode: -std, -rdn0, or -n1")
+    return np.concatenate(tasks)
+
+
 if __name__ == "__main__":
     """
     Prepare lensrec maps.
@@ -165,18 +220,17 @@ if __name__ == "__main__":
 
     Examples
     --------
-    - lensing reconstions for N0 sims. pairing goes upto (i2, i2+1)
-    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -i1 $i1 -i2 $i2 -skip
+    - standard/N0-type lensing reconstructions
+    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -std -skip
 
-    - lensing reconstions for N1 sims. pairing goes upto (i2, i2+1)
-    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -i1 $i1 -i2 $i2 -n1 -skip
+    - N1-type lensing reconstructions
+    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -n1 -skip
 
-    - lensing reconstions for RDN0 . pairing goes from (0, 0) to (0, i2)
-    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -i1 0 -i2 $i2 -skip -rdn0
+    - RDN0-type lensing reconstructions
+    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -rdn0 -skip
     """
     parser = startup.parser()
-    parser.add_argument('-i1', default=1, type=int, help='seed start')
-    parser.add_argument('-i2', default=1, type=int, help='seed stop (inclusive)')
+    parser.add_argument('-std', action='store_true', help='do standard/N0-type operations')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     args = parser.parse_known_args()[0]
@@ -194,7 +248,6 @@ if __name__ == "__main__":
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
-    _loop = np.arange(args.i1, args.i2 + 1)
     if config.nbundle is None or args.bundle is None:
         bundle_pairs = [[None, None]]
     else:
@@ -204,40 +257,11 @@ if __name__ == "__main__":
         # reversing so the higher rank got more data. This is more efficient for slurm
         # (because rank0 might have other jobs)
 
-    if args.n1:
-        assert 0 not in _loop, "N1-type lensrec should not include seed0 (data)!"
-        loops = [
-            ['a', _loop, 'b', _loop],  # a1b1
-            ['b', _loop, 'a', _loop],  # b1a1
-            ['a', _loop, 'a', _loop + 1],  # xy
-            ['a', _loop + 1, 'a', _loop],  # yx
-            ['a', _loop, 'a', _loop],  # a1a1, optional for auto resp
-            ['b', _loop, 'b', _loop],  # b1b1, optional for auto resp
-        ]
-        loop = expand_loops(loops)
-        meta_loop = list(product(bundle_pairs, loop))
-        for _bundle_pair, (_cmbset1, _seed1, _cmbset2, _seed2) in meta_loop[comm.rank :: comm.size]:
-            main(_seed1, _cmbset1, _seed2, _cmbset2, N1=True, bundle_pair=_bundle_pair)
+    try:
+        task_loop = build_task_loop(args, config)
+    except ValueError as exc:
+        parser.error(str(exc))
 
-    else:
-        if args.rdn0:
-            assert 0 in _loop
-            _loop = np.delete(_loop, 0)
-            assert args.set == args.set2
-            loops = [
-                [args.set, [0], args.set, [0]],  # xx
-                [args.set, np.zeros_like(_loop), args.set2, _loop],  # 0x
-                [args.set2, _loop, args.set, np.zeros_like(_loop)],  # x0
-            ]
-        else:
-            # _loop1 = np.concatenate([_loop, [args.i2+1]])
-            loops = [
-                [args.set, _loop, args.set, _loop],  # xx
-                # [args.set, _loop1, args.set, _loop1],  # xx+yy
-                [args.set, _loop, args.set2, _loop + 1],  # xy
-                [args.set2, _loop + 1, args.set, _loop],  # yx
-            ]
-        loop = expand_loops(loops)
-        meta_loop = list(product(bundle_pairs, loop))
-        for _bundle_pair, (_cmbset1, _seed1, _cmbset2, _seed2) in meta_loop[comm.rank :: comm.size]:
-            main(_seed1, _cmbset1, _seed2, _cmbset2, N1=False, bundle_pair=_bundle_pair)
+    meta_loop = list(product(bundle_pairs, task_loop))
+    for _bundle_pair, (_cmbset1, _seed1, _cmbset2, _seed2, _N1) in meta_loop[comm.rank :: comm.size]:
+        main(_seed1, _cmbset1, _seed2, _cmbset2, N1=bool(_N1), bundle_pair=_bundle_pair)

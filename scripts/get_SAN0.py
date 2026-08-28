@@ -225,6 +225,20 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         comm.send((db.path, db.table, [(sql_key, N0)]), dest=comm.size - 1)
 
 
+def build_task_loop(args, config):
+    """Build standard SAN0 tasks from the configured simulation range."""
+    if config.nbundle is None or args.bundle is None:
+        bundle_pairs = [[None, None]]
+    else:
+        # assuming slurm always distribute "nbundle" jobs to compute all lensrec
+        # do cross-bundle lensrec
+        bundle_pairs = np.array_split(config.bundle_pairs, config.nbundle)[::-1][args.bundle]
+        # reversing so the higher rank got more data. This is more efficient for slurm
+        # (because rank0 might has other jobs)
+    seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+    return list(product(bundle_pairs, seeds))
+
+
 if __name__ == "__main__":
     """
     Compute the Semi-analytic N0 (SAN0) for the lensing reconstruction.
@@ -239,15 +253,13 @@ if __name__ == "__main__":
 
     Examples
     --------
-    - SAN0 for the grad mode. pairing goes from (i1, i1) to (i2, i2)
-    >>> $run scripts/get_SAN0.py -c $config [-m $data] -f $field -i1 $i1 -i2 $i2 -skip
+    - SAN0 for the grad mode
+    >>> $run scripts/get_SAN0.py -c $config [-m $data] -f $field -std -skip
 
-    - SAN0 for the curl mode. pairing goes from (i1, i1) to (i2, i2)
-    >>> $run scripts/get_SAN0.py -c $config [-m $data] -f $field -i1 $i1 -i2 $i2 -skip -curl
+    - SAN0 for the curl mode
+    >>> $run scripts/get_SAN0.py -c $config [-m $data] -f $field -std -skip -curl
     """
     parser = startup.parser()
-    parser.add_argument('-i1', default=1, type=int, help='seed start')
-    parser.add_argument('-i2', default=1, type=int, help='seed stop (inclusive)')
     parser.add_argument('-curl', action='store_true', help='compute the curl mode')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     parser.add_argument(
@@ -263,17 +275,10 @@ if __name__ == "__main__":
     config = startup.Config.from_args(args)
     assert comm.size > 1, f"{__name__} only works in MPI mode."
 
-    _loop = np.arange(args.i1, args.i2 + 1)
-    if config.nbundle is None or args.bundle is None:
-        bundle_pairs = [[None, None]]
-    else:
-        # assuming slurm always distribute "nbundle" jobs to compute all lensrec
-        # do cross-bundle lensrec
-        bundle_pairs = np.array_split(config.bundle_pairs, config.nbundle)[::-1][args.bundle]
-        # reversing so the higher rank got more data. This is more efficient for slurm
-        # (because rank0 might has other jobs)
-
-    meta_loop = list(product(bundle_pairs, _loop))
+    try:
+        meta_loop = build_task_loop(args, config)
+    except ValueError as exc:
+        parser.error(str(exc))
 
     if comm.rank == comm.size - 1:
         ClsDB.mpi_write(comm)

@@ -72,6 +72,29 @@ def main(seed, cmbset, N1, ilc_type):
     hq.cinv_io(fname, mapbar, fl=fl, eps=ivfs.get_eps())
 
 
+def build_task_loop(args, config):
+    """Build the requested standard, RDN0, and N1 CINV tasks."""
+    tasks = []
+
+    if args.std:
+        sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+        tasks.extend((seed, args.set, False, ilc_type) for seed in sim_range for ilc_type in args.ilc)
+
+    if args.rdn0:
+        tasks.extend((0, args.set, False, ilc_type) for ilc_type in args.ilc)
+
+    if args.n1:
+        seeds = np.arange(config.sim_range_N1[0], config.sim_range_N1[1] + 1)
+        assert 0 not in seeds, "N1-type CINV should not include seed0 (data)!"
+        tasks.extend(
+            (seed, cmbset, True, ilc_type) for seed in seeds for cmbset in 'ab' for ilc_type in args.ilc
+        )
+
+    if not tasks:
+        raise ValueError("select at least one CINV mode: -std, -rdn0, or -n1")
+    return tasks
+
+
 if __name__ == "__main__":
     """
     Prepare cinv-filtered maps.
@@ -82,16 +105,19 @@ if __name__ == "__main__":
 
     Examples
     --------
-    - standard set-a sims, from seed-0 (data) to seed 100 (for N0, i.e. set-a)
-    >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -i1 0 -i2 100 [-set a] -skip -ilc mv
+    - standard set-a sims
+    >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -std [-set a] -skip -ilc mv
 
-    - standard set-a/b sims, from seed-1 to seed 100 (for N1)
-    >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -i1 1 -i2 100 [-set a] -skip -n1
+    - seed-0 CINV for RDN0 reconstruction
+    >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -rdn0 [-set a] -skip -ilc mv
+
+    - N1 set-a/b sims
+    >>> $run scripts/apply_cinv.py -c $config -m $data -f $field -n1 -skip -ilc mv
     """
 
     parser = startup.parser()
-    parser.add_argument('-i1', default=1, type=int, help='seed start')
-    parser.add_argument('-i2', default=1, type=int, help='seed stop (inclusive)')
+    parser.add_argument('-std', action='store_true', help='do standard/N0-type operations')
+    parser.add_argument('-rdn0', action='store_true', help='do seed-0 CINV for RDN0-type operations')
     parser.add_argument('-ilc', nargs='+', default=['mv'], type=str, help='ILC type(s)')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     parser.add_argument(
@@ -107,14 +133,10 @@ if __name__ == "__main__":
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
-    from itertools import product
+    try:
+        task_loop = build_task_loop(args, config)
+    except ValueError as exc:
+        parser.error(str(exc))
 
-    seed_loop = np.arange(args.i1, args.i2 + 1)
-    if args.n1:
-        # do cmbsets a and b
-        loop = list(product(seed_loop, ['a', 'b'], args.ilc))
-    else:
-        # do cmbset as requested ('a' by default)
-        loop = list(product(seed_loop, [args.set], args.ilc))
-    for i, _cmbset, ilc in loop[comm.rank :: comm.size]:
-        main(seed=i, cmbset=_cmbset, N1=args.n1, ilc_type=ilc)
+    for seed, cmbset, N1, ilc_type in task_loop[comm.rank :: comm.size]:
+        main(seed=seed, cmbset=cmbset, N1=N1, ilc_type=ilc_type)

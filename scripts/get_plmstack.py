@@ -23,11 +23,7 @@ def load(tag, i, ktype, cmbset, N1=False, bundle=None):
     s1, s2, c1, c2 = config.ktype2ij(ktype, i, j=None, cmbset=cmbset)
 
     fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)
-    out = healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1), return_cosmo=False)
-    # make sure consistent UNSEEN pixel
-    out[:, ~config.mask_boundary] = hp.UNSEEN
-    out = hp.ma(out)
-    return out
+    return healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1), return_cosmo=False, partial=True)
 
 
 def main(tag, key, bundle, cmbset):
@@ -43,8 +39,11 @@ def main(tag, key, bundle, cmbset):
 
     i1, i2 = config.sim_range_N1 if N1 else config.sim_range
     spl_i = (i1 + i2) // 2  # mf split mid point
-    mf1_grad, mf2_grad = 0, 0
-    mf1_curl, mf2_curl = 0, 0
+    npix_partial = len(partial_index)
+    mf1_grad = np.zeros(npix_partial, dtype=np.float64)
+    mf2_grad = np.zeros(npix_partial, dtype=np.float64)
+    mf1_curl = np.zeros(npix_partial, dtype=np.float64)
+    mf2_curl = np.zeros(npix_partial, dtype=np.float64)
     nsim1, nsim2 = 0, 0
 
     fname = config.p_plm(tag=tag, stack_type=ktype, N1=N1, bundle=bundle, cmbset=cmbset)
@@ -55,19 +54,23 @@ def main(tag, key, bundle, cmbset):
     for i in range(i1, i2 + 1, 1):
         mf_g, mf_c = load(tag, i, ktype, cmbset=cmbset, N1=N1, bundle=bundle)
         if i < spl_i + 1:
-            mf1_grad += mf_g
-            mf1_curl += mf_c
+            np.add(mf1_grad, mf_g, out=mf1_grad)
+            np.add(mf1_curl, mf_c, out=mf1_curl)
             nsim1 += 1
         else:
-            mf2_grad += mf_g
-            mf2_curl += mf_c
+            np.add(mf2_grad, mf_g, out=mf2_grad)
+            np.add(mf2_curl, mf_c, out=mf2_curl)
             nsim2 += 1
 
     # write to disk
-    mf_grad = mf1_grad + mf2_grad
-    mf_curl = mf1_curl + mf2_curl
-
-    maps_out = np.ma.array([mf_grad, mf1_grad, mf2_grad, mf_curl, mf1_curl, mf2_curl], fill_value=hp.UNSEEN)
+    maps_out = np.full((6, hp.nside2npix(config.nside)), hp.UNSEEN, dtype=np.float32)
+    maps_out[0, partial_index] = mf1_grad + mf2_grad
+    maps_out[1, partial_index] = mf1_grad
+    maps_out[2, partial_index] = mf2_grad
+    maps_out[3, partial_index] = mf1_curl + mf2_curl
+    maps_out[4, partial_index] = mf1_curl
+    maps_out[5, partial_index] = mf2_curl
+    del mf1_grad, mf2_grad, mf1_curl, mf2_curl
     hp.write_map(
         fname,
         maps_out,
@@ -112,6 +115,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
+    with np.load(config.p_index) as index_file:
+        partial_index = index_file['index']
 
     tags = config.mvtypes
 

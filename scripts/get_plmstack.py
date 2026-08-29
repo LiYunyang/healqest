@@ -31,6 +31,10 @@ def load(tag, i, ktype, cmbset, N1=False, bundle=None):
 
 
 def main(tag, key, bundle, cmbset):
+    if config.quick and healqest_utils.mv_is_symm(tag) and key in {'yx', 'x0', 'yx_N1', 'ba_N1'}:
+        logger.warning(f"quick mode: skipping symmetric stack {tag}-{key}", extra={'force': True})
+        return
+
     ktype = key.split('_')[0]
     N1 = key.split('_')[-1] == "N1"
     if N1 and cmbset != 'a':

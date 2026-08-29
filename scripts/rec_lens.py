@@ -9,20 +9,32 @@ from mpi4py.MPI import COMM_WORLD as comm
 logger = log.get_logger(__name__)
 
 
-def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
-    logger.info(f"lensrec: seeds {seed1, seed2}; cmbset {cmbset1, cmbset2}; bundles {bundle_pair} (N1={N1})")
+def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None):  # noqa: C901
+    logger.info(
+        f"lensrec {combination}: seeds {seed1, seed2}; cmbset {cmbset1, cmbset2}; "
+        f"bundles {bundle_pair} (N1={N1})"
+    )
 
     if bundle_pair is None:
         b1, b2 = None, None
     else:
         b1, b2 = bundle_pair
 
-    mvtypes = config.mvtypes
-    qes = config.qes
+    mvtypes = list(config.mvtypes)
+    if config.quick and combination in {'yx', 'x0', 'ba'}:
+        skipped_mvtypes = [mvtype for mvtype in mvtypes if hq.mv_is_symm(mvtype)]
+        if skipped_mvtypes:
+            logger.warning(
+                f"quick mode: skipping symmetric MV types {skipped_mvtypes} for {combination} "
+                f"(seeds {seed1, seed2}; cmbset {cmbset1, cmbset2})",
+                extra={'force': True},
+            )
+            mvtypes = [mvtype for mvtype in mvtypes if mvtype not in skipped_mvtypes]
+
     if args.skip:
         qes = list()
-        mvtypes = list()
-        for mvtype in config.mvtypes:
+        pending_mvtypes = list()
+        for mvtype in mvtypes:
             file_plm = config.p_plm(
                 tag=mvtype,
                 seed1=seed1,
@@ -41,8 +53,11 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
                     logger.warning(f"skipping {mvtype}: {os.path.basename(file_plm)}", extra={"force": True})
                     continue
             qes += hq.mvtype2qe(mvtype)
-            mvtypes.append(mvtype)
+            pending_mvtypes.append(mvtype)
+        mvtypes = pending_mvtypes
         qes = list(set(qes))
+    else:
+        qes = list(set(qe for mvtype in mvtypes for qe in hq.mvtype2qe(mvtype)))
 
     if not qes:
         logger.warning(
@@ -144,12 +159,23 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None):  # noqa: C901
 
 
 def expand_loops(loops):
-    """Convert a lists of loops into a single big loop for MPI."""
-    out = list()
-    for _ in loops:
-        idx, l1, jdx, l2 = _
-        out.append([np.full(len(l1), idx), l1, np.full(len(l2), jdx), l2])
-    out = np.concatenate(out, axis=1, dtype=object).T
+    """Convert (cmbset, seed, cmbset, seed, combination) loops into MPI jobs."""
+    out = []
+    for cmbset1, seeds1, cmbset2, seeds2, combination in loops:
+        assert len(seeds1) == len(seeds2)
+        out.append(
+            np.array(
+                [
+                    np.full(len(seeds1), cmbset1),
+                    seeds1,
+                    np.full(len(seeds2), cmbset2),
+                    seeds2,
+                    np.full(len(seeds1), combination),
+                ],
+                dtype=object,
+            ).T
+        )
+    out = np.concatenate(out)
     out[:, 1] = out[:, 1].astype(int)
     out[:, 3] = out[:, 3].astype(int)
     return out
@@ -157,57 +183,56 @@ def expand_loops(loops):
 
 def build_task_loop(args, config):
     """Build the requested standard, RDN0, and N1 reconstruction tasks."""
-    tasks = []
-
-    def add_tasks(loops, N1):
-        task_loop = expand_loops(loops)
-        task = np.empty((len(task_loop), 5), dtype=object)
-        task[:, :4] = task_loop
-        task[:, 4] = N1
-        tasks.append(task)
+    task_loops = []
 
     if args.std:
         sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
-        add_tasks(
-            [
-                [args.set, sim_range, args.set, sim_range],  # xx
-                [args.set, sim_range, args.set2, sim_range + 1],  # xy
-                [args.set2, sim_range + 1, args.set, sim_range],  # yx
-            ],
-            N1=False,
+        task_loops.append(
+            (
+                False,
+                [
+                    [args.set, sim_range, args.set, sim_range, 'xx'],
+                    [args.set, sim_range, args.set2, sim_range + 1, 'xy'],
+                    [args.set2, sim_range + 1, args.set, sim_range, 'yx'],
+                ],
+            )
         )
 
     if args.rdn0:
         assert args.set == args.set2, "RDN0 requires matching cmbset values"
         sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
         zeros = np.zeros_like(sim_range)
-        add_tasks(
-            [
-                [args.set, np.array([0]), args.set, np.array([0])],  # xx
-                [args.set, zeros, args.set2, sim_range],  # 0x
-                [args.set2, sim_range, args.set, zeros],  # x0
-            ],
-            N1=False,
+        task_loops.append(
+            (
+                False,
+                [
+                    [args.set, np.array([0]), args.set, np.array([0]), 'xx'],
+                    [args.set, zeros, args.set2, sim_range, '0x'],
+                    [args.set2, sim_range, args.set, zeros, 'x0'],
+                ],
+            )
         )
 
     if args.n1:
         sim_range = np.arange(config.sim_range_N1[0], config.sim_range_N1[1] + 1)
         assert 0 not in sim_range, "N1-type lensrec should not include seed0 (data)!"
-        add_tasks(
-            [
-                ['a', sim_range, 'b', sim_range],  # a1b1
-                ['b', sim_range, 'a', sim_range],  # b1a1
-                ['a', sim_range, 'a', sim_range + 1],  # xy
-                ['a', sim_range + 1, 'a', sim_range],  # yx
-                ['a', sim_range, 'a', sim_range],  # a1a1, optional for auto resp
-                ['b', sim_range, 'b', sim_range],  # b1b1, optional for auto resp
-            ],
-            N1=True,
+        task_loops.append(
+            (
+                True,
+                [
+                    ['a', sim_range, 'b', sim_range, 'ab'],
+                    ['b', sim_range, 'a', sim_range, 'ba'],
+                    ['a', sim_range, 'a', sim_range + 1, 'xy'],
+                    ['a', sim_range + 1, 'a', sim_range, 'yx'],
+                    ['a', sim_range, 'a', sim_range, 'aa'],
+                    ['b', sim_range, 'b', sim_range, 'bb'],
+                ],
+            )
         )
 
-    if not tasks:
+    if not task_loops:
         raise ValueError("select at least one reconstruction mode: -std, -rdn0, or -n1")
-    return np.concatenate(tasks)
+    return np.concatenate([np.insert(expand_loops(loops), 4, N1, axis=1) for N1, loops in task_loops])
 
 
 if __name__ == "__main__":
@@ -263,5 +288,15 @@ if __name__ == "__main__":
         parser.error(str(exc))
 
     meta_loop = list(product(bundle_pairs, task_loop))
-    for _bundle_pair, (_cmbset1, _seed1, _cmbset2, _seed2, _N1) in meta_loop[comm.rank :: comm.size]:
-        main(_seed1, _cmbset1, _seed2, _cmbset2, N1=bool(_N1), bundle_pair=_bundle_pair)
+    for _bundle_pair, (_cmbset1, _seed1, _cmbset2, _seed2, _N1, _combination) in meta_loop[
+        comm.rank :: comm.size
+    ]:
+        main(
+            _seed1,
+            _cmbset1,
+            _seed2,
+            _cmbset2,
+            N1=bool(_N1),
+            bundle_pair=_bundle_pair,
+            combination=_combination,
+        )

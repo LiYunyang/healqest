@@ -90,8 +90,6 @@ def mvtype2qe(mvtype) -> list:
         "MV": ["TT", "EE", "EB", "TE", "TB", "BE", "ET", "BT"],
         "PP": ["EE", "EB", "BE"],
         "TTEETE": ["TT", "EE", "TE", "ET"],
-        # "MVnoTT": ["EE", "EB", "TE", "TB", "EB", "TE", "TB"],
-        # "MVnoEB": ["EE", "TE", "TB", "TE", "TB"],
         "TBEB": ["TB", "BT", "EB", "BE"],
         "TEET": ["TE", "ET"],
         "EBBE": ["EB", "BE"],
@@ -113,6 +111,12 @@ def mvtype2qe(mvtype) -> list:
         return qes
     else:
         raise ValueError(f'Undefined mvtype: {mvtype}')
+
+
+def mv_is_symm(mvtype):
+    """Check if mvtype is symmetric (e.g., TT, TE, EB) or asymmetric (e.g., TB, ET, BE)."""
+    _mv = mvtype.removesuffix('ph').removeprefix('G')
+    return _mv in ['TT', 'EE', 'MV', 'PP', 'TTEETE', 'TEET', 'TBBT', 'TBEB']
 
 
 def map_or_alm(m):

@@ -8,7 +8,7 @@ import healpy as hp
 import numpy as np
 
 from mpi4py.MPI import COMM_WORLD as comm
-from healqest import startup, log
+from healqest import startup, healqest_utils as hq, log
 from healqest.spectrum import KappaMap, compute_ps, ClsDB
 
 logger = log.get_logger(__name__)
@@ -32,7 +32,9 @@ def stypes2ktypes(spec_types):
     return set(ktypes)
 
 
-def get_kmap_and_spec(config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset='a', skip=False):
+def get_kmap_and_spec(  # noqa: C901
+    config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset='a', skip=False, copies=None
+):
     """
     Prepare the kappa maps for all the spectra, and compute the spectra of given types.
 
@@ -57,13 +59,28 @@ def get_kmap_and_spec(config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset
         the CMB set for the sims, e.g., 'a', 'b', '
     skip: bool
         whether to skip the spectra that already exist in the database.
+    copies: dict[str, list[str]], optional
+        Mapping of each canonical spectrum type to its duplicate output spectrum types.
     """
+    copies = {} if copies is None else copies
+    stypes_src = list(stypes)
+    for stype_src, stypes_cpy in copies.items():
+        if stype_src not in stypes_src:
+            raise ValueError(f"copy source {stype_src} is not in stypes")
+        if isinstance(stypes_cpy, str):
+            raise TypeError(f"copies[{stype_src}] must be a list of spectrum types")
+
+    stypes_out_by_src = {stype_src: [stype_src, *copies.get(stype_src, [])] for stype_src in stypes_src}
+    stypes_all = [stype for stypes_out in stypes_out_by_src.values() for stype in stypes_out]
+    if len(stypes_all) != len(set(stypes_all)):
+        raise ValueError("a spectrum type can only be written once")
+
     # validate the single database for this call
     db = None
-    to_skip = list()
-
-    for stype in stypes:
-        k1, k2 = stype2ktypes(stype)
+    sql_keys = {}
+    existing = {}
+    for _stype in stypes_all:
+        k1, k2 = stype2ktypes(_stype)
         db_new, sql_key = config.get_sql_keys(
             tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
         )
@@ -71,30 +88,39 @@ def get_kmap_and_spec(config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset
             db = db_new
         else:
             assert db == db_new, "all specs in the same call should write to the same SQLite table."
-        if skip:
-            if db.query(sql_key, return_data=False):
-                spec_key = '_'.join(sql_key.values())
-                logger.info(f"skipping {db.name} {db.table}: {spec_key}", extra={'force': True})
-                to_skip.append(stype)
-    stypes = [s for s in stypes if s not in to_skip]
+        sql_keys[_stype] = sql_key
+        existing[_stype] = skip and db.query(sql_key, return_data=False)
+
+    stypes_src_run = []
+    for stype_src, stypes_out in stypes_out_by_src.items():
+        if skip and all(existing[stype_out] for stype_out in stypes_out):
+            keys = ['_'.join(sql_keys[_stype].values()) for _stype in stypes_out]
+            logger.info(f"skipping {db.name} {db.table}: {keys}", extra={'force': True})
+            continue
+        stypes_src_run.append(stype_src)
 
     with tempfile.TemporaryDirectory(prefix='lens', dir=config.tmp_dir) as tmp:
         kmaps = dict()
-        for ktype in stypes2ktypes(stypes):
+        for ktype in stypes2ktypes(stypes_src_run):
             for g in set(mf_pair):
                 kmaps[(ktype, g)] = KappaMap(
                     config, i, ktype, mvtype=mvtype, mf_group=g, N1=N1, cmbset=cmbset, outdir=tmp, curl=curl
                 )
 
         local_results = []
-        for stype in stypes:
-            k1, k2 = stype2ktypes(stype)
+        for stype_src in stypes_src_run:
+            k1, k2 = stype2ktypes(stype_src)
             g1, g2 = mf_pair
-            _, sql_key = config.get_sql_keys(
-                tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
-            )
             cl_dat = compute_ps(kmaps[(k1, g1)], kmaps[(k2, g2)])
-            local_results.append((sql_key, cl_dat))
+            for stype_out in stypes_out_by_src[stype_src]:
+                if existing[stype_out]:
+                    continue
+                if stype_out != stype_src:
+                    logger.warning(
+                        f"quick mode: copying {mvtype} {stype_src} spectrum to {stype_out}",
+                        extra={'force': True},
+                    )
+                local_results.append((sql_keys[stype_out], cl_dat))
         if local_results:
             comm.send((db.path, db.table, local_results), dest=comm.size - 1)
 
@@ -124,19 +150,39 @@ def build_task_loop(args, config):
 def main(i, mvtype, cmbset, mode, curl=False, skip=False):
     mf_pair = [1, 2] if config.mfsplit else [0, 0]
     common_kw = dict(i=i, mvtype=mvtype, skip=skip, curl=curl, config=config)
+    quick = config.quick and hq.mv_is_symm(mvtype)
     if mode == 'std':
-        stypes = ['xxxx', 'xyyx', 'xyxy']
-        get_kmap_and_spec(stypes=stypes, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
+        if not quick:
+            stypes = ['xxxx', 'xyyx', 'xyxy']
+            copies = None
+        else:
+            stypes = ['xxxx', 'xyxy']
+            copies = {'xyxy': ['xyyx']}
+        get_kmap_and_spec(stypes=stypes, copies=copies, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
         if args.cross:
             get_kmap_and_spec(stypes=['xx'], N1=False, cmbset=cmbset, mf_pair=(0, 0), **common_kw)
 
     elif mode == 'rdn0':
-        stypes = ['xxxx'] if i == 0 else ['x0x0', 'x00x', '0xx0', '0x0x']
-        get_kmap_and_spec(stypes=stypes, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
+        if i == 0:
+            stypes = ['xxxx']
+            copies = None
+        else:
+            if not quick:
+                stypes = ['x0x0', 'x00x', '0xx0', '0x0x']
+                copies = None
+            else:
+                stypes = ['0x0x']
+                copies = {'0x0x': ['x00x', '0xx0', 'x0x0']}
+        get_kmap_and_spec(stypes=stypes, copies=copies, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
 
     elif mode == 'n1':
-        stypes = ['abba', 'abab', 'xyxy', 'xyyx', 'aabb']
-        get_kmap_and_spec(stypes=stypes, N1=True, cmbset='a', mf_pair=mf_pair, **common_kw)
+        if not quick:
+            stypes = ['abba', 'abab', 'xyxy', 'xyyx', 'aabb']
+            copies = None
+        else:
+            stypes = ['abab', 'xyxy', 'aabb']
+            copies = {'abab': ['abba'], 'xyxy': ['xyyx']}
+        get_kmap_and_spec(stypes=stypes, copies=copies, N1=True, cmbset='a', mf_pair=mf_pair, **common_kw)
         if args.cross:
             get_kmap_and_spec(stypes=['aa'], N1=True, cmbset='a', mf_pair=(0, 0), **common_kw)
     else:

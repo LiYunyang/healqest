@@ -129,7 +129,7 @@ def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, **kw):
                 k1 = ktype[:2]
                 k2 = ktype[2:] or None
                 _db, sql_key = config.get_sql_keys(seed=i, ktype1=k1, ktype2=k2, **kw, curl=curl, tag=mvtype)
-                assert _db == db, (str(_db), str(db))
+                assert _db == db, (str(_db), str(db), kw)
                 sign = -1 if s == '-' else 1
                 _cl = db.query_conn(sql_key)
                 if _cl is None:

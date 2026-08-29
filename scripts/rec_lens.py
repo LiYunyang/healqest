@@ -96,6 +96,13 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None)
     ilc_norm = len(ilc_pair)
 
     do_ph = any(qe in qest.Qest.__PH_ESTIMATORS__ for qe in qes)
+    quick = config.quick and seed1 == seed2 and cmbset1 == cmbset2 and b1 == b2
+
+    def add_reconstruction(qe, glm, clm, aresp_g, aresp_c):
+        alms_grads[qe] += glm / ilc_norm
+        alms_curls[qe] += clm / ilc_norm
+        aresp_grads[qe] += aresp_g / ilc_norm
+        aresp_curls[qe] += aresp_c / ilc_norm
 
     for ilc1, ilc2 in ilc_pair:
         almbars1, flms1 = func(cmbset1, seed1, b1, ilc1)
@@ -112,22 +119,28 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None)
             fls=flms1,
             fls2=flms2,
         )
-        qe_cache = {}
         if do_ph:
             estimator.init_harden(config.profile_u, almbars1, almbars2)
+
         for qe in qes:
             _qe = qest.Qest.ph2qe(qe)
-            if _qe not in qe_cache:
-                qe_cache[_qe] = estimator.rec_and_resp(_qe, almbars1, almbars2, type1='lens')
-            (glm, clm), (aresp_g, aresp_c) = qe_cache[_qe]
+            inv_qe = qest.Qest.inv_qe(qe)
+            qe_key = qe, ilc1, ilc2
+            inv_qe_key = inv_qe, ilc2, ilc1
+            if quick and inv_qe in qes and inv_qe_key < qe_key:
+                continue
+
+            (glm, clm), (aresp_g, aresp_c) = estimator.rec_and_resp(_qe, almbars1, almbars2, type1='lens')
             if qest.Qest.isph(qe):
                 glm, aresp_g = estimator.profile_harden(_qe, glm, aresp_g, type1='lens', curl=False)
                 if config.harden_curl:
                     clm, aresp_c = estimator.profile_harden(_qe, clm, aresp_c, type1='lens', curl=True)
-            alms_grads[qe] += glm / ilc_norm
-            alms_curls[qe] += clm / ilc_norm
-            aresp_grads[qe] += aresp_g / ilc_norm
-            aresp_curls[qe] += aresp_c / ilc_norm
+            # Reversed QEs with reversed ILC legs are identical for these inputs.
+            add_reconstruction(qe, glm, clm, aresp_g, aresp_c)
+            if quick and inv_qe in qes and inv_qe_key != qe_key:
+                add_reconstruction(inv_qe, glm, clm, aresp_g, aresp_c)
+
+        del glm, clm, aresp_g, aresp_c, estimator, almbars1, almbars2, flms1, flms2
 
     # create the common partial index file
     partial_index = np.where(config.mask_boundary > 0)[0]

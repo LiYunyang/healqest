@@ -169,19 +169,12 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         return get_clqq(qe1, qe2, pair1, pair2, u1_idx=None, u2_idx=None)
 
     def canonicalize(qe1, qe2, pair1, pair2):
-        def inv(qe):
-            _qe = qest.Qest.ph2qe(qe)
-            out = _qe[::-1]
-            if qest.Qest.isph(qe):
-                out += 'ph'
-            return out
-
         # the following permutations should be the same.
         candidates = [
             (qe1, qe2, pair1, pair2),  #    XYZA
             (qe2, qe1, pair2, pair1),  # = ZAYX
-            (inv(qe1), inv(qe2), pair1[::-1], pair2[::-1]),  # = YXAZ
-            (inv(qe2), inv(qe1), pair2[::-1], pair1[::-1]),  # = AZYX
+            (qest.Qest.inv_qe(qe1), qest.Qest.inv_qe(qe2), pair1[::-1], pair2[::-1]),  # = YXAZ
+            (qest.Qest.inv_qe(qe2), qest.Qest.inv_qe(qe1), pair2[::-1], pair1[::-1]),  # = AZYX
         ]
         return min(candidates)
 

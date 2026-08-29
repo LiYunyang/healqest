@@ -142,7 +142,7 @@ def find_index_file(fname, max_depth=3):
         raise FileNotFoundError(f'partial map index file not found recursively under {idx_dir}')
 
 
-def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
+def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True, partial=False):
     """A wrapper to read the partial maps, as fits or npy files.
 
     Parameters
@@ -158,6 +158,8 @@ def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
         If True, return also the header. Default: False.
     return_cosmo: bool=False
         If True, make sure the return polarization map is in COSMOS format (flipping U sign if needed).
+    partial: bool=False
+        If True, return indexed pixels directly from a partial ``.npy`` map instead of expanding to full sky.
     """
     if isinstance(field, (str, int)):
         field = [field]
@@ -168,11 +170,14 @@ def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
     try:
         if os.path.splitext(fname)[1] == '.npy':
             """load npy partial maps with index stored in parent directories"""
-            index_file = find_index_file(fname)
-            index = index_file['index']
             m = np.load(fname, mmap_mode='r')
             if field is None:
                 field = np.arange(m.shape[0])
+            if partial:
+                return np.squeeze(np.asarray(m[np.asarray(field)], dtype=dtype))
+
+            index_file = find_index_file(fname)
+            index = index_file['index']
             out = _allocate(nside=index_file['nside'])
 
             for idx, j in enumerate(field):
@@ -180,6 +185,8 @@ def read_map(fname, field=(0,), dtype=None, hdu=1, h=False, return_cosmo=True):
             return np.squeeze(out)
         else:
             """load fits partial maps"""
+            if partial:
+                raise ValueError("partial=True is only supported for partial .npy maps")
             return read_map_fits(fname, field=field, dtype=dtype, hdu=hdu, h=h, return_cosmo=return_cosmo)
     except Exception as e:
         raise e from IOError(f"Error reading file: {fname}")

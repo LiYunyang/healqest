@@ -110,6 +110,14 @@ class Qest:
     def ph2qe(cls, qe: str):
         return qe.removesuffix('ph') if cls.isph(qe) else qe
 
+    @classmethod
+    def inv_qe(cls, qe: str):
+        _qe = cls.ph2qe(qe)
+        out = _qe[::-1]
+        if cls.isph(qe):
+            out += 'ph'
+        return out
+
     @staticmethod
     def alm2map_spin(alm, fell, spin, lmax, g, maps, mmax=None):
         """Convert a spin-0 alm into a complex spin field, writing Q and +/-U into maps."""

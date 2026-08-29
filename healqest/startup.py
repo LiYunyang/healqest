@@ -114,7 +114,7 @@ class Config:
     # whether to harden the curl modes. If set to false, the curl reconstruction will not be hardenened, but
     # the SAN0 will still be computed for the hardened version, thus creating inconsistency. This should only
     # be used when curl is not of interest, and only for performance.
-    quick: bool = False  # skip redundant symmetric-MV reconstructions and spectra.
+    quick: bool = True  # skip redundant symmetric-MV reconstructions and spectra.
 
     # === inputs ===
     sim_range: list[int]  # index range (inclusive) of the input alms files

@@ -77,14 +77,14 @@ def build_task_loop(args, config):
     tasks = []
 
     if args.std:
-        sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+        sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 2)
         tasks.extend((seed, args.set, False, ilc_type) for seed in sim_range for ilc_type in args.ilc)
 
     if args.rdn0:
         tasks.extend((0, args.set, False, ilc_type) for ilc_type in args.ilc)
 
     if args.n1:
-        seeds = np.arange(config.sim_range_N1[0], config.sim_range_N1[1] + 1)
+        seeds = np.arange(config.sim_range_N1[0], config.sim_range_N1[1] + 2)
         assert 0 not in seeds, "N1-type CINV should not include seed0 (data)!"
         tasks.extend(
             (seed, cmbset, True, ilc_type) for seed in seeds for cmbset in 'ab' for ilc_type in args.ilc

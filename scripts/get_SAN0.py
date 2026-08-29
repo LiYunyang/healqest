@@ -255,28 +255,18 @@ if __name__ == "__main__":
     parser = startup.parser()
     parser.add_argument('-curl', action='store_true', help='compute the curl mode')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
-    parser.add_argument(
-        "-m",
-        "--module_path",
-        required=True,
-        help="Path to the data module script (e.g., data.ilc.py) that can prepare data/sims and "
-        "auxiliary files (nlres, ninv) for filtering inputs.",
-    )
     args = parser.parse_args()
 
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
     assert comm.size > 1, f"{__name__} only works in MPI mode."
 
-    try:
-        meta_loop = build_task_loop(args, config)
-    except ValueError as exc:
-        parser.error(str(exc))
+    task_loop = build_task_loop(args, config)
 
     if comm.rank == comm.size - 1:
         ClsDB.mpi_write(comm)
     else:
-        for _bundle_pair, _seed in meta_loop[comm.rank :: (comm.size - 1)]:
+        for _bundle_pair, _seed in task_loop[comm.rank :: (comm.size - 1)]:
             main(_seed, args.set, bundle_pair=_bundle_pair)
         comm.send(None, dest=comm.size - 1)
     comm.barrier()

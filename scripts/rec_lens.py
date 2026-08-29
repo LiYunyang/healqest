@@ -245,7 +245,18 @@ def build_task_loop(args, config):
 
     if not task_loops:
         raise ValueError("select at least one reconstruction mode: -std, -rdn0, or -n1")
-    return np.concatenate([np.insert(expand_loops(loops), 4, N1, axis=1) for N1, loops in task_loops])
+
+    task_loop = np.concatenate([np.insert(expand_loops(loops), 4, N1, axis=1) for N1, loops in task_loops])
+
+    if config.nbundle is None or args.bundle is None:
+        bundle_pairs = [[None, None]]
+    else:
+        # assuming slurm always distribute "nbundle" jobs to compute all lensrec
+        # do cross-bundle lensrec
+        bundle_pairs = np.array_split(config.bundle_pairs, config.nbundle)[::-1][args.bundle]
+        # reversing so the higher rank got more data. This is more efficient for slurm
+        # (because rank0 might have other jobs)
+    return list(product(bundle_pairs, task_loop))
 
 
 if __name__ == "__main__":
@@ -273,35 +284,14 @@ if __name__ == "__main__":
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     args = parser.parse_known_args()[0]
     parser.add_argument('-set2', default=args.set, type=str, help='cmbset2 for RDN0-type sims')
-    parser.add_argument(
-        "-m",
-        "--module_path",
-        required=True,
-        help="Path to the data module script (e.g., data.ilc.py) that can prepare data/sims "
-        "and auxiliary files (nlres, ninv) for filtering inputs.",
-    )
     args = parser.parse_args()
-    dm = hq.load_module("healqest.data_module", args.module_path)
 
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
 
-    if config.nbundle is None or args.bundle is None:
-        bundle_pairs = [[None, None]]
-    else:
-        # assuming slurm always distribute "nbundle" jobs to compute all lensrec
-        # do cross-bundle lensrec
-        bundle_pairs = np.array_split(config.bundle_pairs, config.nbundle)[::-1][args.bundle]
-        # reversing so the higher rank got more data. This is more efficient for slurm
-        # (because rank0 might have other jobs)
+    task_loop = build_task_loop(args, config)
 
-    try:
-        task_loop = build_task_loop(args, config)
-    except ValueError as exc:
-        parser.error(str(exc))
-
-    meta_loop = list(product(bundle_pairs, task_loop))
-    for _bundle_pair, (_cmbset1, _seed1, _cmbset2, _seed2, _N1, _combination) in meta_loop[
+    for _bundle_pair, (_cmbset1, _seed1, _cmbset2, _seed2, _N1, _combination) in task_loop[
         comm.rank :: comm.size
     ]:
         main(

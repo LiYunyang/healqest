@@ -1,8 +1,8 @@
 """Compute and save to disk the lensing power spectra."""
 
-import tempfile
+import hashlib
 import os
-import shutil
+import tempfile
 
 import healpy as hp
 import numpy as np
@@ -254,16 +254,14 @@ if __name__ == "__main__":
     assert comm.size > 1, f"{__name__} only works in MPI mode."
 
     config.tmp_dir = config.path(config.outdir, 'tmp/')  # /tmp might be too small for storage
-    config.tmp_file_mask = os.path.join(config.tmp_dir, 'psmask.fits')
+    split_hash = hashlib.sha256(str(args.split).encode()).hexdigest()[:8]
+    config.tmp_file_mask = os.path.join(config.tmp_dir, f'psmask_{split_hash}.fits')
     if comm.rank == 0:
         os.makedirs(config.tmp_dir, exist_ok=True)
         hp.write_map(config.tmp_file_mask, config.mask_ps(args.split), dtype=np.float32, overwrite=True)
     comm.barrier()
 
-    try:
-        task_loop = build_task_loop(args, config)
-    except ValueError as exc:
-        parser.error(str(exc))
+    task_loop = build_task_loop(args, config)
 
     if comm.rank == comm.size - 1:
         ClsDB.mpi_write(comm)
@@ -283,4 +281,3 @@ if __name__ == "__main__":
     comm.barrier()
     if comm.rank == 0:
         os.unlink(config.tmp_file_mask)
-        shutil.rmtree(config.tmp_dir)

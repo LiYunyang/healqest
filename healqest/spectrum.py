@@ -455,7 +455,7 @@ class KappaMap:
     """
 
     def __init__(self, config, i, ktype, mvtype=None, mf_group=None, N1=None, cmbset=None, outdir=None,
-                 curl=False):  # fmt: off
+                 curl=False, split=None):  # fmt: off
         """
         Kappa (convergence) map container for power spectrum estimation.
 
@@ -480,6 +480,8 @@ class KappaMap:
             Directory to write FITS maps to disk (required for PolSpice).
         curl: bool, optional
             If True, use the curl (B-mode) estimator instead of the gradient estimator.
+        split: str, optional
+            Data split selecting the power-spectrum mask.
         """
         self.config = config
         self.i = i
@@ -499,6 +501,7 @@ class KappaMap:
         self.cmbset = cmbset
         self.outdir = outdir
         self.curl = curl
+        self.split = split
         if config.nbundle is not None:
             self.bundle_loop = config.bundle_pairs
             self.bundle_keys = [f'X{b}' for b in range(self.config.nbundle)] + ['X']
@@ -627,7 +630,8 @@ class KappaMap:
         n_qe = np.count_nonzero([o.cross is False for o in [obj, self]])
         assert n_qe in [1, 2], "either one or both of the maps should be QE maps (not input kappa maps)"
         fsky_qe2 = self.config.mask_cinv['t'] * self.config.mask_cinv['p']
-        return np.mean(fsky_qe2**n_qe * self.config.mask_ps**2) / np.mean(self.config.mask_ps**2)
+        ps_mask = self.config.mask_ps(self.split)
+        return np.mean(fsky_qe2**n_qe * ps_mask**2) / np.mean(ps_mask**2)
 
 
 def compute_ps_single(mobj1, mobj2, bundle1, bundle2):

@@ -11,9 +11,9 @@ logger = log.get_logger(__name__)
 
 
 def get_db(config, mvtype, seed, cmbset, curl):
-    return config.get_sql_keys(
-        tag=mvtype, seed=seed, ktype1='xx', ktype2='xx', SAN0=True, N1=False, cmbset=cmbset, curl=curl
-    )
+    db = config.get_sql_table(tag=mvtype, spec_type='san0', curl=curl)
+    keys = config.get_sql_keys(seed=seed, ktype1='xx', ktype2='xx', cmbset=cmbset)
+    return db, keys
 
 
 def main(seed, cmbset, bundle_pair=None):  # noqa: C901

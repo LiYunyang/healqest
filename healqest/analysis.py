@@ -89,7 +89,7 @@ def bin_Cls(Cls, bins, return_ensemble=False):
     return x, Cbs if return_ensemble else np.mean(Cbs, axis=0), cov
 
 
-def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, **kw):
+def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, cmbset='a', split=None):
     """
     Load spectra from the sqlite database and performs specific coadding procedure.
 
@@ -109,13 +109,15 @@ def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, **kw):
         spec types. For example, "xyxy-xyyx" means loading the 'xyxy' and 'xyyx' spectra and coadding them
         with + and - signs respectively.
     Lmax: int=None
+    split: str=None
+        The split of the spectra to be loaded. If None, load the spectra without split.
 
     Returns
     -------
     np.ndarray
         The coadded spectra.
     """
-    db = config.get_sql_table(mvtype, spec_type=spec_type, curl=curl)
+    db = config.get_sql_table(mvtype, spec_type=spec_type, curl=curl, split=split)
     operators = re.split(r'([+-])', ops)
     if operators[0] not in ['+', '-']:
         operators = ['+'] + operators
@@ -128,8 +130,7 @@ def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, **kw):
             for s, ktype in zip(operators[0::2], operators[1::2]):
                 k1 = ktype[:2]
                 k2 = ktype[2:] or None
-                _db, sql_key = config.get_sql_keys(seed=i, ktype1=k1, ktype2=k2, **kw, curl=curl, tag=mvtype)
-                assert _db == db, (str(_db), str(db), kw)
+                sql_key = config.get_sql_keys(seed=i, ktype1=k1, ktype2=k2, cmbset=cmbset)
                 sign = -1 if s == '-' else 1
                 _cl = db.query_conn(sql_key)
                 if _cl is None:
@@ -155,6 +156,7 @@ class LensingSpectra:
         coadd=False,
         resp_smooth=None,
         cmbset='a',
+        split=None,
         do_SAN0=False,
         do_RDN0=False,
         do_data=False,
@@ -191,6 +193,7 @@ class LensingSpectra:
         """
         self.config = config
         self.cmbset = cmbset
+        self.split = split
         self.curl = curl
         self.calibrate_SAN0 = calibrate_SAN0
         self.average = average
@@ -243,7 +246,7 @@ class LensingSpectra:
 
     @property
     def fsky(self):
-        return np.mean(self.config.mask_ps**2)
+        return np.mean(self.config.mask_ps(self.split) ** 2)
 
     @property
     def clkk(self):
@@ -270,8 +273,8 @@ class LensingSpectra:
                     mvtype=self.mvtype,
                     curl=self.curl,
                     ops='aabb',
-                    N1=True,
                     Lmax=self.Lmax,
+                    split=self.split,
                 )
                 self.resp2_cls = Cls_ab / self.clkk[: self.Lmax + 1]
                 self.resp2 = np.mean(Cls_ab / self.clkk[: self.Lmax + 1], axis=0)
@@ -323,7 +326,7 @@ class LensingSpectra:
     def load(self):
         self.offload()
 
-        kw = dict(Lmax=self.Lmax, curl=self.curl, mvtype=self.mvtype, config=self.config)
+        kw = dict(Lmax=self.Lmax, curl=self.curl, mvtype=self.mvtype, config=self.config, split=self.split)
         N0_loop = range(1, self.N + 1)
         N1_loop = range(1, self.N_N1 + 1) if self.N_N1 > 0 else []
 
@@ -333,7 +336,7 @@ class LensingSpectra:
         self.N0s = N0s[:, : self.Lmax + 1] / self.resp2
 
         if self.N_N1 > 0:
-            N1s = load_sql(N1_loop, spec_type='n1', ops='abab+abba-xyxy-xyyx', cmbset='a', N1=True, **kw)
+            N1s = load_sql(N1_loop, spec_type='n1', ops='abab+abba-xyxy-xyyx', cmbset='a', **kw)
             self.N1s = N1s[:, : self.Lmax + 1] / self.resp2
         else:
             self.N1s = None
@@ -353,7 +356,8 @@ class LensingSpectra:
                 self.Cl0 -= self.N0 + self.N1
 
         if self.do_SAN0:
-            SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, SAN0=True, **kw)
+            _kw = {**kw, 'split': None}
+            SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, **_kw)
             self.SAN0s = SAN0s[:, : self.Lmax + 1] / self.resp2
             if self.calibrate_SAN0:
                 logger.info("calibrate SAN0 by N0")

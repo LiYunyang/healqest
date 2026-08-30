@@ -41,6 +41,14 @@ except ImportError:
 logger = log.get_logger(__name__)
 
 
+def none_str(value):
+    return None if value.lower() == 'none' else value
+
+
+def none_int(value):
+    return None if value.lower() == 'none' else int(value)
+
+
 def get_git_version():
     """Get the current git commit hash of the repository."""
     repo_dir = os.path.dirname(os.path.abspath(__file__))
@@ -58,7 +66,6 @@ class Config:
 
     # === command-line parameters ===
     field: str = None  # SPT field name, used for output/fname parsing and mask selection
-    split: str = None  # split name, used for output/fname parsing and split-dependent mask selection
 
     """Config should be specified in a yaml file with these keywords. """
     # === base ===
@@ -125,7 +132,6 @@ class Config:
     # === pspec ===
     mfsplit: bool = True  # split mean-field sims by halves for auto spectra
     fmask_ps: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for clpp
-    fmask_resp: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for MC resp
     spice_kwargs: dict = None  # polspice settings
 
     def __init__(self, **kwargs):
@@ -135,9 +141,9 @@ class Config:
         self._bl = None  # this is a cached property that can be overridden later.
 
     @classmethod
-    def from_yaml(cls, fname, field=None, split=None):
+    def from_yaml(cls, fname, field=None):
         params = yaml.safe_load(open(fname, "r"))
-        config_dict = dict(field=field, split=split)
+        config_dict = dict(field=field)
         for group_key in cls.__keywords__:
             subdict = params.pop(group_key, None)
             if subdict:
@@ -151,7 +157,7 @@ class Config:
     @classmethod
     def from_args(cls, args):
         fname = args.config
-        obj = cls.from_yaml(fname, field=args.field, split=args.split)
+        obj = cls.from_yaml(fname, field=args.field)
 
         # calling script
         script = sys._getframe(1).f_globals['__file__']
@@ -223,9 +229,9 @@ class Config:
             self.recdir = self.outdir
         if self.cinvdir is None:
             self.cinvdir = self.recdir
-        self.outdir = self.outdir.format(field=self.field, split=self.split)
-        self.recdir = self.recdir.format(field=self.field, split=self.split)
-        self.cinvdir = self.cinvdir.format(field=self.field, split=self.split)
+        self.outdir = self.outdir.format(field=self.field)
+        self.recdir = self.recdir.format(field=self.field)
+        self.cinvdir = self.cinvdir.format(field=self.field)
 
         # append a second level of directory to distinguish rectypes
         assert self.rectype in ['naive', 'sqe', 'gmv']
@@ -557,29 +563,29 @@ class Config:
         return ilc
 
     # === setup masks ===
-    def _iter_mask_items(self, item):
+    def _iter_mask_items(self, item, split=None):
         for _item in self.as_list(item):
             if isinstance(_item, dict):
-                if self.split is None:
+                if split is None:
                     logger.warning("Not specifying split.")
                     continue  # skip split-specific mask entry if no split is specified
-                if self.split not in _item:
+                if split not in _item:
                     raise ValueError(
-                        f"Split {self.split!r} not found in split-specific mask entry; "
+                        f"Split {split!r} not found in split-specific mask entry; "
                         f"available splits are {list(_item.keys())}."
                     )
-                yield from self._iter_mask_items(_item[self.split])
+                yield from self._iter_mask_items(_item[split], split=split)
             else:
                 if not isinstance(_item, str):
                     raise TypeError(f"Mask entries must be strings or split-keyed dicts, got {type(_item)}.")
                 yield _item
 
-    def _load_mask(self, item, field=0):
+    def _load_mask(self, item, field=0, split=None):
         mask = None
         if item is None:
             logger.warning("path(s) to mask not given, using full-sky mask.")
             return np.ones(hp.nside2npix(self.nside))
-        for _ in self._iter_mask_items(item):
+        for _ in self._iter_mask_items(item, split=split):
             mask_path = self.path(_, field=self.field)
             try:
                 _mask = hq.read_map(mask_path, field=field, return_cosmo=False)
@@ -604,25 +610,25 @@ class Config:
     def mask_qe(self):
         return dict(t=self._load_mask(self.fmask_qe, field=0), p=self._load_mask(self.fmask_qe, field=1))
 
-    @cached_property
-    def mask_ps(self):
+    def mask_ps(self, split=None):
+        cache = self.__dict__.setdefault('mask_ps_cache', {})
+        if split in cache:
+            return cache[split]
+
         if self.fmask_ps:
             # if T/P use different mask, file `fmask_ps` should have 3 columns, T/P/TP combined.
-            return self._load_mask(self.fmask_ps, field=2)
+            mask = self._load_mask(self.fmask_ps, field=2, split=split)
         else:
+            if split:
+                raise ValueError("No split defined in fmask_ps")
             if np.all(self.mask_qe['t'] == self.mask_qe['p']):
                 logger.warning("ps mask not given, using the QE mask.")
-                return self.mask_qe['t']
+                mask = self.mask_qe['t']
             else:
                 logger.error("ps mask not given, try QE P-mask, but it is not consistent with T-mask!.")
-                return self.mask_qe["p"]
-
-    @cached_property
-    def mask_resp(self):
-        if self.fmask_resp:
-            return self._load_mask(self.fmask_resp)
-        else:
-            return self.mask_ps
+                mask = self.mask_qe["p"]
+        cache[split] = mask
+        return mask
 
     @cached_property
     def mask_boundary(self):
@@ -729,28 +735,16 @@ class Config:
         out = self.path(self.recdir, subdir, fname)
         return out
 
-    def get_sql_table(self, tag, spec_type: str, curl=False):
+    def get_sql_table(self, tag, spec_type: str, curl=False, split=None):
         assert spec_type.lower() in ['n0', 'n1', 'san0', 'rdn0']
         fname = f'{spec_type.lower()}.db'
         gc_tag = 'g' if not curl else 'c'
         table = f'{gc_tag}{tag}'
-        path = self.path(self.outdir, 'cls', fname)
+        path = self.path(self.outdir, 'cls', split if split is not None else '', fname)
         return ClsDB(path, table)
 
-    def get_sql_keys(self, tag, seed, ktype1, ktype2, N1=False, SAN0=False, cmbset='a', curl=False):
+    def get_sql_keys(self, seed, ktype1, ktype2, cmbset='a'):
         """Returns a ClsDB handle and key-value dict for the SQL entry."""
-        if SAN0:
-            assert N1 is False
-            assert ktype2 == ktype1
-            spec_type = 'san0'
-        elif N1:
-            spec_type = 'n1'
-        elif seed == 0 or ktype1 in ['0x', 'x0'] or ktype2 in ['0x', 'x0']:
-            spec_type = 'rdn0'
-        else:
-            spec_type = 'n0'
-
-        db = self.get_sql_table(tag, spec_type=spec_type, curl=curl)
         s1, s2, c1, c2 = self.ktype2ij(ktype1, seed, j=None, cmbset=cmbset)
         l1 = f"{s1}{c1}"
         l2 = f"{s2}{c2}"
@@ -762,7 +756,7 @@ class Config:
             l3 = None
             l4 = None
         kv = dict(l1=l1, l2=l2, l3=l3, l4=l4)
-        return db, kv
+        return kv
 
     def query_spectra(self, tag, spec_type, stype, curl=False):
         """
@@ -808,16 +802,8 @@ class Config:
 def parser():
     p = argparse.ArgumentParser()
 
-    def none_str(value):
-        return None if value.lower() == 'none' else value
-
-    def none_int(value):
-        return None if value.lower() == 'none' else int(value)
-
     p.add_argument('-c', '--config', default=None, type=str, help='path to config file', required=True)
     p.add_argument('-f', '--field', default=None, type=none_str, help='SPT field')
-    p.add_argument('-s', '--split', default=None, type=none_str, help='Data split')
-
     # bundle and n1 are mutually exclusive: N1-type calculations should be the same for all bundles.
     group = p.add_mutually_exclusive_group()
     group.add_argument('-b', '--bundle', type=none_int, help='Bundle id')

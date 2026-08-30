@@ -33,7 +33,18 @@ def stypes2ktypes(spec_types):
 
 
 def get_kmap_and_spec(  # noqa: C901
-    config, stypes, i, mvtype, N1, mf_pair, curl=False, cmbset='a', skip=False, copies=None
+    config,
+    stypes,
+    i,
+    mvtype,
+    N1,
+    mf_pair,
+    spectype,
+    split=None,
+    curl=False,
+    cmbset='a',
+    skip=False,
+    copies=None,
 ):
     """
     Prepare the kappa maps for all the spectra, and compute the spectra of given types.
@@ -53,6 +64,10 @@ def get_kmap_and_spec(  # noqa: C901
         whether to compute N1-type spectra. if False, compute N0-type spectra.
     mf_pair: tuple of int
         the meanf-field group for the two kappa maps.
+    spectype: str
+        the spectrum type for the database table, e.g., 'n0', 'n1', 'rdn0'.
+    split: str, optional
+        Data split selecting the power-spectrum mask and output database.
     curl: bool
         whether to compute the curl mode spectra.
     cmbset: str='a'
@@ -61,6 +76,7 @@ def get_kmap_and_spec(  # noqa: C901
         whether to skip the spectra that already exist in the database.
     copies: dict[str, list[str]], optional
         Mapping of each canonical spectrum type to its duplicate output spectrum types.
+
     """
     copies = {} if copies is None else copies
     stypes_src = list(stypes)
@@ -75,19 +91,12 @@ def get_kmap_and_spec(  # noqa: C901
     if len(stypes_all) != len(set(stypes_all)):
         raise ValueError("a spectrum type can only be written once")
 
-    # validate the single database for this call
-    db = None
     sql_keys = {}
     existing = {}
+    db = config.get_sql_table(mvtype, spec_type=spectype, curl=curl, split=split)
     for _stype in stypes_all:
         k1, k2 = stype2ktypes(_stype)
-        db_new, sql_key = config.get_sql_keys(
-            tag=mvtype, seed=i, ktype1=k1, ktype2=k2, N1=N1, SAN0=False, cmbset=cmbset, curl=curl
-        )
-        if db is None:
-            db = db_new
-        else:
-            assert db == db_new, "all specs in the same call should write to the same SQLite table."
+        sql_key = config.get_sql_keys(seed=i, ktype1=k1, ktype2=k2, cmbset=cmbset)
         sql_keys[_stype] = sql_key
         existing[_stype] = skip and db.query(sql_key, return_data=False)
 
@@ -104,7 +113,16 @@ def get_kmap_and_spec(  # noqa: C901
         for ktype in stypes2ktypes(stypes_src_run):
             for g in set(mf_pair):
                 kmaps[(ktype, g)] = KappaMap(
-                    config, i, ktype, mvtype=mvtype, mf_group=g, N1=N1, cmbset=cmbset, outdir=tmp, curl=curl
+                    config,
+                    i,
+                    ktype,
+                    mvtype=mvtype,
+                    mf_group=g,
+                    N1=N1,
+                    cmbset=cmbset,
+                    outdir=tmp,
+                    curl=curl,
+                    split=split,
                 )
 
         local_results = []
@@ -147,9 +165,9 @@ def build_task_loop(args, config):
     return tasks
 
 
-def main(i, mvtype, cmbset, mode, curl=False, skip=False):
+def main(i, mvtype, cmbset, mode, split=None, curl=False, skip=False):
     mf_pair = [1, 2] if config.mfsplit else [0, 0]
-    common_kw = dict(i=i, mvtype=mvtype, skip=skip, curl=curl, config=config)
+    common_kw = dict(i=i, mvtype=mvtype, skip=skip, curl=curl, config=config, split=split)
     quick = config.quick and hq.mv_is_symm(mvtype)
     if mode == 'std':
         if not quick:
@@ -158,9 +176,13 @@ def main(i, mvtype, cmbset, mode, curl=False, skip=False):
         else:
             stypes = ['xxxx', 'xyxy']
             copies = {'xyxy': ['xyyx']}
-        get_kmap_and_spec(stypes=stypes, copies=copies, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
+        get_kmap_and_spec(
+            stypes=stypes, copies=copies, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw, spectype='n0'
+        )
         if args.cross:
-            get_kmap_and_spec(stypes=['xx'], N1=False, cmbset=cmbset, mf_pair=(0, 0), **common_kw)
+            get_kmap_and_spec(
+                stypes=['xx'], N1=False, cmbset=cmbset, mf_pair=(0, 0), **common_kw, spectype='n0'
+            )
 
     elif mode == 'rdn0':
         if i == 0:
@@ -173,7 +195,15 @@ def main(i, mvtype, cmbset, mode, curl=False, skip=False):
             else:
                 stypes = ['0x0x']
                 copies = {'0x0x': ['x00x', '0xx0', 'x0x0']}
-        get_kmap_and_spec(stypes=stypes, copies=copies, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw)
+        get_kmap_and_spec(
+            stypes=stypes,
+            copies=copies,
+            N1=False,
+            cmbset=cmbset,
+            mf_pair=mf_pair,
+            **common_kw,
+            spectype='rdn0',
+        )
 
     elif mode == 'n1':
         if not quick:
@@ -182,9 +212,11 @@ def main(i, mvtype, cmbset, mode, curl=False, skip=False):
         else:
             stypes = ['abab', 'xyxy', 'aabb']
             copies = {'abab': ['abba'], 'xyxy': ['xyyx']}
-        get_kmap_and_spec(stypes=stypes, copies=copies, N1=True, cmbset='a', mf_pair=mf_pair, **common_kw)
+        get_kmap_and_spec(
+            stypes=stypes, copies=copies, N1=True, cmbset='a', mf_pair=mf_pair, **common_kw, spectype='n1'
+        )
         if args.cross:
-            get_kmap_and_spec(stypes=['aa'], N1=True, cmbset='a', mf_pair=(0, 0), **common_kw)
+            get_kmap_and_spec(stypes=['aa'], N1=True, cmbset='a', mf_pair=(0, 0), **common_kw, spectype='n1')
     else:
         raise ValueError(f"unknown spectrum mode: {mode}")
 
@@ -214,6 +246,7 @@ if __name__ == "__main__":
     parser.add_argument('-cross', action='store_true', help='compute cross spectra')
     parser.add_argument('-curl', action='store_true', help='compute the curl mode')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
+    parser.add_argument('-split', default=None, type=startup.none_str, help='Data split')
     args = parser.parse_args()
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
@@ -222,10 +255,9 @@ if __name__ == "__main__":
 
     config.tmp_dir = config.path(config.outdir, 'tmp/')  # /tmp might be too small for storage
     config.tmp_file_mask = os.path.join(config.tmp_dir, 'psmask.fits')
-
     if comm.rank == 0:
         os.makedirs(config.tmp_dir, exist_ok=True)
-        hp.write_map(config.tmp_file_mask, config.mask_ps, dtype=np.float32, overwrite=True)
+        hp.write_map(config.tmp_file_mask, config.mask_ps(args.split), dtype=np.float32, overwrite=True)
     comm.barrier()
 
     try:
@@ -237,7 +269,15 @@ if __name__ == "__main__":
         ClsDB.mpi_write(comm)
     else:
         for _i, _cmbset, _mode in task_loop[comm.rank :: (comm.size - 1)]:
-            main(_i, cmbset=_cmbset, mode=_mode, mvtype=args.mvtype, curl=args.curl, skip=args.skip)
+            main(
+                _i,
+                cmbset=_cmbset,
+                mode=_mode,
+                mvtype=args.mvtype,
+                split=args.split,
+                curl=args.curl,
+                skip=args.skip,
+            )
         comm.send(None, dest=comm.size - 1)
 
     comm.barrier()

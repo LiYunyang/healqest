@@ -69,19 +69,9 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
             almbars = {s: _ for s, _ in zip('TEB', almbars)}
         return almbars, flms
 
-    fsky_tt = np.mean(config.mask_cinv['t'] ** 2)
-    fsky_tp = np.mean(config.mask_cinv['t'] * config.mask_cinv['p'])
-    fsky_pp = np.mean(config.mask_cinv['p'] ** 2)
-
-    def qe2fsky(qe):
-        assert set(qe.lower()).issubset('teb')
-        assert len(qe) == 2
-        if set(qe.lower()) == {'t'}:
-            return fsky_tt
-        elif set(qe.lower()).issubset({'e', 'b'}):
-            return fsky_pp
-        else:
-            return fsky_tp
+    # this matches with `mask_bias` computation in `compute_ps`
+    # the absolute scaling is not very important as they will both be normalized by MCresp.
+    fsky = np.mean(config.mask_cinv['t'] * config.mask_cinv['p'])
 
     almbars = dict()
     fls = dict()
@@ -157,10 +147,10 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         Z = almbars[pair2[0]][qe2[0]]
         A = almbars[pair2[1]][qe2[1]]
 
-        XZ = hp.alm2cl(X, Z) / qe2fsky(qe1[0] + qe2[0])
-        YA = hp.alm2cl(Y, A) / qe2fsky(qe1[1] + qe2[1])
-        XA = hp.alm2cl(X, A) / qe2fsky(qe1[0] + qe2[1])
-        YZ = hp.alm2cl(Y, Z) / qe2fsky(qe1[1] + qe2[0])
+        XZ = hp.alm2cl(X, Z) / fsky
+        YA = hp.alm2cl(Y, A) / fsky
+        XA = hp.alm2cl(X, A) / fsky
+        YZ = hp.alm2cl(Y, Z) / fsky
         ret = np.zeros(config.Lmax + 1, dtype=np.complex128)
         return resp.fill_clq1q2_fullsky(qeXY, qeZA, ret, XZ, YA, XA, YZ, fast=True)
 

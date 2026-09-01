@@ -1,16 +1,9 @@
 import numpy as np
+from ..mpi import rank
 from .. import log
 from . import cinv_utils
 
 logger = log.get_logger(__name__)
-
-try:
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-except ImportError:
-    rank = 0
 
 
 class Logger:

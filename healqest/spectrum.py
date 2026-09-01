@@ -119,11 +119,9 @@ class ClsDB:
 
         Receive (db_path, table, [(key, cl), ...]) from workers until all send None.
         """
-        from mpi4py import MPI
-
         n_workers, n_done, dbs = comm.size - 1, 0, {}
         while n_done < n_workers:
-            msg = comm.recv(source=MPI.ANY_SOURCE, tag=MPI.ANY_TAG)
+            msg = comm.recv()
             if msg is None:
                 n_done += 1
             else:

@@ -3,13 +3,7 @@
 import logging
 import sys
 
-try:
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-except ImportError:
-    rank = 0
+from .mpi import rank
 
 
 class MPIFilter(logging.Filter):

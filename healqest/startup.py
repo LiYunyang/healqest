@@ -25,18 +25,12 @@ import healpy as hp
 import yaml
 from git import Repo, InvalidGitRepositoryError
 
+from .mpi import rank
 from healqest import healqest_utils as hq, log
 from healqest.spectrum import ClsDB
 
-try:
-    from mpi4py import MPI
-
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    if rank != 0:
-        warnings.filterwarnings("ignore")
-except ImportError:
-    rank = 0
+if rank != 0:
+    warnings.filterwarnings("ignore")
 
 logger = log.get_logger(__name__)
 

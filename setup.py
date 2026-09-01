@@ -28,5 +28,5 @@ if __name__ == "__main__":
                 'initializedcheck': True,
             },
         ),
-        package_data={"healqest": ["*.so", "src/*.h", "data/*"]},
+        package_data={"healqest": ["*.so", "src/*.h", "data/*", "data/camb/*"]},
     )

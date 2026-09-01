@@ -1,4 +1,5 @@
 import os
+from importlib import resources
 from astropy.io import fits
 import numpy as np
 import healpy as hp
@@ -64,6 +65,19 @@ def get_lensedcls(file, lmax=2000, return_dict=False):
         return ell, *cls
     else:
         return {key: cls[i] for i, key in enumerate(['tt', 'ee', 'bb', 'te'])}
+
+
+def get_default_cls(lmax=4000):
+    """Load the bundled Planck 2018 lensed CMB power spectra.
+
+    The returned spectra are ``C_ell`` arrays, with zero padding at ell 0 and 1.
+    """
+    resource = resources.files("healqest").joinpath(
+        "data", "camb", "planck2018_base_plikHM_TTTEEE_lowl_lowE_lensing_lensedCls.dat"
+    )
+    with resources.as_file(resource) as file:
+        ell, tt, ee, bb, te = get_lensedcls(file, lmax=lmax)
+    return {"ell": ell, "tt": tt, "ee": ee, "bb": bb, "te": te}
 
 
 def get_unlensedcls(file, lmax=2000):

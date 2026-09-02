@@ -198,10 +198,10 @@ def build_task_loop(args, config):
     """Build the requested standard, RDN0, and N1 reconstruction tasks."""
     task_loops = []
 
-    if args.std or args.std_xx_only:
+    if args.std or args.std_xx:
         sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
         std_loops = [[args.set, sim_range, args.set, sim_range, 'xx']]
-        if not args.std_xx_only:
+        if not args.std_xx:
             std_loops.extend(
                 [
                     [args.set, sim_range, args.set2, sim_range + 1, 'xy'],
@@ -243,7 +243,7 @@ def build_task_loop(args, config):
         )
 
     if not task_loops:
-        raise ValueError("select at least one reconstruction mode: -std, -rdn0, or -n1")
+        raise ValueError("select at least one reconstruction mode: -std, -std-xx, -rdn0, or -n1")
 
     task_loop = np.concatenate([np.insert(expand_loops(loops), 4, N1, axis=1) for N1, loops in task_loops])
 
@@ -272,7 +272,7 @@ if __name__ == "__main__":
     >>> $run scripts/rec_lens.py -c $config -m $data -f $field -std -skip
 
     - standard/N0-type xx-only lensing reconstructions
-    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -std -std-xx-only -skip
+    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -std-xx -skip
 
     - N1-type lensing reconstructions
     >>> $run scripts/rec_lens.py -c $config -m $data -f $field -n1 -skip
@@ -282,7 +282,7 @@ if __name__ == "__main__":
     """
     parser = startup.parser()
     parser.add_argument('-std', action='store_true', help='do standard/N0-type operations')
-    parser.add_argument('-std-xx-only', action='store_true', help='restrict -std operations to xx tasks')
+    parser.add_argument('-std-xx', action='store_true', help='do standard/N0-type xx tasks only')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     args = parser.parse_known_args()[0]

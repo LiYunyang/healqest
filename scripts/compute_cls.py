@@ -147,7 +147,10 @@ def build_task_loop(args, config):
     """Build the requested standard, RDN0, and N1 spectrum tasks."""
     tasks = []
 
-    if args.std:
+    if args.std_xx:
+        seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+        tasks.extend((seed, args.set, 'std_xx') for seed in seeds)
+    elif args.std:
         seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
         tasks.extend((seed, args.set, 'std') for seed in seeds)
 
@@ -161,21 +164,25 @@ def build_task_loop(args, config):
         tasks.extend((seed, 'a', 'n1') for seed in seeds)
 
     if not tasks:
-        raise ValueError("select at least one spectrum mode: -std, -rdn0, or -n1")
+        raise ValueError("select at least one spectrum mode: -std, -std-xx, -rdn0, or -n1")
     return tasks
+
+
+def standard_stypes(quick, std_xx):
+    """Select standard N0 spectrum types, optionally restricting to xx."""
+    if std_xx:
+        return ['xxxx'], None
+    if quick:
+        return ['xxxx', 'xyxy'], {'xyxy': ['xyyx']}
+    return ['xxxx', 'xyyx', 'xyxy'], None
 
 
 def main(i, mvtype, cmbset, mode, split=None, curl=False, skip=False):
     mf_pair = [1, 2] if config.mfsplit else [0, 0]
     common_kw = dict(i=i, mvtype=mvtype, skip=skip, curl=curl, config=config, split=split)
     quick = config.quick and hq.mv_is_symm(mvtype)
-    if mode == 'std':
-        if not quick:
-            stypes = ['xxxx', 'xyyx', 'xyxy']
-            copies = None
-        else:
-            stypes = ['xxxx', 'xyxy']
-            copies = {'xyxy': ['xyyx']}
+    if mode in {'std', 'std_xx'}:
+        stypes, copies = standard_stypes(quick, std_xx=mode == 'std_xx')
         get_kmap_and_spec(
             stypes=stypes, copies=copies, N1=False, cmbset=cmbset, mf_pair=mf_pair, **common_kw, spectype='n0'
         )
@@ -234,6 +241,8 @@ if __name__ == "__main__":
     --------
     - standard N0-type spectra
     >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -std [-curl]
+    - standard N0-type xx-only spectra
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -std-xx [-curl]
     - N1-type spectra
     >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -n1 [-curl]
     - RDN0-type spectra, including the seed-0 data spectrum
@@ -241,6 +250,7 @@ if __name__ == "__main__":
     """
     parser = startup.parser()
     parser.add_argument('-std', action='store_true', help='do standard Cls')
+    parser.add_argument('-std-xx', action='store_true', help='do standard xxxx spectrum only')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     parser.add_argument('-mvtype', default=None, type=str, help='MV type')
     parser.add_argument('-cross', action='store_true', help='compute cross spectra')

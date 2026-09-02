@@ -102,6 +102,9 @@ if __name__ == "__main__":
     - N0-type stacking.
     >>> $run scripts/get_plmstack.py -c $config -f $field [-set a] -std
 
+    - N0-type xx-only stacking.
+    >>> $run scripts/get_plmstack.py -c $config -f $field [-set a] -std-xx
+
     - N1-type stacking. `set` has to be `a` (or omit), the a/b type will be handled internally.
     >>> $run scripts/get_plmstack.py -c $config -f $field -set a -n1
 
@@ -111,6 +114,7 @@ if __name__ == "__main__":
     parser = startup.parser()
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     parser.add_argument('-std', action='store_true', help='do standard Cls')
+    parser.add_argument('-std-xx', action='store_true', help='do standard xx stacks only')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
     args = parser.parse_args()
     log.setup_logger(verbose=args.verbose)
@@ -121,7 +125,9 @@ if __name__ == "__main__":
     tags = config.mvtypes
 
     keys = []
-    if args.std:
+    if args.std_xx:
+        keys += ['xx']
+    elif args.std:
         keys += ['xx', 'xy', 'yx']
     if args.rdn0:
         keys += ['x0', '0x']

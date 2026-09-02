@@ -21,23 +21,6 @@ def cl2almformat(cl):
     return alm
 
 
-def read_map(m):
-    """Reads a map whether given as (list of) string (with ',f' denoting field f), array or callable."""
-    if callable(m):
-        return m()
-    if isinstance(m, list):
-        ma = read_map(m[0])
-        for m2 in m[1:]:
-            ma *= read_map(m2)
-        return ma
-    if not isinstance(m, str):
-        return m
-    if "," not in m:
-        return hp.read_map(m)
-    m, field = m.split(",")
-    return hp.read_map(m, field=int(field))
-
-
 class jit:
     """just-in-time instantiation wrapper class."""
 

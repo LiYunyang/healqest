@@ -47,6 +47,18 @@ def reduce_lmax(alm, lmax=4000):
     return almout
 
 
+def smooth_cl(cl, sigma=50):
+    """Smooth a one-dimensional power spectrum in D_ell."""
+    from scipy.ndimage import gaussian_filter1d
+
+    ell = np.arange(len(cl))
+    fac = ell * (ell + 1) / (2 * np.pi)
+    dl = gaussian_filter1d(cl * fac, sigma=sigma, mode="nearest")
+    dl[2:] /= fac[2:]
+    dl[:2] = cl[:2]
+    return dl
+
+
 def get_nside(lmax):
     """Calculates the most appropriate nside based on lmax."""
     nside = np.array([8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384])

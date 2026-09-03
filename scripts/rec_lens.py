@@ -140,8 +140,6 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None)
             if quick and inv_qe in qes and inv_qe_key != qe_key:
                 add_reconstruction(inv_qe, glm, clm, aresp_g, aresp_c)
 
-        del glm, clm, aresp_g, aresp_c, estimator, almbars1, almbars2, flms1, flms2
-
     # create the common partial index file
     partial_index = np.where(config.mask_boundary > 0)[0]
     index_file = config.p_index

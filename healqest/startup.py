@@ -673,6 +673,28 @@ class Config:
         fname = f'cinv_{ilc_type}_{seed}_{cmbset}{N1_tag}.{ext}'
         return self.path(self.cinvdir, subdir, fname)
 
+    def p_ilc(self, seed, cmbset, ilc_type: str = 'mv', N1=False, bundle=None, ext='fits'):
+        """
+        Path to the ilc maps (as output of cinv, or input of reclens).
+
+        Parameter
+        ---------
+        cinv_type: str
+            Type of the cinv file. Can be sqe or gmv
+        seed: int
+        cmbset: str
+            Single letter strings. Accepted values are 'a', 'b'
+        N1: bool=False
+        bundle: int=None
+        ext: str='fits'
+        """
+        N1_tag = "_N1" if N1 else ""
+        subdir = 'ilc'
+        if bundle is not None:  # MF and N1 don't do bundle
+            subdir = f"{subdir}/{self.bundle2str(bundle)}"
+        fname = f'ilc_{ilc_type}_{seed}_{cmbset}{N1_tag}.{ext}'
+        return self.path(self.cinvdir, subdir, fname)
+
     def p_plm(
         self,
         tag=None,

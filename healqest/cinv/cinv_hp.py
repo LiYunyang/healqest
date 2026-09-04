@@ -410,10 +410,9 @@ class library_cinv_sTP:
         poalrization-only filtering library
     """
 
-    def __init__(self, sim_lib, cinvt: cinv_t, cinvp: cinv_p, lfilt=None, add_noise=False):
+    def __init__(self, sim_lib, cinvt: cinv_t, cinvp: cinv_p, lfilt=None):
         self.sim_lib = sim_lib
         self.lfilt = lfilt
-        self.add_noise = add_noise
         self.cinv_t = cinvt
         self.cinv_p = cinvp
         self.g = cinvp.g
@@ -457,7 +456,7 @@ class library_cinv_sTP:
             inverse-filtered temperature healpy alm array
         """
         soltn = None
-        map_in = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
+        map_in = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, g=self.g)
         tlm = self._apply_ivf_t(map_in, soltn=soltn)
         if self.lfilt is not None:
             # noinspection PyTypeChecker
@@ -481,7 +480,7 @@ class library_cinv_sTP:
         elm, blm
             inverse-filtered E/B alm arrays
         """
-        map_in = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
+        map_in = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, g=self.g)
         elm, blm = self._apply_ivf_p(map_in, soltn=None)
 
         if self.lfilt is not None:
@@ -511,10 +510,9 @@ class library_cinv_jTP:
         temperature and pol joint filtering library
     """
 
-    def __init__(self, sim_lib, cinv_jtp: cinv_tp, lfilt=None, add_noise=False):
+    def __init__(self, sim_lib, cinv_jtp: cinv_tp, lfilt=None):
         self.sim_lib = sim_lib
         self.lfilt = lfilt
-        self.add_noise = add_noise
         self.cinv_tp = cinv_jtp
         self.g = cinv_jtp.g
 
@@ -524,8 +522,8 @@ class library_cinv_jTP:
     def _get_alms(self, a, seed, cmbset, bundle):
         assert a in ["t", "e", "b", "teb"]
 
-        T = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
-        Q, U = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, add_noise=self.add_noise, g=self.g)
+        T = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, g=self.g)
+        Q, U = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, g=self.g)
         tlm, elm, blm = self._apply_ivf([T, Q, U], soltn=None)
 
         if self.lfilt is not None:
@@ -566,7 +564,7 @@ class MapsBase(abc.ABC):
             cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
         bundle: int
             integer number from 0--`config.nbundle`-1.
-        add_noise: bool=False
+        add_noise: bool=True
             For simulations, this controls whether to add noise to the map.
         apply_tf: bool=False
             Whether to apply transfer function to the signal map.
@@ -592,7 +590,7 @@ class MapsBase(abc.ABC):
             cmbset of the sims. Available sets are single letter strings, e.g., 'a/b'.
         bundle: int
             integer number from 0--`config.nbundle`-1.
-        add_noise: bool=False
+        add_noise: bool=True
             For simulations, this controls whether to add noise to the map.
         apply_tf: bool=False
             Whether to apply transfer function to the signal map.

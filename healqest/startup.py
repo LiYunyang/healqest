@@ -91,7 +91,6 @@ class Config:
     file_pysm: str = None  # path to pysm maps to add to simulations.
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
 
-    add_noise: bool = True  # whether to add noise in simulations.
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
     cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
     fmask_cinv: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for cinv

@@ -26,7 +26,6 @@ def main(seed, cmbset, N1, ilc_type):
     sims = dm.Data(config=config, N1=N1, ilc_type=ilc_type)
     (ninv_t, ninv_p), ninv_nl = sims.get_ninv()
     nlres = sims.get_nlres(cinv=True)
-    add_noise = config.add_noise and not N1
 
     common_kw = dict(
         lmax=config.cinv_lmax,
@@ -48,7 +47,7 @@ def main(seed, cmbset, N1, ilc_type):
             ninv=[ninv_p, ninv_p], tf1d=config.tf1d['p'], bl=config.bl, eps_min=config.eps_p, **common_kw
         )
 
-        ivfs = cinv.library_cinv_sTP(sims, cinvt=cinv_t, cinvp=cinv_p, add_noise=add_noise)
+        ivfs = cinv.library_cinv_sTP(sims, cinvt=cinv_t, cinvp=cinv_p)
 
         tlmbar = ivfs.get_sim_tlm(seed=seed, cmbset=cmbset, bundle=args.bundle)
         elmbar, blmbar = ivfs.get_sim_eblm(seed=seed, cmbset=cmbset, bundle=args.bundle)
@@ -62,7 +61,7 @@ def main(seed, cmbset, N1, ilc_type):
             **common_kw,
         )
 
-        ivfs = cinv.library_cinv_jTP(sims, cinv_jtp=cinv_tp, add_noise=add_noise)
+        ivfs = cinv.library_cinv_jTP(sims, cinv_jtp=cinv_tp)
         almbar = ivfs.get_sim_teblm(seed=seed, cmbset=cmbset, bundle=args.bundle)
     else:
         raise NotImplementedError(f"cinv for {config.rectype} is not implemented")

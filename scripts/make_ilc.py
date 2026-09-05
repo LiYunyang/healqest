@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import os
 import healpy as hp
 import numpy as np

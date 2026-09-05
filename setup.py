@@ -19,6 +19,7 @@ if __name__ == "__main__":
         version="0.1.0",
         packages=find_packages(),
         include_package_data=True,
+        scripts=["scripts/make_ilc.py"],
         ext_modules=cythonize(
             wignerd_ext,
             compiler_directives={

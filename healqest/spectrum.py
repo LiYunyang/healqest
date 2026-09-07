@@ -510,7 +510,8 @@ class KappaMap:
             self._make_map_kin()  # input kappa map from alms. Optionally save to disk for polspice.
         else:
             self._make_map()  # create the mf-subtracted kappa maps. Optionally save to disk for polspice.
-        self.file_mask = getattr(self.config, 'tmp_file_mask', None)  # the on-disk mask file for polspice.
+        tmp_file_mask = getattr(self.config, 'tmp_file_mask', {})
+        self.file_mask = tmp_file_mask.get(self.split)  # the on-disk mask file for polspice.
 
     def _save_map(self, kmap, bundle_key=None):
         fname = self.get_fname(bundle_key=bundle_key)

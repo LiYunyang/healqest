@@ -143,8 +143,15 @@ def get_kmap_and_spec(  # noqa: C901
             comm.send((db.path, db.table, local_results), dest=comm.size - 1)
 
 
+def task_options(args, config):
+    """Return the requested MV types and splits, applying configuration defaults."""
+    mvtypes = list(config.mvtypes) if args.mvtype is None else args.mvtype
+    splits = [None] if args.split is None else args.split
+    return mvtypes, splits
+
+
 def build_task_loop(args, config):
-    """Build the requested standard, RDN0, and N1 spectrum tasks."""
+    """Build the requested standard, RDN0, and N1 spectrum tasks for every MV type and split."""
     tasks = []
 
     if args.std_xx:
@@ -165,7 +172,13 @@ def build_task_loop(args, config):
 
     if not tasks:
         raise ValueError("select at least one spectrum mode: -std, -std-xx, -rdn0, or -n1")
-    return tasks
+    mvtypes, splits = task_options(args, config)
+    return [
+        (seed, cmbset, mode, mvtype, split)
+        for seed, cmbset, mode in tasks
+        for mvtype in mvtypes
+        for split in splits
+    ]
 
 
 def standard_stypes(quick, std_xx):
@@ -240,35 +253,41 @@ if __name__ == "__main__":
     Examples
     --------
     - standard N0-type spectra
-    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -std [-curl]
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype GMVph MV -split none highb -std [-curl]
     - standard N0-type xx-only spectra
-    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -std-xx [-curl]
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype GMVph MV -std-xx [-curl]
     - N1-type spectra
-    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -n1 [-curl]
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype GMVph MV -n1 [-curl]
     - RDN0-type spectra, including the seed-0 data spectrum
-    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype $mv -rdn0 [-curl]
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype GMVph MV -rdn0 [-curl]
     """
     parser = startup.parser()
     parser.add_argument('-std', action='store_true', help='do standard Cls')
     parser.add_argument('-std-xx', action='store_true', help='do standard xxxx spectrum only')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
-    parser.add_argument('-mvtype', default=None, type=str, help='MV type')
+    parser.add_argument('-mvtype', nargs='+', default=None, type=str, help='MV type(s)')
     parser.add_argument('-cross', action='store_true', help='compute cross spectra')
     parser.add_argument('-curl', action='store_true', help='compute the curl mode')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
-    parser.add_argument('-split', default=None, type=startup.none_str, help='Data split')
+    parser.add_argument('-split', nargs='+', default=None, type=startup.none_str, help='Data split(s)')
     args = parser.parse_args()
     log.setup_logger(verbose=args.verbose)
     config = startup.Config.from_args(args)
+    args.mvtype, args.split = task_options(args, config)
 
     assert comm.size > 1, f"{__name__} only works in MPI mode."
 
     config.tmp_dir = config.path(config.outdir, 'tmp/')  # /tmp might be too small for storage
-    split_hash = hashlib.sha256(str(args.split).encode()).hexdigest()[:8]
-    config.tmp_file_mask = os.path.join(config.tmp_dir, f'psmask_{split_hash}.fits')
+    config.tmp_file_mask = {
+        split: os.path.join(
+            config.tmp_dir, f'psmask_{hashlib.sha256(str(split).encode()).hexdigest()[:8]}.fits'
+        )
+        for split in args.split
+    }
     if comm.rank == 0:
         os.makedirs(config.tmp_dir, exist_ok=True)
-        hp.write_map(config.tmp_file_mask, config.mask_ps(args.split), dtype=np.float32, overwrite=True)
+        for split, filename in config.tmp_file_mask.items():
+            hp.write_map(filename, config.mask_ps(split), dtype=np.float32, overwrite=True)
     comm.barrier()
 
     task_loop = build_task_loop(args, config)
@@ -276,18 +295,11 @@ if __name__ == "__main__":
     if comm.rank == comm.size - 1:
         ClsDB.mpi_write(comm)
     else:
-        for _i, _cmbset, _mode in task_loop[comm.rank :: (comm.size - 1)]:
-            main(
-                _i,
-                cmbset=_cmbset,
-                mode=_mode,
-                mvtype=args.mvtype,
-                split=args.split,
-                curl=args.curl,
-                skip=args.skip,
-            )
+        for _i, _cmbset, _mode, _mvtype, _split in task_loop[comm.rank :: (comm.size - 1)]:
+            main(_i, cmbset=_cmbset, mode=_mode, mvtype=_mvtype, split=_split, curl=args.curl, skip=args.skip)
         comm.send(None, dest=comm.size - 1)
 
     comm.barrier()
     if comm.rank == 0:
-        os.unlink(config.tmp_file_mask)
+        for filename in config.tmp_file_mask.values():
+            os.unlink(filename)

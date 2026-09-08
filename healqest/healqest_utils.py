@@ -130,7 +130,8 @@ def mvtype2qe(mvtype) -> list:
         return [mvtype]
     elif mvtype in ['MVph', 'TTEETEph', 'TPph']:  # compund profile-harden estimators for SQE
         qes = mvtype2qe(mvtype.removesuffix('ph'))
-        qes[qes.index('TT')] = 'TTph'
+        if 'TT' in qes:
+            qes[qes.index('TT')] = 'TTph'
         return qes
     elif mvtype in ['GMVph', 'GTTEETEph', 'GTBEBph', 'GTPph']:  # compund profile-harden estimators for GMV
         _qes = mvtype2qe(mvtype.removesuffix('ph').removeprefix('G'))

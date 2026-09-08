@@ -157,7 +157,10 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None)
         glm, aresp_grad = qest.coadd_qe_alm(mvtype, alms_grads, aresp_grads, config.Lmax)
         clm, aresp_curl = qest.coadd_qe_alm(mvtype, alms_curls, aresp_curls, config.Lmax)
 
-        maps = config.g.alm2map([glm, clm], pol=False).astype(np.float32)
+        if config.disable_curl:
+            maps = np.atleast_2d(config.g.alm2map(glm, pol=False)).astype(np.float32)
+        else:
+            maps = config.g.alm2map([glm, clm], pol=False).astype(np.float32)
         file_plm = config.p_plm(
             tag=mvtype, seed1=seed1, cmbset1=cmbset1, seed2=seed2, cmbset2=cmbset2, N1=N1, bundle=bundle_pair
         )

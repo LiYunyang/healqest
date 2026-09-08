@@ -23,7 +23,21 @@ def load(tag, i, ktype, cmbset, N1=False, bundle=None):
     s1, s2, c1, c2 = config.ktype2ij(ktype, i, j=None, cmbset=cmbset)
 
     fname = config.p_plm(tag=tag, seed1=s1, seed2=s2, cmbset1=c1, cmbset2=c2, N1=N1, bundle=bundle)
-    return healqest_utils.read_map(fname, dtype=np.float64, field=(0, 1), return_cosmo=False, partial=True)
+    field = 0 if config.disable_curl else (0, 1)
+    return healqest_utils.read_map(fname, dtype=np.float64, field=field, return_cosmo=False, partial=True)
+
+
+def accumulate_mean_fields(tag, ktype, cmbset, N1, bundle, i1, i2, split_index, components):
+    mean_fields = np.zeros((len(components), 2, len(partial_index)), dtype=np.float64)
+    nsims = np.zeros(2, dtype=int)
+
+    for i in range(i1, i2 + 1):
+        plms = np.atleast_2d(load(tag, i, ktype, cmbset=cmbset, N1=N1, bundle=bundle))
+        half = int(i >= split_index + 1)
+        np.add(mean_fields[:, half], plms, out=mean_fields[:, half])
+        nsims[half] += 1
+
+    return mean_fields, nsims
 
 
 def main(tag, key, bundle, cmbset):
@@ -39,49 +53,37 @@ def main(tag, key, bundle, cmbset):
 
     i1, i2 = config.sim_range_N1 if N1 else config.sim_range
     spl_i = (i1 + i2) // 2  # mf split mid point
-    npix_partial = len(partial_index)
-    mf1_grad = np.zeros(npix_partial, dtype=np.float64)
-    mf2_grad = np.zeros(npix_partial, dtype=np.float64)
-    mf1_curl = np.zeros(npix_partial, dtype=np.float64)
-    mf2_curl = np.zeros(npix_partial, dtype=np.float64)
-    nsim1, nsim2 = 0, 0
+    components = ('grad',) if config.disable_curl else ('grad', 'curl')
 
     fname = config.p_plm(tag=tag, stack_type=ktype, N1=N1, bundle=bundle, cmbset=cmbset)
     if args.skip and os.path.exists(fname):
         return
     os.makedirs(os.path.dirname(fname), exist_ok=True)
 
-    for i in range(i1, i2 + 1, 1):
-        mf_g, mf_c = load(tag, i, ktype, cmbset=cmbset, N1=N1, bundle=bundle)
-        if i < spl_i + 1:
-            np.add(mf1_grad, mf_g, out=mf1_grad)
-            np.add(mf1_curl, mf_c, out=mf1_curl)
-            nsim1 += 1
-        else:
-            np.add(mf2_grad, mf_g, out=mf2_grad)
-            np.add(mf2_curl, mf_c, out=mf2_curl)
-            nsim2 += 1
+    mean_fields, nsims = accumulate_mean_fields(tag, ktype, cmbset, N1, bundle, i1, i2, spl_i, components)
 
     # write to disk
-    maps_out = np.full((6, hp.nside2npix(config.nside)), hp.UNSEEN, dtype=np.float32)
-    maps_out[0, partial_index] = mf1_grad + mf2_grad
-    maps_out[1, partial_index] = mf1_grad
-    maps_out[2, partial_index] = mf2_grad
-    maps_out[3, partial_index] = mf1_curl + mf2_curl
-    maps_out[4, partial_index] = mf1_curl
-    maps_out[5, partial_index] = mf2_curl
-    del mf1_grad, mf2_grad, mf1_curl, mf2_curl
+    maps_out = np.full((3 * len(components), hp.nside2npix(config.nside)), hp.UNSEEN, dtype=np.float32)
+    column_names = []
+    for component_index, (component, (mf1, mf2)) in enumerate(zip(components, mean_fields)):
+        offset = 3 * component_index
+        prefix = component[0]
+        maps_out[offset, partial_index] = mf1 + mf2
+        maps_out[offset + 1, partial_index] = mf1
+        maps_out[offset + 2, partial_index] = mf2
+        column_names += [f'{prefix}mf', f'{prefix}mf1', f'{prefix}mf2']
+
     hp.write_map(
         fname,
         maps_out,
         overwrite=True,
         dtype=np.float32,
         partial=True,
-        column_names=['gmf', 'gmf1', 'gmf2', 'cmf', 'cmf1', 'cmf2'],
+        column_names=column_names,
         extra_header=[
-            ('NSIM', nsim1 + nsim2, "Number of sims in total"),
-            ('NSIM1', nsim1, "Number of sims in MF group 1"),
-            ('NSIM2', nsim2, "Number of sims in MF group 2"),
+            ('NSIM', int(np.sum(nsims)), "Number of sims in total"),
+            ('NSIM1', int(nsims[0]), "Number of sims in MF group 1"),
+            ('NSIM2', int(nsims[1]), "Number of sims in MF group 2"),
             ('SPLITIDX', spl_i, "Index that splits two MF groups"),
         ],
     )

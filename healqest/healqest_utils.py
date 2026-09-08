@@ -115,6 +115,7 @@ def mvtype2qe(mvtype) -> list:
     composite = {
         "MV": ["TT", "EE", "EB", "TE", "TB", "BE", "ET", "BT"],
         "PP": ["EE", "EB", "BE"],
+        "TP": ["TE", "ET", "TB", "BT"],
         "TTEETE": ["TT", "EE", "TE", "ET"],
         "TBEB": ["TB", "BT", "EB", "BE"],
         "TEET": ["TE", "ET"],
@@ -127,11 +128,11 @@ def mvtype2qe(mvtype) -> list:
         return composite[mvtype]
     elif mvtype in Qest.__PH_ESTIMATORS__:  # single ph estimators
         return [mvtype]
-    elif mvtype in ['MVph', 'TTEETEph']:  # compund profile-harden estimators for SQE
+    elif mvtype in ['MVph', 'TTEETEph', 'TPph']:  # compund profile-harden estimators for SQE
         qes = mvtype2qe(mvtype.removesuffix('ph'))
         qes[qes.index('TT')] = 'TTph'
         return qes
-    elif mvtype in ['GMVph', 'GTTEETEph', 'GTBEBph']:  # compund profile-harden estimators for GMV
+    elif mvtype in ['GMVph', 'GTTEETEph', 'GTBEBph', 'GTPph']:  # compund profile-harden estimators for GMV
         _qes = mvtype2qe(mvtype.removesuffix('ph').removeprefix('G'))
         qes = [_ + 'ph' if _ + 'ph' in Qest.__PH_ESTIMATORS__ else _ for _ in _qes]
         return qes
@@ -142,7 +143,7 @@ def mvtype2qe(mvtype) -> list:
 def mv_is_symm(mvtype):
     """Check if mvtype is symmetric (e.g., TT, TE, EB) or asymmetric (e.g., TB, ET, BE)."""
     _mv = mvtype.removesuffix('ph').removeprefix('G')
-    return _mv in ['TT', 'EE', 'MV', 'PP', 'TTEETE', 'TEET', 'TBBT', 'TBEB']
+    return _mv in ['TT', 'EE', 'MV', 'PP', 'TTEETE', 'TEET', 'TBBT', 'TBEB', 'TP']
 
 
 def map_or_alm(m):

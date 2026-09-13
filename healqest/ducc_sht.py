@@ -534,10 +534,51 @@ def fast_subtract(maps: np.ndarray, cut_map: np.ndarray, ipix, tf_pix):
 
 
 @numba.njit(fastmath=True, parallel=False)
-def fast_assign(src: np.ndarray, dst: np.ndarray, ipix, tf_pix):
+def fast_assign(src: np.ndarray, dst: np.ndarray, src_pix, dst_pix):
     for i in numba.prange(src.shape[0]):  # Parallel over rows
-        for j in range(ipix.size):  # Sequential over columns
-            dst[i, tf_pix[j]] = src[i, ipix[j]]
+        for j in range(src_pix.size):  # Sequential over columns
+            dst[i, dst_pix[j]] = src[i, src_pix[j]]
+
+
+@numba.njit(fastmath=True, inline="always")
+def ring_transfer(im, nphi_i, mc_lp, power_lp, use_lp, smooth_lp, mc_hp, power_hp, use_hp, smooth_hp):
+    nyquist = nphi_i // 2
+    if im > nyquist:
+        return 0.0
+
+    transfer = 1.0 / nphi_i
+    m_safe = max(im, 1)
+    if use_hp:
+        if smooth_hp:
+            transfer *= np.exp(-((mc_hp / m_safe) ** power_hp))
+        elif im < mc_hp:
+            return 0.0
+    if use_lp:
+        if smooth_lp:
+            transfer *= np.exp(-((im / mc_lp) ** power_lp))
+        elif im > mc_lp:
+            return 0.0
+    if im == nyquist and nphi_i % 2 == 0:
+        transfer *= 0.5
+    return transfer
+
+
+@numba.njit(fastmath=True, parallel=True)
+def filter_rings_full(
+    legs, nphi, sin_theta, lx_lp, power_lp, use_lp, smooth_lp, lx_hp, power_hp, use_hp, smooth_hp
+):
+    """Apply the full ring transfer in place, parallelizing independent rings."""
+    ncomp, nrings, nmodes = legs.shape
+    for ir in numba.prange(nrings):
+        nphi_i = int(nphi[ir])
+        mc_lp = lx_lp * sin_theta[ir]
+        mc_hp = lx_hp * sin_theta[ir]
+        for im in range(nmodes):
+            transfer = ring_transfer(
+                im, nphi_i, mc_lp, power_lp, use_lp, smooth_lp, mc_hp, power_hp, use_hp, smooth_hp
+            )
+            for icomp in range(ncomp):
+                legs[icomp, ir, im] *= transfer
 
 
 class GeometryTF:
@@ -761,6 +802,121 @@ class GeometryTF:
             return np.exp(-((mc / np.maximum(m, 1)) ** power))
 
         return func
+
+
+class GeometryTF2(GeometryTF):
+    """GeometryTF but filtering modes with full transformation, not just low-lx."""
+
+    def __init__(self, geom, ipix=None, lx_lp=6144, power_lp=6, lx_hp=300, power_hp=6):
+        """
+        Setup a Geometry for m(theta) filter.
+
+        Parameters
+        ----------
+        geom: Geometry
+        ipix: int array, optional
+            The pixels to include for filtering, must be a subset of geom pixels. If None, use all pixels in
+            geom, which are in contuguous rings.
+        lx_lp, lx_hp: int
+            The lx cut (scale) for the low-pass and high-pass filter. If None, no cut is applied.
+        power_lp, power_hp: float or None
+            The power of the low-pass and high-pass filter. If set, the filter will take a exp-power-law form
+            instead of a hard cut. This number must be positive.
+        """
+        assert geom.ofs[0] == np.min(geom.ofs)
+        self.g = geom
+        self.lx_lp = lx_lp
+        self.lx_hp = lx_hp
+        if power_lp is not None:
+            assert power_lp > 0, "power_lp must be positive"
+        if power_hp is not None:
+            assert power_hp > 0, "power_hp must be positive"
+        self.power_lp = power_lp
+        self.power_hp = power_hp
+
+        self.ipix = None
+        self.tf_pix = None
+        if ipix is not None:
+            pass
+        else:
+            # very tricky, with unit type, np.arange becomes float!
+            ipix = np.arange(self.g.ofs[0], self.g.ofs[-1] + self.g.nphi[-1]).astype(int)
+        self.set_ipix(ipix)
+        self.sin_theta = np.sin(np.minimum(self.g.theta, np.pi))
+
+    @classmethod
+    def from_mask(cls, geom, mask, lx_lp=6144, power_lp=6, lx_hp=300, power_hp=6):
+        try:
+            hp.get_nside(mask)
+        except Exception:
+            raise ValueError("mask must be in Healpix format.")
+        ipix = np.where(mask != 0)[0]
+        return cls(geom, ipix=ipix, lx_lp=lx_lp, power_lp=power_lp, lx_hp=lx_hp, power_hp=power_hp)
+
+    def filter_rings(self, legs, nthreads=None):
+        nthreads = min(get_nthreads(nthreads), numba.config.NUMBA_NUM_THREADS)
+        previous_nthreads = numba.get_num_threads()
+        try:
+            numba.set_num_threads(nthreads)
+            filter_rings_full(
+                legs,
+                self.g.nphi,
+                self.sin_theta,
+                lx_lp=0.0 if self.lx_lp is None else self.lx_lp,
+                power_lp=0.0 if self.power_lp is None else self.power_lp,
+                use_lp=self.lx_lp is not None,
+                smooth_lp=self.power_lp is not None,
+                lx_hp=0.0 if self.lx_hp is None else self.lx_hp,
+                power_hp=0.0 if self.power_hp is None else self.power_hp,
+                use_hp=self.lx_hp is not None,
+                smooth_hp=self.power_hp is not None,
+            )
+        finally:
+            numba.set_num_threads(previous_nthreads)
+        return legs
+
+    def apply_map(self, maps, nthreads=None, fast=True):
+        """Filter maps.
+
+        Parameters
+        ----------
+        maps: np.ndarray
+            shape (ncomp, 12*nside**2)
+        nthreads: int=None
+        fast: bool=True
+            use the fast algorithm for array value assignment.
+
+        Returns
+        -------
+        maps: np.ndarray
+        """
+        assert maps.ndim == 2, maps.shape
+        nmaps, npix = maps.shape
+        nthreads = get_nthreads(nthreads)
+        kw = dict(nphi=self.g.nphi, ringstart=self.ofs, phi0=self.g.phi0, nthreads=nthreads)
+
+        _maps = np.zeros((nmaps, self.npix), dtype=maps.dtype)
+        if fast:
+            fast_assign(maps, _maps, self.ipix, self.tf_pix)
+        else:
+            _maps[:, self.tf_pix] = maps[:, self.ipix]
+        mmax = int(np.max(self.g.nphi) // 2)
+        legs = ducc0.sht.map2leg(map=_maps, mmax=mmax, **kw)
+        self.filter_rings(legs, nthreads=nthreads)
+        fmap = ducc0.sht.leg2map(leg=legs, **kw)
+        if fast:
+            fast_assign(fmap, maps, self.tf_pix, self.ipix)
+        else:
+            maps[:, self.ipix] = fmap[:, self.tf_pix]
+        return maps
+
+    def filter_maps(self, maps: np.ndarray, nthreads=None):
+        """Apply lx cut to maps of shape (1,2,3) for T/QU/TQU (inplace)."""
+        out = self.apply_map(np.atleast_2d(maps), nthreads=nthreads)
+        if maps.ndim == 1:
+            assert out.shape[0] == 1
+            return out[0]
+        return out
 
 
 def map2lens(maps, plm, g=None, **kwargs):

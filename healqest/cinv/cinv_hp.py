@@ -437,7 +437,7 @@ class library_cinv_sTP:
     def _apply_ivf_p(self, pmap, soltn=None):
         return self.cinv_p.apply_ivf(pmap, soltn=soltn)
 
-    def get_sim_tlm(self, seed, cmbset, bundle):
+    def get_sim_tlm(self, seed, cmbset, bundle, **kwargs):
         """
         Returns an inverse-filtered temperature simulation.
 
@@ -456,14 +456,14 @@ class library_cinv_sTP:
             inverse-filtered temperature healpy alm array
         """
         soltn = None
-        map_in = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, g=self.g)
+        map_in = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, g=self.g, **kwargs)
         tlm = self._apply_ivf_t(map_in, soltn=soltn)
         if self.lfilt is not None:
             # noinspection PyTypeChecker
             hp.almxfl(tlm, self.lfilt, inplace=True)
         return tlm
 
-    def get_sim_eblm(self, seed, cmbset, bundle):
+    def get_sim_eblm(self, seed, cmbset, bundle, **kwargs):
         """Returns an inverse-filtered E-polarization simulation.
 
         Parameters
@@ -480,7 +480,7 @@ class library_cinv_sTP:
         elm, blm
             inverse-filtered E/B alm arrays
         """
-        map_in = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, g=self.g)
+        map_in = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, g=self.g, **kwargs)
         elm, blm = self._apply_ivf_p(map_in, soltn=None)
 
         if self.lfilt is not None:
@@ -519,11 +519,11 @@ class library_cinv_jTP:
     def get_sim_teblm(self, seed, cmbset, bundle):
         return self._get_alms("teb", seed, cmbset, bundle=bundle)
 
-    def _get_alms(self, a, seed, cmbset, bundle):
+    def _get_alms(self, a, seed, cmbset, bundle, **kwargs):
         assert a in ["t", "e", "b", "teb"]
 
-        T = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, g=self.g)
-        Q, U = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, g=self.g)
+        T = self.sim_lib.get_tmap(seed, cmbset, bundle=bundle, g=self.g, **kwargs)
+        Q, U = self.sim_lib.get_pmap(seed, cmbset, bundle=bundle, g=self.g, **kwargs)
         tlm, elm, blm = self._apply_ivf([T, Q, U], soltn=None)
 
         if self.lfilt is not None:

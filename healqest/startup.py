@@ -65,6 +65,8 @@ class Config:
     # === base ===
     outdir: str
     recdir: str = None  # output directory for lensing rec. Default to outdir
+    cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
+    clsdir: str = None  # output directory for cls. Default to outdir
     nbundle: int = None  # number of bundles, if any.
 
     # === ilc ===
@@ -92,7 +94,6 @@ class Config:
     file_slm_N1: str  # path to (beamed) signal alm files for N1-type sims.
 
     ellscale: bool = True  # if True, apply the l(l+1)/2pi scaling to cinv cls
-    cinvdir: str = None  # The output directory for cinv maps. If not specified, set to "recdir"
     fmask_cinv: Union[str, dict, list[Union[str, dict]]] = None  # path(s) to mask used for cinv
 
     # === lensrec ===
@@ -161,6 +162,8 @@ class Config:
             logger.info(f"cinv IO directory (`cinvdir`): {obj.path(obj.cinvdir)}")
         if obj.recdir != obj.outdir:
             logger.info(f"lensrec IO directory (`recdir`): {obj.path(obj.recdir)}")
+        if obj.clsdir != obj.outdir:
+            logger.info(f"cls IO directory (`clsdir`): {obj.path(obj.clsdir)}")
 
         # save a hard copy of the config file and current script
         obj.copy_script(fname, dir_dst=obj.path(obj.outdir), git_track=False)
@@ -235,7 +238,8 @@ class Config:
         self.recdir = f"{self.recdir}/{self.rectype}"
         # all three types of ILC ('mv', 'cibfree', 'tszfree') go into the same `cinvdir`
         self.cinvdir = f"{self.cinvdir}/{self.rectype}"
-
+        if self.clsdir is None:
+            self.clsdir = self.outdir
         # auto adjust spice kwargs
         if self.spice_kwargs:
             for key in ['apodizesigma', 'thetamax']:
@@ -756,7 +760,7 @@ class Config:
         fname = f'{spec_type.lower()}.db'
         gc_tag = 'g' if not curl else 'c'
         table = f'{gc_tag}{tag}'
-        path = self.path(self.outdir, 'cls', split if split is not None else '', fname)
+        path = self.path(self.clsdir, 'cls', split if split is not None else '', fname)
         return ClsDB(path, table)
 
     def get_sql_keys(self, seed, ktype1, ktype2, cmbset='a'):

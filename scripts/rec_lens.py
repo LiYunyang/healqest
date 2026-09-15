@@ -9,7 +9,22 @@ from mpi4py.MPI import COMM_WORLD as comm
 logger = log.get_logger(__name__)
 
 
-def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None):  # noqa: C901
+def cinv_func(config, seed, cmbset, ilc_type, N1, bundle):
+    return hq.cinv_io(config.p_cinv(seed=seed, cmbset=cmbset, ilc_type=ilc_type, N1=N1, bundle=bundle))
+
+
+def main(  # noqa: C901
+    config,
+    seed1,
+    cmbset1,
+    seed2,
+    cmbset2,
+    N1,
+    bundle_pair=None,
+    combination=None,
+    skip=False,
+    cinv_func=cinv_func,
+):
     logger.info(
         f"lensrec {combination}: seeds {seed1, seed2}; cmbset {cmbset1, cmbset2}; "
         f"bundles {bundle_pair} (N1={N1})"
@@ -31,7 +46,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None)
             )
             mvtypes = [mvtype for mvtype in mvtypes if mvtype not in skipped_mvtypes]
 
-    if args.skip:
+    if skip:
         qes = list()
         pending_mvtypes = list()
         for mvtype in mvtypes:
@@ -68,9 +83,7 @@ def main(seed1, cmbset1, seed2, cmbset2, N1, bundle_pair=None, combination=None)
     logger.info(f"Performing MV: {mvtypes} QE: {qes}")
 
     def func(cmbset, seed, bundle, ilc_type, as_dict=False):
-        _maps, flms = hq.cinv_io(
-            config.p_cinv(seed=seed, cmbset=cmbset, ilc_type=ilc_type, N1=N1, bundle=bundle)
-        )
+        _maps, flms = cinv_func(config, seed, cmbset=cmbset, ilc_type=ilc_type, N1=N1, bundle=bundle)
 
         _maps[0] *= config.mask_qe['t']
         _maps[1:] *= config.mask_qe['p']
@@ -299,6 +312,7 @@ if __name__ == "__main__":
         comm.rank :: comm.size
     ]:
         main(
+            config,
             _seed1,
             _cmbset1,
             _seed2,
@@ -306,4 +320,5 @@ if __name__ == "__main__":
             N1=bool(_N1),
             bundle_pair=_bundle_pair,
             combination=_combination,
+            skip=args.skip,
         )

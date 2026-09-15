@@ -516,8 +516,8 @@ class library_cinv_jTP:
         self.cinv_tp = cinv_jtp
         self.g = cinv_jtp.g
 
-    def get_sim_teblm(self, seed, cmbset, bundle):
-        return self._get_alms("teb", seed, cmbset, bundle=bundle)
+    def get_sim_teblm(self, seed, cmbset, bundle, **kwargs):
+        return self._get_alms("teb", seed, cmbset, bundle=bundle, **kwargs)
 
     def _get_alms(self, a, seed, cmbset, bundle, **kwargs):
         assert a in ["t", "e", "b", "teb"]

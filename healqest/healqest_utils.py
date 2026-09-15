@@ -128,7 +128,7 @@ def mvtype2qe(mvtype) -> list:
         return composite[mvtype]
     elif mvtype in Qest.__PH_ESTIMATORS__:  # single ph estimators
         return [mvtype]
-    elif mvtype in ['MVph', 'TTEETEph', 'TPph']:  # compund profile-harden estimators for SQE
+    elif mvtype in ['MVph', 'TTEETEph']:  # compund profile-harden estimators for SQE
         qes = mvtype2qe(mvtype.removesuffix('ph'))
         if 'TT' in qes:
             qes[qes.index('TT')] = 'TTph'

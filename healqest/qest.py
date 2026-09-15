@@ -526,8 +526,6 @@ class HardenCache:
 
 
 def coadd_qe_alm(mvtype: str, alms: dict, response: dict, Lmax: int):
-    from healqest.startup import Config
-
     l = np.arange(Lmax + 1)
     alm = np.zeros(hp.Alm.getsize(Lmax), dtype=complex)
     aresp = np.zeros(Lmax + 1, dtype=float)

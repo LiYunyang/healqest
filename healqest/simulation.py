@@ -20,11 +20,20 @@ def sample_joint_alms(cls, seed=None):
     return np.einsum("aik,ka->ia", factors[ell], modes, optimize=True)
 
 
-def sample_agora_alms(fname_cls, fname_alm, cond_comp=(), seed=None):
+def sample_agora_alms(fname_cls, fname_alm, cond_comp=(), fg_amp=None, seed=None):
     """Return ``(alm_90, alm_150, alm_220)`` for unconditioned AGORA components."""
     COMPONENTS = ("rad", "cib", "tsz")
     FREQUENCIES = (90, 150, 220)
     CHANNELS = [(component, freq) for component in COMPONENTS for freq in FREQUENCIES]
+
+    if fg_amp is None:
+        fg_amp = dict.fromkeys(COMPONENTS, 1.0)
+    try:
+        amplitudes = np.asarray([fg_amp[component] for component in COMPONENTS], dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("fg_amp values must be finite numeric amplitudes") from exc
+    if not np.all(np.isfinite(amplitudes)):
+        raise ValueError("fg_amp values must be finite numeric amplitudes")
 
     cls = np.load(Config.path(fname_cls))
     cond_comp = tuple(cond_comp)
@@ -62,6 +71,9 @@ def sample_agora_alms(fname_cls, fname_alm, cond_comp=(), seed=None):
         modes[:, m == 0] = rng.normal(size=(len(unobserved), np.count_nonzero(m == 0)))
         mean = np.einsum("aio,oa->ia", gain[ell], observed_alms, optimize=True)
         alms = mean + np.einsum("aik,ka->ia", factors[ell], modes, optimize=True)
+
+    # Scale component fields before aggregation so their auto- and cross-power scale consistently.
+    alms *= np.array([amplitudes[COMPONENTS.index(CHANNELS[i][0])] for i in unobserved])[:, None]
 
     return tuple(
         alms[[j for j, i in enumerate(unobserved) if CHANNELS[i][1] == freq]].sum(axis=0)

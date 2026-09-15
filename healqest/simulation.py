@@ -7,17 +7,38 @@ from . import healqest_utils as hq
 from .startup import Config
 
 
+_ALM_BLOCK_SIZE = 65_536
+
+
+def _sample_alms_blockwise(factors, ell, m, rng, mean_factors=None, observed_alms=None):
+    """Sample ALMs in blocks, avoiding an ``(nalm, nfield, nfield)`` temporary."""
+    nfield = factors.shape[1]
+    alms = np.empty((nfield, len(ell)), dtype=np.complex128)
+
+    for start in range(0, len(ell), _ALM_BLOCK_SIZE):
+        stop = min(start + _ALM_BLOCK_SIZE, len(ell))
+        block = slice(start, stop)
+        block_ell = ell[block]
+        block_m = m[block]
+        nalm = stop - start
+        modes = (rng.normal(size=(nfield, nalm)) + 1j * rng.normal(size=(nfield, nalm))) / np.sqrt(2)
+        modes[:, block_m == 0] = rng.normal(size=(nfield, np.count_nonzero(block_m == 0)))
+        alms[:, block] = np.einsum("aik,ka->ia", factors[block_ell], modes, optimize=True)
+        if mean_factors is not None:
+            alms[:, block] += np.einsum("aik,ka->ia", mean_factors[block_ell], observed_alms, optimize=True)
+
+    return alms
+
+
 def sample_joint_alms(cls, seed=None):
     """Sample scalar-real-sky ALMs from ``cls[i, j, l]``."""
     cls = np.moveaxis(cls, -1, 0)
     rng = np.random.default_rng(seed)
-    lmax, nfield = cls.shape[0] - 1, cls.shape[1]
+    lmax, _ = cls.shape[0] - 1, cls.shape[1]
     ell, m = hp.Alm.getlm(lmax)
     eigenvalues, eigenvectors = np.linalg.eigh(cls)
     factors = eigenvectors * np.sqrt(np.clip(eigenvalues, 0, None))[..., None, :]
-    modes = (rng.normal(size=(nfield, len(ell))) + 1j * rng.normal(size=(nfield, len(ell)))) / np.sqrt(2)
-    modes[:, m == 0] = rng.normal(size=(nfield, np.count_nonzero(m == 0)))
-    return np.einsum("aik,ka->ia", factors[ell], modes, optimize=True)
+    return _sample_alms_blockwise(factors, ell, m, rng)
 
 
 def sample_agora_alms(fname_cls, fname_alm, cond_comp=(), fg_amp=None, seed=None):
@@ -65,12 +86,7 @@ def sample_agora_alms(fname_cls, fname_alm, cond_comp=(), fg_amp=None, seed=None
         eigenvalues, eigenvectors = np.linalg.eigh(covariance)
         factors = eigenvectors * np.sqrt(np.clip(eigenvalues, 0, None))[..., None, :]
         rng = np.random.default_rng(seed)
-        modes = (
-            rng.normal(size=(len(unobserved), len(ell))) + 1j * rng.normal(size=(len(unobserved), len(ell)))
-        ) / np.sqrt(2)
-        modes[:, m == 0] = rng.normal(size=(len(unobserved), np.count_nonzero(m == 0)))
-        mean = np.einsum("aio,oa->ia", gain[ell], observed_alms, optimize=True)
-        alms = mean + np.einsum("aik,ka->ia", factors[ell], modes, optimize=True)
+        alms = _sample_alms_blockwise(factors, ell, m, rng, mean_factors=gain, observed_alms=observed_alms)
 
     # Scale component fields before aggregation so their auto- and cross-power scale consistently.
     alms *= np.array([amplitudes[COMPONENTS.index(CHANNELS[i][0])] for i in unobserved])[:, None]

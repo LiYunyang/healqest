@@ -763,13 +763,14 @@ class Config:
         path = self.path(self.clsdir, 'cls', split if split is not None else '', fname)
         return ClsDB(path, table)
 
-    def get_sql_keys(self, seed, ktype1, ktype2, cmbset='a'):
+    @staticmethod
+    def get_sql_keys(seed, ktype1, ktype2, cmbset='a'):
         """Returns a ClsDB handle and key-value dict for the SQL entry."""
-        s1, s2, c1, c2 = self.ktype2ij(ktype1, seed, j=None, cmbset=cmbset)
+        s1, s2, c1, c2 = Config.ktype2ij(ktype1, seed, j=None, cmbset=cmbset)
         l1 = f"{s1}{c1}"
         l2 = f"{s2}{c2}"
         if ktype2 is not None:
-            s1, s2, c1, c2 = self.ktype2ij(ktype2, seed, j=None, cmbset=cmbset)
+            s1, s2, c1, c2 = Config.ktype2ij(ktype2, seed, j=None, cmbset=cmbset)
             l3 = f"{s1}{c1}"
             l4 = f"{s2}{c2}"
         else:

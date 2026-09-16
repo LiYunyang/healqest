@@ -161,7 +161,10 @@ def build_task_loop(args, config):
         seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
         tasks.extend((seed, args.set, 'std') for seed in seeds)
 
-    if args.rdn0:
+    if args.rdn0_xx:
+        # The data-only RDN0 leg is the same xxxx spectrum as the seed-0 branch below.
+        tasks.append((0, args.set, 'rdn0_xx'))
+    elif args.rdn0:
         seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
         tasks.extend((seed, args.set, 'rdn0') for seed in np.unique(np.concatenate(([0], seeds))))
 
@@ -171,7 +174,7 @@ def build_task_loop(args, config):
         tasks.extend((seed, 'a', 'n1') for seed in seeds)
 
     if not tasks:
-        raise ValueError("select at least one spectrum mode: -std, -std-xx, -rdn0, or -n1")
+        raise ValueError("select at least one spectrum mode: -std, -std-xx, -rdn0, -rdn0-xx, or -n1")
     mvtypes, splits = task_options(args, config)
     return [
         (seed, cmbset, mode, mvtype, split)
@@ -204,7 +207,9 @@ def main(i, mvtype, cmbset, mode, split=None, curl=False, skip=False):
                 stypes=['xx'], N1=False, cmbset=cmbset, mf_pair=(0, 0), **common_kw, spectype='n0'
             )
 
-    elif mode == 'rdn0':
+    elif mode in {'rdn0', 'rdn0_xx'}:
+        if mode == 'rdn0_xx' and i != 0:
+            raise ValueError("rdn0_xx only supports the seed-0 data spectrum")
         if i == 0:
             stypes = ['xxxx']
             copies = None
@@ -260,11 +265,14 @@ if __name__ == "__main__":
     >>> $run scripts/compute_cls.py -c $config -f $field -mvtype GMVph MV -n1 [-curl]
     - RDN0-type spectra, including the seed-0 data spectrum
     >>> $run scripts/compute_cls.py -c $config -f $field -mvtype GMVph MV -rdn0 [-curl]
+    - seed-0 RDN0 spectrum only
+    >>> $run scripts/compute_cls.py -c $config -f $field -mvtype GMVph MV -rdn0-xx [-curl]
     """
     parser = startup.parser()
     parser.add_argument('-std', action='store_true', help='do standard Cls')
     parser.add_argument('-std-xx', action='store_true', help='do standard xxxx spectrum only')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
+    parser.add_argument('-rdn0-xx', action='store_true', help='do only the seed-0 RDN0 xxxx spectrum')
     parser.add_argument('-mvtype', nargs='+', default=None, type=str, help='MV type(s)')
     parser.add_argument('-cross', action='store_true', help='compute cross spectra')
     parser.add_argument('-curl', action='store_true', help='compute the curl mode')

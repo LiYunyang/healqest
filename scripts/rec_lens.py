@@ -224,20 +224,16 @@ def build_task_loop(args, config):
             )
         task_loops.append((False, std_loops))
 
-    if args.rdn0:
+    if args.rdn0 or args.rdn0_xx:
         assert args.set == args.set2, "RDN0 requires matching cmbset values"
-        sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
-        zeros = np.zeros_like(sim_range)
-        task_loops.append(
-            (
-                False,
-                [
-                    [args.set, np.array([0]), args.set, np.array([0]), 'xx'],
-                    [args.set, zeros, args.set2, sim_range, '0x'],
-                    [args.set2, sim_range, args.set, zeros, 'x0'],
-                ],
+        rdn0_loops = [[args.set, np.array([0]), args.set, np.array([0]), 'xx']]
+        if not args.rdn0_xx:
+            sim_range = np.arange(config.sim_range[0], config.sim_range[1] + 1)
+            zeros = np.zeros_like(sim_range)
+            rdn0_loops.extend(
+                [[args.set, zeros, args.set2, sim_range, '0x'], [args.set2, sim_range, args.set, zeros, 'x0']]
             )
-        )
+        task_loops.append((False, rdn0_loops))
 
     if args.n1:
         sim_range = np.arange(config.sim_range_N1[0], config.sim_range_N1[1] + 1)
@@ -257,7 +253,7 @@ def build_task_loop(args, config):
         )
 
     if not task_loops:
-        raise ValueError("select at least one reconstruction mode: -std, -std-xx, -rdn0, or -n1")
+        raise ValueError("select at least one reconstruction mode: -std, -std-xx, -rdn0, -rdn0-xx, or -n1")
 
     task_loop = np.concatenate([np.insert(expand_loops(loops), 4, N1, axis=1) for N1, loops in task_loops])
 
@@ -293,11 +289,15 @@ if __name__ == "__main__":
 
     - RDN0-type lensing reconstructions
     >>> $run scripts/rec_lens.py -c $config -m $data -f $field -rdn0 -skip
+
+    - seed-0 RDN0 reconstruction only
+    >>> $run scripts/rec_lens.py -c $config -m $data -f $field -rdn0-xx -skip
     """
     parser = startup.parser()
     parser.add_argument('-std', action='store_true', help='do standard/N0-type operations')
     parser.add_argument('-std-xx', action='store_true', help='do standard/N0-type xx tasks only')
     parser.add_argument('-rdn0', action='store_true', help='do RDN0-type operations')
+    parser.add_argument('-rdn0-xx', action='store_true', help='do only the seed-0 RDN0 xx task')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
     args = parser.parse_known_args()[0]
     parser.add_argument('-set2', default=args.set, type=str, help='cmbset2 for RDN0-type sims')

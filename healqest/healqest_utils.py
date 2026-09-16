@@ -500,44 +500,38 @@ def cli(cl: np.ndarray):
 
 
 class EmulatorSampler:
-    def __init__(self, Nfg, Nsys, parameters):
-        self.Nfg = Nfg
-        self.Nsys = Nsys
-        self.key_fg = sorted(list(parameters['fg'].keys()))
-        self.key_sys = sorted(list(parameters['sys'].keys()))
-        self.parameters = self.key_fg + self.key_sys
-        self.grid_fg = self.make_grid(
-            Ndim=len(self.key_fg),
-            Nsamp=self.Nfg,
-            boundary_dict=parameters['fg'],
-            ordered_keys=self.key_fg,
+    def __init__(self, N, parameters):
+        self.N = N
+
+        self.parameters = sorted(list(parameters.keys()))
+
+        self.grid = self.make_grid(
+            Ndim=len(self.parameters),
+            Nsamp=self.N,
+            boundary_dict=parameters,
+            ordered_keys=self.parameters,
             seed=0,
-        )
-        self.grid_sys = self.make_grid(
-            Ndim=len(self.key_sys),
-            Nsamp=self.Nsys,
-            boundary_dict=parameters['sys'],
-            ordered_keys=self.key_sys,
-            seed=1,
         )
 
     @staticmethod
     def make_grid(Ndim, Nsamp, boundary_dict, ordered_keys, seed):
+        if Nsamp > 1024:
+            raise ValueError("Nsamp should be <= 1024 for Sobol sampling.")
+
         from scipy.stats import qmc
 
-        samples = qmc.LatinHypercube(d=Ndim, seed=seed).random(n=Nsamp)
-        return qmc.scale(
-            samples, [boundary_dict[k][0] for k in ordered_keys], [boundary_dict[k][1] for k in ordered_keys]
-        )
+        sampler = qmc.Sobol(d=Ndim, seed=seed, scramble=True)
+        samples = sampler.random_base2(10)[:Nsamp]  # 1024 total samples
 
-    def get_parameter(self, n_fg, n_sys):
-        assert n_fg < self.Nfg, f"n_fg={n_fg} exceeds the number of foreground samples {self.Nfg}"
-        assert n_sys < self.Nsys, f"n_sys={n_sys} exceeds the number of systematics samples {self.Nsys}"
-        fg_samples = self.grid_fg[n_fg]
-        sys_samples = self.grid_sys[n_sys]
-        out = dict()
-        for i, k in enumerate(self.key_fg):
-            out[k] = fg_samples[i]
-        for i, k in enumerate(self.key_sys):
-            out[k] = sys_samples[i]
+        samples = qmc.scale(
+            samples,
+            l_bounds=[boundary_dict[k][0] for k in ordered_keys],
+            u_bounds=[boundary_dict[k][1] for k in ordered_keys],
+        )
+        return samples
+
+    def get_parameter(self, i):
+        assert 0 <= i < self.N, f"i={i} exceeds the number of foreground samples {self.N}"
+
+        out = {k: self.grid[i, j] for j, k in enumerate(self.parameters)}
         return out

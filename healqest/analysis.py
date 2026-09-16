@@ -89,6 +89,55 @@ def bin_Cls(Cls, bins, return_ensemble=False):
     return x, Cbs if return_ensemble else np.mean(Cbs, axis=0), cov
 
 
+def read_sql(db, seeds: list, ops: str, cmbset='a'):
+    """
+    Load spectra from the sqlite database and performs specific coadding procedure.
+
+    Parameters
+    ----------
+    db: "ClsDB"
+    seeds: list of int
+        The seeds of the spectra to be loaded.
+    ops: str
+        Instructions on how the spectra should be combined. The instruction will be parsed to be signs and
+        spec types. For example, "xyxy-xyyx" means loading the 'xyxy' and 'xyyx' spectra and coadding them
+        with + and - signs respectively.
+    cmbset: str='a'
+        The cmbset of the spectra to be loaded.
+
+    Returns
+    -------
+    np.ndarray
+        The coadded spectra.
+    """
+    from healqest.startup import Config
+
+    operators = re.split(r'([+-])', ops)
+    if operators[0] not in ['+', '-']:
+        operators = ['+'] + operators
+
+    assert len(operators) % 2 == 0, "invalid ops format"
+    out = list()
+    with db:
+        for i in seeds:
+            cl = 0
+            for s, ktype in zip(operators[0::2], operators[1::2]):
+                k1 = ktype[:2]
+                k2 = ktype[2:] or None
+                sql_key = Config.get_sql_keys(seed=i, ktype1=k1, ktype2=k2, cmbset=cmbset)
+                sign = -1 if s == '-' else 1
+                try:
+                    _cl = db.query_conn(sql_key)
+                except Exception as e:
+                    raise ValueError(f"Failed to load {sql_key} from {db.path}") from e
+                if _cl is None:
+                    raise ValueError(f"Failed to load {sql_key} from {db}")
+                cl += sign * _cl
+            out.append(cl)
+    out = np.array(out)
+    return out
+
+
 def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, cmbset='a', split=None):
     """
     Load spectra from the sqlite database and performs specific coadding procedure.
@@ -109,6 +158,8 @@ def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, cmbset
         spec types. For example, "xyxy-xyyx" means loading the 'xyxy' and 'xyyx' spectra and coadding them
         with + and - signs respectively.
     Lmax: int=None
+    cmbset: str='a'
+        The cmbset of the spectra to be loaded.
     split: str=None
         The split of the spectra to be loaded. If None, load the spectra without split.
 
@@ -118,26 +169,7 @@ def load_sql(seeds, config, spec_type, mvtype, curl, ops: str, Lmax=None, cmbset
         The coadded spectra.
     """
     db = config.get_sql_table(mvtype, spec_type=spec_type, curl=curl, split=split)
-    operators = re.split(r'([+-])', ops)
-    if operators[0] not in ['+', '-']:
-        operators = ['+'] + operators
-
-    assert len(operators) % 2 == 0, "invalid ops format"
-    out = list()
-    with db:
-        for i in seeds:
-            cl = 0
-            for s, ktype in zip(operators[0::2], operators[1::2]):
-                k1 = ktype[:2]
-                k2 = ktype[2:] or None
-                sql_key = config.get_sql_keys(seed=i, ktype1=k1, ktype2=k2, cmbset=cmbset)
-                sign = -1 if s == '-' else 1
-                _cl = db.query_conn(sql_key)
-                if _cl is None:
-                    raise ValueError(f"Failed to load {sql_key} from {db}")
-                cl += sign * _cl
-            out.append(cl)
-    out = np.array(out)
+    out = read_sql(db, seeds=seeds, ops=ops, cmbset=cmbset)
     if Lmax is not None:
         out = out[:, : Lmax + 1]
     return out

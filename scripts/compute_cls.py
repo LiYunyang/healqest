@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+import shutil
 import tempfile
 
 import healpy as hp
@@ -309,5 +310,4 @@ if __name__ == "__main__":
 
     comm.barrier()
     if comm.rank == 0:
-        for filename in config.tmp_file_mask.values():
-            os.unlink(filename)
+        shutil.rmtree(config.tmp_dir)

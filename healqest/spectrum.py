@@ -58,12 +58,12 @@ class ClsDB:
         return f"ClsDB(path={self.path}, table={self.table})"
 
     @classmethod
-    def create(cls, path, table):
+    def create(cls, path, table, *, enable_wal=False):
         """Create the DB file and initialize the table if needed. Call from write rank only."""
         os.makedirs(os.path.dirname(path), exist_ok=True)
         if not os.path.exists(path):
             logger.info(f"creating new database: {os.path.basename(path)}")
-        with cls._connect(path, create_if_missing=True) as conn:
+        with cls._connect(path, create_if_missing=True, enable_wal=enable_wal) as conn:
             conn.execute(
                 f"CREATE TABLE IF NOT EXISTS {table} "
                 "(l1 TEXT NOT NULL, l2 TEXT NOT NULL, l3 TEXT, l4 TEXT, "
@@ -76,14 +76,15 @@ class ClsDB:
         return os.path.basename(self.path)
 
     @staticmethod
-    def _connect(path, create_if_missing=False):
+    def _connect(path, create_if_missing=False, *, enable_wal=False):
         if not os.path.exists(path) and not create_if_missing:
             raise FileNotFoundError(
                 f"database file {os.path.basename(path)} not found. "
                 f"Create it with `create` explicitly before writing."
             )
         conn = sqlite3.connect(path, timeout=30)
-        conn.execute("PRAGMA journal_mode=WAL")
+        if enable_wal:
+            conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
     def query_conn(self, kv, return_data=True):
@@ -119,7 +120,7 @@ class ClsDB:
 
         Receive (db_path, table, [(key, cl), ...]) from workers until all send None.
         """
-        n_workers, n_done, dbs = comm.size - 1, 0, {}
+        n_workers, n_done, dbs, initialized_paths = comm.size - 1, 0, {}, set()
         while n_done < n_workers:
             msg = comm.recv()
             if msg is None:
@@ -128,7 +129,8 @@ class ClsDB:
                 db_path, table, results = msg
                 key = (db_path, table)
                 if key not in dbs:
-                    dbs[key] = cls.create(db_path, table)
+                    dbs[key] = cls.create(db_path, table, enable_wal=db_path not in initialized_paths)
+                    initialized_paths.add(db_path)
                 with dbs[key]:
                     for sql_key, cl in results:
                         dbs[key].write_conn(sql_key, cl)

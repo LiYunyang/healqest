@@ -79,8 +79,7 @@ class ClsDB:
     def _connect(path, create_if_missing=False, *, enable_wal=False):
         if not os.path.exists(path) and not create_if_missing:
             raise FileNotFoundError(
-                f"database file {os.path.basename(path)} not found. "
-                f"Create it with `create` explicitly before writing."
+                f"database file {path} not found. Create it with `create` explicitly before writing."
             )
         conn = sqlite3.connect(path, timeout=30)
         if enable_wal:

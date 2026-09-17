@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Create a tagged YAML configuration with selected values overridden.
 
 Examples
@@ -24,7 +25,7 @@ class TouchError(ValueError):
     """Raised for invalid touch.py input that should be reported by argparse."""
 
 
-def tagged_path(source_file: str, config_id: int) -> str:
+def tagged_path(source_file: str, config_id: str) -> str:
     """Return the path used for a configuration tagged with ``config_id``."""
     stem, extension = os.path.splitext(source_file)
     if extension not in {'.yml', '.yaml'}:
@@ -118,7 +119,7 @@ def main(argv: list[str] | None = None) -> str:
     """Run the command-line interface and return the affected path."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('file', help='existing .yml or .yaml configuration file')
-    parser.add_argument('id', type=int, help='numeric tag included in the generated filename')
+    parser.add_argument('id', type=str, help='str tag included in the generated filename')
     args, unknown_args = parser.parse_known_args(argv)
 
     try:

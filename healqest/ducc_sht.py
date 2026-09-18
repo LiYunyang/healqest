@@ -525,6 +525,57 @@ class Geometry:
             Cm[j] = v
         return Cm
 
+    def rotate_alm(self, alms, rot, lmax=None, mmax=None, nthreads=None, eulertype='ZYZ'):
+        """Rotate the alm's. The default is ZYZ, different from the hp.rotator default!.
+
+        Parameters
+        ----------
+        alms: array-like
+            The input alm's to be rotated. Can be a single array or a list of arrays.
+        rot: array-like
+            The rotation angles in degrees. Following convetions specified by `eulertype`.
+        lmax: int, optional
+            The maximum l to consider. If None, it will be inferred from the size of the alm's.
+        mmax: int, optional
+            The maximum m to consider. If None, it will be inferred from the size of the alm's.
+        nthreads: int, optional
+            The number of threads to use for the computation. If None, it will use the value of
+            `OMP_NUM_THREADS`.
+        eulertype: str, optional
+            The type of Euler angles to use for the rotation. Default is 'ZYZ'.
+
+        Returns
+        -------
+        rotated_alms: array-like
+            The rotated alm's.
+        """
+        alms = np.atleast_2d(alms)
+        nmaps = alms.shape[0]
+        if lmax is None:
+            lmax = hp.Alm.getlmax(alms.shape[-1])
+        if mmax is None:
+            mmax = lmax
+
+        nthreads = get_nthreads(nthreads)
+        lmax = self._lmax if lmax is None else lmax
+        mmax = lmax if mmax is None else mmax
+
+        rotated_alms = np.zeros_like(alms)
+        assert eulertype == 'ZYZ', "Currently only ZYZ Euler angles are supported."
+        phi, theta, psi = np.deg2rad(rot)
+        ducc0.sht.rotate_alm(
+            alm=alms,
+            phi=phi,
+            theta=theta,
+            psi=psi,
+            out=rotated_alms,
+            nthreads=nthreads,
+            lmax=lmax,
+            mmax_in=mmax,
+            mmax_out=mmax,
+        )
+        return np.squeeze(rotated_alms)
+
 
 @numba.njit(fastmath=True, parallel=False)
 def fast_subtract(maps: np.ndarray, cut_map: np.ndarray, ipix, tf_pix):

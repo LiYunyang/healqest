@@ -329,13 +329,13 @@ class BiasEmulator:
         y2 = self.emu2.predict(x)[0]
 
         if self.kind == 'AB':
-            out = Tcal**4 * (y1 + self.N1) - Tcal**2 * (y2 + self.N0)
+            out = Tcal**4 * (y1 + self.N1 + self.N0) - Tcal**2 * (y2 + 2 * self.N0)
             out += self.N0 - self.N1
         elif self.kind == 'DB':
             if self.S is not None:
                 y1 = (self.S @ y1.T).T
             out = Tcal**4 * y1 + (Tcal**4 - Tcal**2) * y2
-            out += (Tcal**4 - 1) * self.N1 - (Tcal**2 - 1) * self.N0
+            out += (Tcal**4 - 1) * self.N1 + (Tcal**4 - 2 * Tcal**2 + 1) * self.N0
         else:
             raise ValueError(self.kind)
 
@@ -494,7 +494,7 @@ class Builder:
         dat = np.array(
             [self.load_spec(f(i), 'rdn0', mvtype=self.mvtype, seeds=0) for i in range(self.Nsamp_std[0])]
         )
-        return dat - self.N1, RDN0 - self.N0
+        return dat - self.N1 - self.N0, RDN0 - 2 * self.N0
 
     def load_ref(self):
         """Load debiased reference spectra for every realization key.

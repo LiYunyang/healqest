@@ -24,7 +24,7 @@ def bin_spectrum(Cls, bins, *, weight=False):
     ellb: np.ndarray(nbin)
     """
     x, bpwf = make_bpwf(bins, weight=weight)
-    return x, Cls[..., : bpwf.shape[1]] @ bpwf.T
+    return x, np.nan_to_num(Cls[..., : bpwf.shape[1]]) @ bpwf.T
 
 
 def make_bpwf(bins, lmax=None, weight=False):
@@ -89,7 +89,7 @@ def bin_Cls(Cls, bins, return_ensemble=False):
         If True, return the binned Cls for each realization, otherwise return the mean.
     """
     x, bpwf = make_bpwf(bins, lmax=Cls.shape[-1] - 1)
-    Cbs = np.atleast_2d(Cls)[..., : bpwf.shape[1]] @ bpwf.T
+    Cbs = np.atleast_2d(np.nan_to_num(Cls))[..., : bpwf.shape[1]] @ bpwf.T
     cov = np.cov(Cbs, rowvar=False)
     return x, Cbs if return_ensemble else np.mean(Cbs, axis=0), cov
 

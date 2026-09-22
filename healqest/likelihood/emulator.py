@@ -180,7 +180,20 @@ class BiasEmulator:
         Estimator label used to namespace persisted artifacts.
     """
 
-    __allowed_parameters__ = ["Tcal", "Pcal", "Arad", "Acib", "Atsz", "beta_pol"]
+    __allowed_parameters__ = [
+        "Tcal",
+        "Pcal",
+        "Arad",
+        "Acib",
+        "Atsz",
+        "Arad_90",
+        "Arad_150",
+        "Acib_150",
+        "Acib_220",
+        "Bpol_90",
+        "Bpol_150",
+        "Bpol_220",
+    ]
 
     def __init__(
         self,
@@ -452,7 +465,7 @@ class Builder:
             out = np.squeeze(out, 0)
         else:
             out = np.mean(out, axis=0)
-        return ha.bin_spectrum(out, self.bins, verbose=False)[1]
+        return ha.bin_spectrum(out, self.bins)[1]
 
     def _load_ref(self, key):
         """

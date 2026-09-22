@@ -6,59 +6,64 @@ from healqest import log
 logger = log.get_logger(__name__)
 
 
-def bin_spectrum(Cls, bins, *, return_error=False, verbose=True, weight=False):
+def bin_spectrum(Cls, bins, *, weight=False):
     """
     The returned error is the "error of the mean".
 
     Parameters
     ----------
-    Cls: np.ndarray(nspec, nstokes, nell) or
-        np.ndarray(nstokes, nell) or np.ndarray(nstokes, )
-        The Cls to be binned.
+    Cls: np.ndarray(nspec, nstokes, nell) or np.ndarray(nspec, nell), the Cls to be binned.
     bins: np.array(nbin+1, )
         The bins used. The left edge is included while the right edge is Excluded.
     weight: bool=False
         If True, use the l(l+1) weights on the Cl.
-    return_error: bool=False
-        If True, return the error.
-    verbose: bool=True
 
     Returns
     -------
+    x: np.ndarray(nbin)
     ellb: np.ndarray(nbin)
-    Clsb: np.ndarray(nstokes, nbin)
     """
-    if np.array(Cls).ndim == 3:
-        _Cls = np.transpose(Cls, (1, 2, 0))
-    else:
-        _Cls = np.atleast_3d(Cls)
-    nstoke, nell, nspec = _Cls.shape
-    if verbose:
-        print(f'nstoke={nstoke}, nell={nell}, nspec={nspec}')
+    x, bpwf = make_bpwf(bins, weight=weight)
+    return x, Cls[..., : bpwf.shape[1]] @ bpwf.T
 
-    ell = np.arange(nell)
+
+def make_bpwf(bins, lmax=None, weight=False):
+    """
+    Make bandpower window function.
+
+    Parameters
+    ----------
+    bins: np.ndarray
+        The bin edges.
+    lmax: int
+        The maximum multipole.
+    weight: bool=False
+        If True, use the l(l+1) weights on the Cl.
+
+    Returns
+    -------
+    x: np.ndarray
+        The bin centers of shape (nbin, ).
+    bpwf: np.ndarray
+        The bandpower window function of shape (nbin, lmax+1).
+    """
+    if lmax is None:
+        lmax = bins[-1]
+    ell = np.arange(lmax + 1)
+
     if weight:
         fac = 2 * ell + 1
     else:
         fac = np.ones_like(ell)
-    _Cls = np.einsum('ijk,j->ijk', _Cls, fac)
-
     bin_idx = np.digitize(ell, bins, right=False)
     bin_norm = np.bincount(bin_idx, weights=fac)
-
-    ellb = np.bincount(bin_idx, ell * fac) / bin_norm
-    Clb = np.array([np.bincount(bin_idx, np.mean(_, axis=-1)) for _ in _Cls]) / bin_norm
-    slc = slice(1, len(bins))
-    if return_error:
-        Clb_expand = Clb[:, bin_idx].reshape(nstoke, nell, 1) * fac[None, :, None]
-        Clb_err = (
-            np.sqrt(np.array([np.bincount(bin_idx, np.sum(_**2, axis=-1)) for _ in _Cls - Clb_expand]))
-            / bin_norm
-            / nspec
-        )
-        return ellb[slc], np.squeeze(Clb[:, slc]), np.squeeze(Clb_err[:, slc])
-    else:
-        return ellb[slc], np.squeeze(Clb[:, slc])
+    nbin = len(bins) - 1
+    bpwf = np.zeros((nbin, lmax + 1))
+    for i in range(nbin):
+        sel = bin_idx == i + 1
+        bpwf[i, sel] = fac[sel] / bin_norm[i + 1]
+    x = np.bincount(bin_idx, ell * fac) / bin_norm
+    return x[1 : len(bins)], bpwf
 
 
 def unbin_spectrum(Clb, bins, lmax):
@@ -83,8 +88,8 @@ def bin_Cls(Cls, bins, return_ensemble=False):
     return_ensemble: bool=False
         If True, return the binned Cls for each realization, otherwise return the mean.
     """
-    x = (bins[1:] + bins[:-1]) / 2
-    Cbs = np.array([bin_spectrum(_, bins=bins, verbose=False)[1] for _ in np.atleast_2d(Cls)])
+    x, bpwf = make_bpwf(bins, lmax=Cls.shape[-1] - 1)
+    Cbs = np.atleast_2d(Cls)[..., : bpwf.shape[1]] @ bpwf.T
     cov = np.cov(Cbs, rowvar=False)
     return x, Cbs if return_ensemble else np.mean(Cbs, axis=0), cov
 
@@ -400,7 +405,7 @@ class LensingSpectra:
 
     def bin_spec(self, bins, norm_cl=None, resp_err=False):
         if norm_cl is not None:
-            norm_cb = bin_spectrum(norm_cl[: self.Lmax + 1], bins=bins, verbose=False)[1]
+            norm_cb = bin_spectrum(norm_cl[: self.Lmax + 1], bins=bins)[1]
             fac = 1 / unbin_spectrum(norm_cb, bins=bins, lmax=self.Lmax)
             # fac = 1 / norm_cl[: self.Lmax + 1]
         else:

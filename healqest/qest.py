@@ -236,7 +236,7 @@ class Qest:
         out['ET'] = fls[3]
         return out
 
-    def get_resp(self, qe, u=None, curl=False, type1='lens', type2=None, u2=None):
+    def get_resp(self, qe, u=None, curl=False, type1='lens', type2=None, u2=None, cls2=None):
         r"""
         Compute the cross response between two estimators. Assume joint cinv filtering.
 
@@ -258,6 +258,8 @@ class Qest:
             If True, `qe` is suffixed with `curl` to compute curl-mode response.
         type1, type2: str
             distortion field  type for the estimator, 'lens' or 'prf' or 'tau' or 'rot'.
+        cls2: CMBCl=None
+            The CMB spectra entering the CMB response (for cross-response calculation), if None, use self.cls.
 
         Returns
         -------
@@ -294,7 +296,9 @@ class Qest:
                 continue
             flX = self.fls[k1] * self.fl_cut[s1]
             flY = self.fls2[k2] * self.fl_cut[s2]
-            qeZA = weights.WeightsPlus(qe2, self.cls, self.lmax, distortion=type2, curl=curl, u=u2)
+            qeZA = weights.WeightsPlus(
+                qe2, self.cls if cls2 is None else cls2, self.lmax, distortion=type2, curl=curl, u=u2
+            )
             R += resp.fill_resp_fullsky(
                 qeXY, qeZA, np.zeros(self.Lmax + 1, dtype=complex), flX, flY, fast=self.fast
             )
@@ -346,7 +350,7 @@ class Qest:
             clm, aresp_c = self.profile_harden(_qe, clm, aresp_c, type1=type1, curl=True)
         return [glm, clm], [aresp_g, aresp_c]
 
-    def profile_harden(self, qe: str, klm, aresp, type1='lens', curl=False):
+    def profile_harden(self, qe: str, klm, aresp, type1='lens', curl=False, cls2=None):
         # do the source harden stuff
         _qe = self.ph2qe(qe)
         assert self.harden_cache is not None, "Need HardenCache to compute this estimator"
@@ -360,7 +364,7 @@ class Qest:
             if klm is not None:
                 klm_ph += hp.almxfl(self.slm_cache[j], _w)
             if aresp is not None:
-                _r = self.harden_cache.get_harden_response(j, curl=curl, type1=type1)
+                _r = self.harden_cache.get_harden_response(j, curl=curl, type1=type1, cls2=cls2)
                 aresp_ph += _r * _w
         return klm_ph, aresp_ph
 
@@ -399,7 +403,7 @@ class HardenCache:
         func = partial(self.get_R, curl=False, qe=None)
         self.D00 = self.cofactor(self.full_seq, self.full_seq, 0, 0, func)
 
-    def get_R(self, i: int, j: int, qe: Optional[str] = None, type1='lens', curl: bool = False):
+    def get_R(self, i: int, j: int, qe: Optional[str] = None, type1='lens', curl: bool = False, cls2=None):
         """
         Compute the (cached) response matrix element R_{ij} for profile hardening.
 
@@ -420,6 +424,9 @@ class HardenCache:
             The main distortion field type, 'lens' or 'tau' or 'rot'.
         curl: bool
             If True, compute the curl-mode response (for lensing).
+        cls2: CMBCl, optional
+            CMB spectra for the second response weight. This is only relevant for lensing-side terms
+            ``R00`` and ``Ri0``; profile-only terms remain self-consistent with ``qest.cls``.
         """
         assert i in range(self.nprf + 1)
         assert j in range(self.nprf + 1)
@@ -427,7 +434,7 @@ class HardenCache:
         if i == j == 0:
             # phi-phi (lensing response)
             assert qe is not None
-            return self._get_R00(qe=self.qest.ph2qe(qe), type1=type1, curl=curl)
+            return self._get_R00(qe=self.qest.ph2qe(qe), type1=type1, curl=curl, cls2=cls2)
         elif i == 0:
             # phi-source terms, used to determine weights (i.e. how much source contribute to lensing)
             assert qe is not None
@@ -435,7 +442,7 @@ class HardenCache:
         elif j == 0:
             # source-phi terms, used only for response (i.e., how much the source over subtracts lensing)
             # note that this is assymetric and has additional summation over lensing QE types.
-            return self._get_Ri0(i, type1=type1, curl=curl)
+            return self._get_Ri0(i, type1=type1, curl=curl, cls2=cls2)
         else:
             # source-source terms
             return self._get_Rij(i, j)
@@ -446,16 +453,26 @@ class HardenCache:
             'TT', type1='prf', type2='prf', u=self.u[i - 1], curl=False, u2=self.u[j - 1]
         )
 
+    def _get_Ri0(self, i: int, type1: str, curl: bool, cls2=None):
+        if cls2 is None:
+            return self._get_Ri0_cached(i, type1, curl)
+        return self.qest.get_resp('TT', type1='prf', type2=type1, u=self.u[i - 1], curl=curl, cls2=cls2)
+
     @lru_cache(maxsize=8)  # good for upto 4 profiles
-    def _get_Ri0(self, i: int, type1: str, curl: bool):
+    def _get_Ri0_cached(self, i: int, type1: str, curl: bool):
         return self.qest.get_resp('TT', type1='prf', type2=type1, u=self.u[i - 1], curl=curl)
 
     @lru_cache(maxsize=72)  # good for upto 4 profiles
     def _get_R0j(self, j: int, qe: str, type1: str, curl: bool):
         return self.qest.get_resp(qe, type1=type1, type2='prf', u2=self.u[j - 1], curl=curl)
 
+    def _get_R00(self, qe: str, type1: str, curl: bool, cls2=None):
+        if cls2 is None:
+            return self._get_R00_cached(qe, type1, curl)
+        return self.qest.get_resp(qe, type1=type1, type2=type1, curl=curl, cls2=cls2)
+
     @lru_cache(maxsize=18)
-    def _get_R00(self, qe: str, type1: str, curl: bool):
+    def _get_R00_cached(self, qe: str, type1: str, curl: bool):
         return self.qest.get_resp(qe, type1=type1, type2=type1, curl=curl)
 
     def get_harden_weights(self, qe: str, j: int, curl: bool = False, type1: str = 'lens'):
@@ -464,9 +481,14 @@ class HardenCache:
         Ck = self.cofactor(self.full_seq, self.full_seq, j + 1, 0, func)
         return Ck / self.D00
 
-    @lru_cache(maxsize=10)
-    def get_harden_response(self, j: int, curl: bool = False, type1: str = 'lens'):
+    def get_harden_response(self, j: int, curl: bool = False, type1: str = 'lens', cls2=None):
         assert j in range(self.nprf)
+        if cls2 is None:
+            return self._get_harden_response_cached(j, curl, type1)
+        return self.get_R(j + 1, 0, qe=None, curl=curl, type1=type1, cls2=cls2)
+
+    @lru_cache(maxsize=10)
+    def _get_harden_response_cached(self, j: int, curl: bool, type1: str):
         return self.get_R(j + 1, 0, qe=None, curl=curl, type1=type1)
 
     @staticmethod

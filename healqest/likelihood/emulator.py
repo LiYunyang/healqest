@@ -1,5 +1,4 @@
 import numpy as np
-import os
 from healqest import spectrum, startup, analysis as ha, log
 import GPy
 
@@ -154,8 +153,38 @@ def RBFSmooth(var, lengthscale, variance):
     return S
 
 
+class JaxGPPredictor:
+    """JAX predictive mean for a fitted zero-mean GPy ARD-RBF regression model."""
+
+    def __init__(self, emulator):
+        # Builder starts Joblib workers while reading spectra.  Import JAX only
+        # for an evaluator, after that work has completed, so Joblib never
+        # forks a process with JAX's multithreaded runtime initialized.
+        import jax
+
+        jax.config.update('jax_enable_x64', True)
+        import jax.numpy as jnp
+
+        if not isinstance(emulator.kern, GPy.kern.RBF):
+            raise TypeError("jeval requires a GPy RBF kernel.")
+        if emulator.normalizer is not None or emulator.mean_function is not None:
+            raise ValueError("jeval requires a zero-mean, unnormalized GPy model.")
+        self.jnp = jnp
+        self.X = jnp.asarray(emulator.X)
+        self.lengthscale = jnp.asarray(emulator.kern.lengthscale.values)
+        self.variance = jnp.asarray(emulator.kern.variance.values[0])
+        self.woodbury_vector = jnp.asarray(emulator.posterior.woodbury_vector)
+
+    def predict(self, X):
+        jnp = self.jnp
+        X = jnp.asarray(X)
+        scaled_difference = (X[:, None, :] - self.X[None, :, :]) / self.lengthscale
+        cross_kernel = self.variance * jnp.exp(-0.5 * jnp.sum(scaled_difference**2, axis=-1))
+        return cross_kernel @ self.woodbury_vector
+
+
 class BiasEmulator:
-    """Evaluate an AB or DB bias emulator at foreground parameters.
+    """Evaluate a DB bias emulator at foreground parameters.
 
     The first input parameter is always ``Tcal``. Remaining parameters are
     normalized using ``x_transform`` before prediction by the two GPy models.
@@ -168,8 +197,6 @@ class BiasEmulator:
         Ordered input names, beginning with ``"Tcal"``.
     x_transform : tuple[np.ndarray, np.ndarray]
         Mean and scale vectors used to normalize all inputs after ``Tcal``.
-    kind : {"AB", "DB"}, default="AB"
-        Bias-estimation convention to evaluate.
     S : np.ndarray, optional
         Bin-space smoothing matrix applied to the first DB component.
     N0, N1 : np.ndarray, optional
@@ -196,17 +223,7 @@ class BiasEmulator:
     ]
 
     def __init__(
-        self,
-        emu1,
-        emu2,
-        names: list,
-        x_transform: tuple,
-        kind='AB',
-        S=None,
-        N0=None,
-        N1=None,
-        bins=None,
-        mvtype=None,
+        self, emu1, emu2, names: list, x_transform: tuple, S=None, N0=None, N1=None, bins=None, mvtype=None
     ):
         self.names = names
         for name in self.names:
@@ -216,16 +233,17 @@ class BiasEmulator:
                 )
         self.emu1 = emu1
         self.emu2 = emu2
-        self.kind = kind
         self.S = S
         self.N0 = N0
         self.N1 = N1
         self.x_mean, self.x_std = x_transform
         self.bins = bins
         self.mvtype = mvtype
+        self.jemu1 = JaxGPPredictor(emu1)
+        self.jemu2 = JaxGPPredictor(emu2)
 
     @staticmethod
-    def from_builder(builder, emu1, emu2, kind='AB', S=None):
+    def from_builder(builder, emu1, emu2, S=None):
         """Construct an evaluator from a completed :class:`Builder`.
 
         Parameters
@@ -235,8 +253,6 @@ class BiasEmulator:
             bias terms.
         emu1, emu2 : GPy model
             Trained component models to evaluate.
-        kind : {"AB", "DB"}, default="AB"
-            Bias-estimation convention for the returned emulator.
         S : np.ndarray, optional
             Bin-space smoothing matrix for DB evaluation.
 
@@ -255,7 +271,6 @@ class BiasEmulator:
         return BiasEmulator(
             emu1,
             emu2,
-            kind=kind,
             S=S,
             N0=builder.N0 / ref,
             N1=builder.N1 / ref,
@@ -268,22 +283,21 @@ class BiasEmulator:
     @staticmethod
     def load(dirname, mvtype='MVph'):
         _dirname = startup.Config.path(dirname, mvtype)
-
-        emu1 = GPy.core.model.Model.load_model(startup.Config.path(_dirname, "emu1.zip"))
-        emu2 = GPy.core.model.Model.load_model(startup.Config.path(_dirname, "emu2.zip"))
         meta = np.load(startup.Config.path(_dirname, "meta.npz"), allow_pickle=True)
 
         def fmeta(key):
             value = meta[key]
-            if value.shape == () and value.dtype == object:
+            if value.shape == ():
                 value = value.item()
             return value
+
+        emu1 = GPy.core.model.Model.load_model(startup.Config.path(_dirname, "emu1.zip"))
+        emu2 = GPy.core.model.Model.load_model(startup.Config.path(_dirname, "emu2.zip"))
 
         assert mvtype == fmeta('mvtype'), f"mvtype mismatch: {mvtype} != {fmeta('mvtype')}"
         return BiasEmulator(
             emu1,
             emu2,
-            kind=fmeta('kind'),
             S=fmeta('S'),
             N0=fmeta('N0'),
             N1=fmeta('N1'),
@@ -294,13 +308,14 @@ class BiasEmulator:
         )
 
     def dump(self, dirname):
+        import os
+
         _dirname = startup.Config.path(dirname, self.mvtype)
         os.makedirs(_dirname, exist_ok=True)
         self.emu1.save_model(startup.Config.path(_dirname, "emu1"))
         self.emu2.save_model(startup.Config.path(_dirname, "emu2"))
         np.savez(
             startup.Config.path(_dirname, "meta.npz"),
-            kind=self.kind,
             S=self.S,
             N0=self.N0,
             N1=self.N1,
@@ -313,6 +328,24 @@ class BiasEmulator:
 
     def transX(self, X):
         return (X - self.x_mean) / self.x_std
+
+    def jeval(self, p):
+        """Evaluate the DB emulator as a differentiable JAX function."""
+        jnp = self.jemu1.jnp
+        p = jnp.atleast_2d(jnp.asarray(p))
+        if p.shape[1] != len(self.names):
+            raise ValueError(f"Expected {len(self.names)} parameters, received {p.shape[1]}")
+        Tcal = p[:, 0:1]
+        x = (p[:, 1:] - jnp.asarray(self.x_mean)) / jnp.asarray(self.x_std)
+        y1 = self.jemu1.predict(x)
+        y2 = self.jemu2.predict(x)
+        if self.S is not None:
+            y1 = (jnp.asarray(self.S) @ y1.T).T
+        N0 = jnp.asarray(self.N0)
+        N1 = jnp.asarray(self.N1)
+        out = Tcal**4 * y1 + (Tcal**4 - Tcal**2) * y2
+        out += (Tcal**4 - 1) * N1 + (Tcal**4 - 2 * Tcal**2 + 1) * N0
+        return jnp.squeeze(out, axis=0) if out.shape[0] == 1 else out
 
     def __call__(self, p=None, **kwargs):
         """Evaluate the binned bias spectrum.
@@ -334,27 +367,7 @@ class BiasEmulator:
         if p is None:
             p = np.array([kwargs.pop(k) for k in self.names])
             assert len(kwargs) == 0, f"Unused parameters: {kwargs}"
-        p = np.atleast_2d(p)
-        Tcal = p[:, 0:1]
-        assert p.shape[1] == len(self.names)
-        x = self.transX(p[:, 1:])
-        y1 = self.emu1.predict(x)[0]
-        y2 = self.emu2.predict(x)[0]
-
-        if self.kind == 'AB':
-            out = Tcal**4 * (y1 + self.N1 + self.N0) - Tcal**2 * (y2 + 2 * self.N0)
-            out += self.N0 - self.N1
-        elif self.kind == 'DB':
-            if self.S is not None:
-                y1 = (self.S @ y1.T).T
-            out = Tcal**4 * y1 + (Tcal**4 - Tcal**2) * y2
-            out += (Tcal**4 - 1) * self.N1 + (Tcal**4 - 2 * Tcal**2 + 1) * self.N0
-        else:
-            raise ValueError(self.kind)
-
-        if out.shape[0] == 1:
-            out = np.squeeze(out, axis=0)
-        return out
+        return np.asarray(self.jeval(p))
 
 
 class Builder:
@@ -362,7 +375,7 @@ class Builder:
 
     Construction loads and reference-normalizes the supplied spectra, then
     trains the standard-spectrum and RDN0 component models. Use :meth:`make`
-    to obtain an AB or DB :class:`BiasEmulator`.
+    to obtain a DB :class:`BiasEmulator`.
     """
 
     def __init__(
@@ -570,18 +583,16 @@ class Builder:
         Y_train = dat[train_idx]
         X_train_scaled = self.transform(X_train)
         kernel = GPy.kern.RBF(input_dim=X_train.shape[1], ARD=True)
-
         emulator = GPy.models.GPRegression(
             X_train_scaled, Y_train, kernel=kernel, noise_var=1e-10, normalizer=None
         )
-        # emulator.Gaussian_noise.variance.constrain_bounded(1e-8, 0.1)
         emulator.Gaussian_noise.variance.fix(1e-8)
         emulator.optimize_restarts(num_restarts=10, verbose=False)
         if len(withheld_idx):
-            predict, var = emulator.predict(
+            prediction, _ = emulator.predict(
                 self.transform(self.parameters[withheld_idx]), include_likelihood=False
             )
-            max_dev = np.max(np.abs(predict - dat[withheld_idx]))
+            max_dev = np.max(np.abs(prediction - dat[withheld_idx]))
             logger.info(f"maxdev: {max_dev:.3e} over {len(withheld_idx)} validation samples.")
         return emulator, withheld_idx
 
@@ -598,13 +609,11 @@ class Builder:
         emu_rdn0, idx_rdn0 = self.train(np.mean(self.sample_RDN0, axis=0), Ntrain=self.Nsamp_RDN0[1])
         return emu_dat, emu_rdn0
 
-    def make(self, kind='DB', lengthscale=None, variance=None):
-        """Build an AB or DB evaluator from the trained component models.
+    def make(self, lengthscale=None, variance=None):
+        """Build a DB evaluator from the trained component models.
 
         Parameters
         ----------
-        kind : {"AB", "DB"}, default="DB"
-            Requested bias-estimation convention.
         lengthscale : float, optional
             RBF bin-space smoothing length for DB output. No smoothing is
             applied when omitted.
@@ -615,21 +624,18 @@ class Builder:
         Returns
         -------
         BiasEmulator
-            Configured evaluator for the requested convention.
+            Configured DB evaluator.
         """
-        if kind == 'AB':
-            return BiasEmulator.from_builder(self, self.emu1, self.emu2, kind='AB')
-        else:
-            S = None
-            Dmean = np.mean(self.sample, axis=0) - self.emu2.predict(self.transform(self.parameters))[0]
-            emu_D, idx_dat = self.train(Dmean, Ntrain=self.Nsamp_std[0])
-            if lengthscale is not None:
-                if variance is None:
-                    var_sample = []
-                    for d in Dmean:
-                        model = GP1d(d, self.varD, lengthscale=lengthscale)
-                        var_sample.append(model.rbf.variance.values[0])
-                    variance = np.mean(var_sample)
-                    logger.info(f"Estimated RBF variance: {variance:.3e} from {len(var_sample)} samples.")
-                S = RBFSmooth(self.varD, lengthscale=lengthscale, variance=variance)
-            return BiasEmulator.from_builder(self, emu_D, self.emu2, kind='DB', S=S)
+        S = None
+        Dmean = np.mean(self.sample, axis=0) - self.emu2.predict(self.transform(self.parameters))[0]
+        emu_D, idx_dat = self.train(Dmean, Ntrain=self.Nsamp_std[0])
+        if lengthscale is not None:
+            if variance is None:
+                var_sample = []
+                for d in Dmean:
+                    model = GP1d(d, self.varD, lengthscale=lengthscale)
+                    var_sample.append(model.rbf.variance.values[0])
+                variance = np.mean(var_sample)
+                logger.info(f"Estimated RBF variance: {variance:.3e} from {len(var_sample)} samples.")
+            S = RBFSmooth(self.varD, lengthscale=lengthscale, variance=variance)
+        return BiasEmulator.from_builder(self, emu_D, self.emu2, S=S)

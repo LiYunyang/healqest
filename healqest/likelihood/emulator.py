@@ -153,10 +153,10 @@ def RBFSmooth(var, lengthscale, variance):
     return S
 
 
-class JaxGPPredictor:
-    """JAX predictive mean for a fitted zero-mean GPy ARD-RBF regression model."""
+class JEmulator:
+    """JAX predictive mean for an ARD-RBF emulator stored as numerical arrays."""
 
-    def __init__(self, emulator):
+    def __init__(self, X, lengthscale, variance, woodbury_vector):
         # Builder starts Joblib workers while reading spectra.  Import JAX only
         # for an evaluator, after that work has completed, so Joblib never
         # forks a process with JAX's multithreaded runtime initialized.
@@ -165,15 +165,21 @@ class JaxGPPredictor:
         jax.config.update('jax_enable_x64', True)
         import jax.numpy as jnp
 
-        if not isinstance(emulator.kern, GPy.kern.RBF):
-            raise TypeError("jeval requires a GPy RBF kernel.")
-        if emulator.normalizer is not None or emulator.mean_function is not None:
-            raise ValueError("jeval requires a zero-mean, unnormalized GPy model.")
         self.jnp = jnp
-        self.X = jnp.asarray(emulator.X)
-        self.lengthscale = jnp.asarray(emulator.kern.lengthscale.values)
-        self.variance = jnp.asarray(emulator.kern.variance.values[0])
-        self.woodbury_vector = jnp.asarray(emulator.posterior.woodbury_vector)
+        self.X = jnp.asarray(X)
+        self.lengthscale = jnp.asarray(lengthscale)
+        self.variance = jnp.asarray(variance)
+        self.woodbury_vector = jnp.asarray(woodbury_vector)
+
+    @classmethod
+    def from_gpy(cls, emulator):
+        """Extract the numerical predictive state from a fitted GPy emulator."""
+        return cls(
+            emulator.X,
+            emulator.kern.lengthscale.values,
+            emulator.kern.variance.values[0],
+            emulator.posterior.woodbury_vector,
+        )
 
     def predict(self, X):
         jnp = self.jnp
@@ -187,12 +193,12 @@ class BiasEmulator:
     """Evaluate a DB bias emulator at foreground parameters.
 
     The first input parameter is always ``Tcal``. Remaining parameters are
-    normalized using ``x_transform`` before prediction by the two GPy models.
+    normalized using ``x_transform`` before prediction by the two JAX emulators.
 
     Parameters
     ----------
-    emu1, emu2 : GPy model
-        Trained models for the two bias components.
+    emu1, emu2 : JEmulator
+        Numerical predictors for the two bias components.
     names : list[str]
         Ordered input names, beginning with ``"Tcal"``.
     x_transform : tuple[np.ndarray, np.ndarray]
@@ -239,8 +245,6 @@ class BiasEmulator:
         self.x_mean, self.x_std = x_transform
         self.bins = bins
         self.mvtype = mvtype
-        self.jemu1 = JaxGPPredictor(emu1)
-        self.jemu2 = JaxGPPredictor(emu2)
 
     @staticmethod
     def from_builder(builder, emu1, emu2, S=None):
@@ -252,7 +256,8 @@ class BiasEmulator:
             Builder supplying parameter normalization, reference spectrum, and
             bias terms.
         emu1, emu2 : GPy model
-            Trained component models to evaluate.
+            Trained component models whose numerical predictor state is
+            extracted for evaluation.
         S : np.ndarray, optional
             Bin-space smoothing matrix for DB evaluation.
 
@@ -269,8 +274,8 @@ class BiasEmulator:
         x_mean = boundaries.mean(axis=1)
         x_std = np.diff(boundaries, axis=1).flatten()
         return BiasEmulator(
-            emu1,
-            emu2,
+            JEmulator.from_gpy(emu1),
+            JEmulator.from_gpy(emu2),
             S=S,
             N0=builder.N0 / ref,
             N1=builder.N1 / ref,
@@ -283,28 +288,31 @@ class BiasEmulator:
     @staticmethod
     def load(dirname, mvtype='MVph'):
         _dirname = startup.Config.path(dirname, mvtype)
-        meta = np.load(startup.Config.path(_dirname, "meta.npz"), allow_pickle=True)
+        with np.load(startup.Config.path(_dirname, "meta.npz"), allow_pickle=True) as meta:
 
-        def fmeta(key):
-            value = meta[key]
-            if value.shape == ():
-                value = value.item()
-            return value
+            def fmeta(key):
+                value = meta[key]
+                if value.shape == ():
+                    value = value.item()
+                return value
 
-        emu1 = GPy.core.model.Model.load_model(startup.Config.path(_dirname, "emu1.zip"))
-        emu2 = GPy.core.model.Model.load_model(startup.Config.path(_dirname, "emu2.zip"))
+            metadata = {key: fmeta(key) for key in meta.files}
+        with np.load(startup.Config.path(_dirname, "emu1.npz")) as saved_emu1:
+            emu1 = JEmulator(**{key: saved_emu1[key] for key in saved_emu1.files})
+        with np.load(startup.Config.path(_dirname, "emu2.npz")) as saved_emu2:
+            emu2 = JEmulator(**{key: saved_emu2[key] for key in saved_emu2.files})
 
-        assert mvtype == fmeta('mvtype'), f"mvtype mismatch: {mvtype} != {fmeta('mvtype')}"
+        assert mvtype == metadata['mvtype'], f"mvtype mismatch: {mvtype} != {metadata['mvtype']}"
         return BiasEmulator(
             emu1,
             emu2,
-            S=fmeta('S'),
-            N0=fmeta('N0'),
-            N1=fmeta('N1'),
-            bins=fmeta('bins'),
-            x_transform=(fmeta('x_mean'), fmeta('x_std')),
-            names=list(fmeta('names')),
-            mvtype=fmeta('mvtype'),
+            S=metadata['S'],
+            N0=metadata['N0'],
+            N1=metadata['N1'],
+            bins=metadata['bins'],
+            x_transform=(metadata['x_mean'], metadata['x_std']),
+            names=list(metadata['names']),
+            mvtype=metadata['mvtype'],
         )
 
     def dump(self, dirname):
@@ -312,8 +320,14 @@ class BiasEmulator:
 
         _dirname = startup.Config.path(dirname, self.mvtype)
         os.makedirs(_dirname, exist_ok=True)
-        self.emu1.save_model(startup.Config.path(_dirname, "emu1"))
-        self.emu2.save_model(startup.Config.path(_dirname, "emu2"))
+        for name, emulator in [('emu1', self.emu1), ('emu2', self.emu2)]:
+            np.savez(
+                startup.Config.path(_dirname, f"{name}.npz"),
+                X=np.asarray(emulator.X),
+                lengthscale=np.asarray(emulator.lengthscale),
+                variance=np.asarray(emulator.variance),
+                woodbury_vector=np.asarray(emulator.woodbury_vector),
+            )
         np.savez(
             startup.Config.path(_dirname, "meta.npz"),
             S=self.S,
@@ -331,14 +345,14 @@ class BiasEmulator:
 
     def jeval(self, p):
         """Evaluate the DB emulator as a differentiable JAX function."""
-        jnp = self.jemu1.jnp
+        jnp = self.emu1.jnp
         p = jnp.atleast_2d(jnp.asarray(p))
         if p.shape[1] != len(self.names):
             raise ValueError(f"Expected {len(self.names)} parameters, received {p.shape[1]}")
         Tcal = p[:, 0:1]
         x = (p[:, 1:] - jnp.asarray(self.x_mean)) / jnp.asarray(self.x_std)
-        y1 = self.jemu1.predict(x)
-        y2 = self.jemu2.predict(x)
+        y1 = self.emu1.predict(x)
+        y2 = self.emu2.predict(x)
         if self.S is not None:
             y1 = (jnp.asarray(self.S) @ y1.T).T
         N0 = jnp.asarray(self.N0)

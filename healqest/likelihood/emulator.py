@@ -349,7 +349,8 @@ class BiasEmulator:
         p = jnp.atleast_2d(jnp.asarray(p))
         if p.shape[1] != len(self.names):
             raise ValueError(f"Expected {len(self.names)} parameters, received {p.shape[1]}")
-        Tcal = p[:, 0:1]
+        Tcal = 1 / p[:, 0:1]
+        # the correct convention of Tcal is 1/Tcal, # # see https://sptlocal.grid.uchicago.edu/~yyli/SPT_lensing/widelens_emulator/emulator1.html#what-exactly-does-systematic-parameter-mean?
         x = (p[:, 1:] - jnp.asarray(self.x_mean)) / jnp.asarray(self.x_std)
         y1 = self.emu1.predict(x)
         y2 = self.emu2.predict(x)

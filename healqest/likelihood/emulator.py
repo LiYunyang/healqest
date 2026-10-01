@@ -229,7 +229,7 @@ class BiasEmulator:
     ]
 
     def __init__(
-        self, emu1, emu2, names: list, x_transform: tuple, S=None, N0=None, N1=None, bins=None, mvtype=None
+        self, emu1, emu2, names: list, x_transform: tuple, S=None, N0=None, N1=None, bpwf=None, mvtype=None
     ):
         self.names = names
         for name in self.names:
@@ -243,7 +243,7 @@ class BiasEmulator:
         self.N0 = N0
         self.N1 = N1
         self.x_mean, self.x_std = x_transform
-        self.bins = bins
+        self.bpwf = bpwf
         self.mvtype = mvtype
 
     @staticmethod
@@ -280,7 +280,7 @@ class BiasEmulator:
             N0=builder.N0 / ref,
             N1=builder.N1 / ref,
             x_transform=(x_mean, x_std),
-            bins=builder.bins,
+            bpwf=builder.bpwf,
             names=['Tcal'] + builder.names,
             mvtype=builder.mvtype,
         )
@@ -309,7 +309,7 @@ class BiasEmulator:
             S=metadata['S'],
             N0=metadata['N0'],
             N1=metadata['N1'],
-            bins=metadata['bins'],
+            bpwf=metadata['bpwf'],
             x_transform=(metadata['x_mean'], metadata['x_std']),
             names=list(metadata['names']),
             mvtype=metadata['mvtype'],
@@ -333,7 +333,7 @@ class BiasEmulator:
             S=self.S,
             N0=self.N0,
             N1=self.N1,
-            bins=self.bins,
+            bpwf=self.bpwf,
             x_mean=self.x_mean,
             x_std=self.x_std,
             names=self.names,
@@ -403,7 +403,7 @@ class Builder:
         rdn0_sample: str,
         Nsamp_std,
         Nsamp_RDN0,
-        bins,
+        bpwf,
         rlz_keys,
         N_N0=99,
         N_N1=99,
@@ -437,8 +437,8 @@ class Builder:
         N_N0/N_N1: int
             Number of N0/N1 samples to use for the emulator. For now these are assumed to be the same for
             fid/ref and sample spectra.
-        bins: int
-            Number of bins to use for the emulator.
+        bpwf: np.ndarray
+            bpwf
         """
         self.names = qmc.parameters
         self.parameters = qmc.grid
@@ -452,7 +452,7 @@ class Builder:
 
         self.Nsamp_std = Nsamp_std if isinstance(Nsamp_std, tuple) else (Nsamp_std, Nsamp_std)
         self.Nsamp_RDN0 = Nsamp_RDN0 if isinstance(Nsamp_RDN0, tuple) else (Nsamp_RDN0, Nsamp_RDN0)
-        self.bins = bins
+        self.bpwf = bpwf
         self.seeds_N1 = np.arange(1, N_N1 + 1)
         self.seeds_N0 = np.arange(1, N_N0 + 1)
         # fiducial N0 and N1
@@ -493,7 +493,7 @@ class Builder:
             out = np.squeeze(out, 0)
         else:
             out = np.mean(out, axis=0)
-        return ha.bin_spectrum(out, self.bins)[1]
+        return ha.BPWF(self.bpwf)(out)
 
     def _load_ref(self, key):
         """

@@ -1,4 +1,6 @@
 import re
+from functools import cached_property
+
 import numpy as np
 import operator
 from healqest import log
@@ -6,92 +8,104 @@ from healqest import log
 logger = log.get_logger(__name__)
 
 
-def bin_spectrum(Cls, bins, *, weight=False):
+class BPWF(np.ndarray):
+    """Bandpower window function with cached minimum-norm reconstruction.
+
+    A BPWF maps an unbinned spectrum ``C_ell`` to bandpowers through ``bpwf(C_ell)``.
+    It remains an ``ndarray`` so matrix operations such as ``bpwf @ C_ell`` continue to work.
     """
-    The returned error is the "error of the mean".
 
-    Parameters
-    ----------
-    Cls: np.ndarray(nspec, nstokes, nell) or np.ndarray(nspec, nell), the Cls to be binned.
-    bins: np.array(nbin+1, )
-        The bins used. The left edge is included while the right edge is Excluded.
-    weight: bool=False
-        If True, use the l(l+1) weights on the Cl.
+    def __new__(cls, values):
+        array = np.asarray(values, dtype=float)
+        if array.ndim != 2:
+            raise ValueError(f"bpwf must be two-dimensional, got shape {array.shape}.")
+        return array.view(cls)
 
-    Returns
-    -------
-    x: np.ndarray(nbin)
-    ellb: np.ndarray(nbin)
-    """
-    x, bpwf = make_bpwf(bins, weight=weight)
-    return x, np.nan_to_num(Cls[..., : bpwf.shape[1]]) @ bpwf.T
+    def __array_finalize__(self, obj):
+        # A view can have different rows or ell support, so inherited caches are not valid.
+        for name in ("lmax", "norm_matrix", "unbin_operator"):
+            self.__dict__.pop(name, None)
 
+    @classmethod
+    def from_bins(cls, bins, lmax=None, weight=False):
+        """Create a normalized BPWF from bin edges.
 
-def make_bpwf(bins, lmax=None, weight=False):
-    """
-    Make bandpower window function.
+        Parameters
+        ----------
+        bins: np.ndarray
+            Bin edges. The left edge is included and the right edge is excluded.
+        lmax: int, optional
+            Allocated maximum multipole. Defaults to the final bin edge.
+        weight: bool=False
+            If True, weight each multipole by ``2 * ell + 1`` within its bin.
+        """
+        bins = np.asarray(bins)
+        if bins.ndim != 1 or bins.size < 2:
+            raise ValueError("bins must be a one-dimensional array with at least two edges.")
+        if np.any(np.diff(bins) <= 0):
+            raise ValueError("bins must be strictly increasing.")
 
-    Parameters
-    ----------
-    bins: np.ndarray
-        The bin edges.
-    lmax: int
-        The maximum multipole.
-    weight: bool=False
-        If True, use the l(l+1) weights on the Cl.
+        if lmax is None:
+            lmax = bins[-1]
+        if lmax < 0:
+            raise ValueError("lmax must be non-negative.")
 
-    Returns
-    -------
-    x: np.ndarray
-        The bin centers of shape (nbin, ).
-    bpwf: np.ndarray
-        The bandpower window function of shape (nbin, lmax+1).
-    """
-    if lmax is None:
-        lmax = bins[-1]
-    ell = np.arange(lmax + 1)
+        ell = np.arange(lmax + 1)
+        fac = 2 * ell + 1 if weight else np.ones_like(ell)
+        bin_idx = np.digitize(ell, bins, right=False)
+        bin_norm = np.bincount(bin_idx, weights=fac, minlength=bins.size + 1)
+        bpwf = np.zeros((bins.size - 1, lmax + 1))
+        for i in range(bins.size - 1):
+            selection = bin_idx == i + 1
+            if not np.any(selection):
+                raise ValueError(f"bin [{bins[i]}, {bins[i + 1]}) has no multipoles at lmax={lmax}.")
+            bpwf[i, selection] = fac[selection] / bin_norm[i + 1]
+        return cls(bpwf)
 
-    if weight:
-        fac = 2 * ell + 1
-    else:
-        fac = np.ones_like(ell)
-    bin_idx = np.digitize(ell, bins, right=False)
-    bin_norm = np.bincount(bin_idx, weights=fac)
-    nbin = len(bins) - 1
-    bpwf = np.zeros((nbin, lmax + 1))
-    for i in range(nbin):
-        sel = bin_idx == i + 1
-        bpwf[i, sel] = fac[sel] / bin_norm[i + 1]
-    x = np.bincount(bin_idx, ell * fac) / bin_norm
-    return x[1 : len(bins)], bpwf
+    @cached_property
+    def lmax(self):
+        """Highest ell with nonzero weight in the final bandpower window."""
+        if self.ndim != 2 or self.shape[0] == 0:
+            raise ValueError("bpwf must have at least one bandpower window.")
+        active = np.flatnonzero(np.asarray(self[-1]) != 0)
+        return int(active[-1]) if active.size else -1
 
+    @cached_property
+    def norm_matrix(self):
+        """Cached BPWF normal matrix used to construct the reconstruction operator."""
+        matrix = np.asarray(self)
+        return matrix @ matrix.T
 
-def unbin_spectrum(Clb, bins, lmax):
-    assert Clb.shape[0] == len(bins) - 1, "the number of binned Cls should match the number of bins"
-    ell = np.arange(lmax + 1)
-    bin_idx = np.digitize(ell, bins, right=False)
-    out = np.zeros(lmax + 1)
-    sel = np.logical_and(bin_idx <= len(bins) - 1, bin_idx > 0)
-    out[sel] = Clb[bin_idx[sel] - 1]
-    return out
+    @cached_property
+    def unbin_operator(self):
+        """Cached minimum-norm right inverse mapping bandpowers to ``C_ell``."""
+        if np.linalg.matrix_rank(self.norm_matrix) != self.shape[0]:
+            raise ValueError("bpwf rows are linearly dependent; exact unbinning is unavailable.")
+        return np.linalg.solve(self.norm_matrix, np.asarray(self)).T
 
+    @cached_property
+    def x(self):
+        return self(np.arange(self.shape[1]))
 
-def bin_Cls(Cls, bins, return_ensemble=False):
-    """Return bin center, bined Cls, error on the mean and cov.
+    def __call__(self, Cls):
+        """Bin one or more spectra along their final ell axis."""
+        Cls = np.asarray(Cls)
+        if Cls.ndim == 0:
+            raise ValueError("Cls must have an ell axis.")
+        if Cls.shape[-1] - 1 < self.lmax:
+            raise ValueError(
+                f"spectrum ends at ell={Cls.shape[-1] - 1}, but the final BPWF window has "
+                f"support through ell={self.lmax}; truncating the window."
+            )
+        nell = min(Cls.shape[-1], self.shape[1])
+        return np.nan_to_num(Cls[..., :nell]) @ np.asarray(self[:, :nell]).T
 
-    Parameters
-    ----------
-    Cls: np.ndarray
-        shape (nspec, nell) or (nell, )
-    bins: np.ndarray
-        shape (nbin+1, )
-    return_ensemble: bool=False
-        If True, return the binned Cls for each realization, otherwise return the mean.
-    """
-    x, bpwf = make_bpwf(bins, lmax=Cls.shape[-1] - 1)
-    Cbs = np.atleast_2d(np.nan_to_num(Cls))[..., : bpwf.shape[1]] @ bpwf.T
-    cov = np.cov(Cbs, rowvar=False)
-    return x, Cbs if return_ensemble else np.mean(Cbs, axis=0), cov
+    def unbin(self, Clb):
+        """Return the minimum-norm spectrum whose BPWF projection is ``Clb``."""
+        Clb = np.asarray(Clb)
+        if Clb.ndim == 0 or Clb.shape[-1] != self.shape[0]:
+            raise ValueError(f"Clb must end with {self.shape[0]} bandpowers, got shape {Clb.shape}.")
+        return Clb @ self.unbin_operator.T
 
 
 def read_sql(db, seeds: list, ops: str, cmbset='a'):
@@ -403,30 +417,33 @@ class LensingSpectra:
         else:
             self.Cls = self.Cls_hat - self.N0 - self.N1
 
-    def bin_spec(self, bins, norm_cl=None, resp_err=False):
+    def bin_spec(self, bpwf: BPWF, norm_cl=None, resp_err=False):
+        if not isinstance(bpwf, BPWF):
+            bpwf = BPWF(bpwf)
         if norm_cl is not None:
-            norm_cb = bin_spectrum(norm_cl[: self.Lmax + 1], bins=bins)[1]
-            fac = 1 / unbin_spectrum(norm_cb, bins=bins, lmax=self.Lmax)
-            # fac = 1 / norm_cl[: self.Lmax + 1]
+            norm_cb = bpwf(norm_cl[: self.Lmax + 1])
+            fac = 1 / bpwf.unbin(norm_cb)[: self.Lmax + 1]
         else:
             fac = 1
 
-        self.x = (bins[1:] + bins[:-1]) / 2
-        N0cov = bin_Cls(self.N0s * fac, bins)[-1]
+        self.x = bpwf.x
+        N0cov = np.cov(bpwf(self.N0s * fac), rowvar=False)
         if self.N_N1 > 0:
-            N1cov = bin_Cls(self.N1s * fac, bins)[-1]
+            N1cov = np.cov(bpwf(self.N1s * fac), rowvar=False)
         else:
             N1cov = np.diag(np.zeros(len(self.x)))
 
         if self.do_data:
-            self.y0 = bin_Cls(self.Cl0 * fac, bins=bins)[1]
+            self.y0 = bpwf(self.Cl0 * fac)
 
-        self.ys, self.cov = bin_Cls(self.Cls * fac, bins=bins, return_ensemble=True)[1:]
+        self.ys = bpwf(self.Cls * fac)
+        self.cov = np.cov(self.ys, rowvar=False)
         self.y = np.mean(self.ys, axis=0)
 
         self.cov_sys = np.zeros_like(self.cov)
         # because of SAN0 normalization, the sim-mean cov is always from Cls-N0s
-        self.cov_sm = bin_Cls((self.Cls_hat - self.N0s) * fac, bins=bins)[-1] / self.N
+
+        self.cov_sm = np.cov(bpwf((self.Cls_hat - self.N0s) * fac), rowvar=False) / self.N
 
         if not self.do_SAN0:
             logger.warning("cov might be overestimated because SAN0 is not subtracted")
@@ -441,7 +458,9 @@ class LensingSpectra:
             # var(y) = var(s)/<r>^2 + var(<r>)*s^2/<r>^4
             # the first term is the usual covariance, and the second term is:
             # var(<r>)*s^2/<r>^4 = var(r)/N * (y/<r>)^2
-            resp_bin, resp_cov = bin_Cls(self.resp2_cls, bins=bins)[1:]
+            _ = bpwf(self.resp2_cls)
+            resp_bin = np.mean(_, axis=0)
+            resp_cov = np.cov(_, rowvar=False)
             k = self.y / resp_bin
             resp_cov = np.einsum('ij,i,j->ij', resp_cov / self.N_N1, k, k)
             self.cov_sys += resp_cov

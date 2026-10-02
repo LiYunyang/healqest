@@ -23,7 +23,7 @@ class BPWF(np.ndarray):
 
     def __array_finalize__(self, obj):
         # A view can have different rows or ell support, so inherited caches are not valid.
-        for name in ("lmax", "norm_matrix", "unbin_operator"):
+        for name in ("lmax", "bins", "norm_matrix", "unbin_operator"):
             self.__dict__.pop(name, None)
 
     @classmethod
@@ -46,7 +46,7 @@ class BPWF(np.ndarray):
             raise ValueError("bins must be strictly increasing.")
 
         if lmax is None:
-            lmax = bins[-1]
+            lmax = bins[-1] - 1
         if lmax < 0:
             raise ValueError("lmax must be non-negative.")
 
@@ -69,6 +69,37 @@ class BPWF(np.ndarray):
             raise ValueError("bpwf must have at least one bandpower window.")
         active = np.flatnonzero(np.asarray(self[-1]) != 0)
         return int(active[-1]) if active.size else -1
+
+    @cached_property
+    def bins(self):
+        """Return the effective top-hat bin edges of the BPWF.
+
+        Returns
+        -------
+        np.ndarray
+            Bin edges, shape (nbins + 1,).
+        """
+        matrix = np.asarray(self)
+        if matrix.ndim != 2 or matrix.shape[0] == 0:
+            raise ValueError("bpwf must have at least one bandpower window.")
+
+        lows = np.empty(matrix.shape[0], dtype=float)
+        highs = np.empty(matrix.shape[0], dtype=float)
+        for index, row in enumerate(matrix):
+            active = np.flatnonzero(row != 0)
+            if active.size == 0:
+                raise ValueError(f"bpwf row {index} has no active multipoles.")
+            lows[index] = active[0]
+            highs[index] = active[-1] + 1
+
+        if np.any(np.diff(lows) < 0) or np.any(np.diff(highs) < 0):
+            raise ValueError("bpwf row supports must be monotonically ordered in ell.")
+
+        edges = np.empty(matrix.shape[0] + 1, dtype=float)
+        edges[0] = lows[0]
+        edges[-1] = highs[-1]
+        edges[1:-1] = (highs[:-1] + lows[1:]) / 2
+        return edges
 
     @cached_property
     def norm_matrix(self):

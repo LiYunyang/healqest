@@ -720,7 +720,7 @@ class GeometryTF:
                 "Probably need to extend the northern declination limit."
             )
         self.ipix = ipix
-        self.tf_pix = ipix - self.g.ofs[0]  # internal index to map from reduced pix to full pixels.
+        self.tf_pix = ipix - int(self.g.ofs[0])  # internal index to map from reduced pix to full pixels.
         assert all(self.tf_pix >= 0)
 
     @property

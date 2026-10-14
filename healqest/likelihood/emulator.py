@@ -340,9 +340,6 @@ class BiasEmulator:
             mvtype=self.mvtype,
         )
 
-    def transX(self, X):
-        return (X - self.x_mean) / self.x_std
-
     def jeval(self, p):
         """Evaluate the DB emulator as a differentiable JAX function."""
         jnp = self.emu1.jnp

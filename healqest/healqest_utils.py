@@ -92,6 +92,33 @@ def get_default_cls(lmax=4000):
     return {"ell": ell, "tt": tt, "ee": ee, "bb": bb, "te": te}
 
 
+def get_default_cosmos(fast=True):
+    """
+    Get the default cosmology parameters from the Planck 2018 baseline model.
+
+    Parameters
+    ----------
+    fast : bool, optional
+        If True, use a faster but less accurate computation by disabling lensing and limiting the matter
+        power calculation. Default is True.
+    """
+    import camb
+
+    fname = str(
+        resources.files("healqest").joinpath(
+            'data/camb/planck2018_base_plikHM_TTTEEE_lowl_lowE_lensing_params.ini'
+        )
+    )
+    pars = camb.read_ini(fname)
+    if fast:
+        pars.WantCls = False
+        pars.DoLensing = False
+        pars.set_matter_power(redshifts=[0.0], kmax=2.0, nonlinear=False)
+        pars.Accuracy.AccuracyBoost = 2
+    results = camb.get_results(pars)
+    return results
+
+
 def get_unlensedcls(file, lmax=2000):
     logger.info(f"Loading unlensed Cls from {file}")
     # order: TT/EE/BB/TE/PP/TP/EP

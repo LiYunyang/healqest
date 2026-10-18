@@ -92,31 +92,43 @@ def get_default_cls(lmax=4000):
     return {"ell": ell, "tt": tt, "ee": ee, "bb": bb, "te": te}
 
 
-def get_default_cosmos(fast=True):
+def get_default_cosmos(fname=None, fast=True):
     """
     Get the default cosmology parameters from the Planck 2018 baseline model.
 
     Parameters
     ----------
+    fname : str, optional
+        Path to the CAMB parameter file. If None, use the default Planck 2018 parameter file included in the
+        package.
     fast : bool, optional
         If True, use a faster but less accurate computation by disabling lensing and limiting the matter
         power calculation. Default is True.
     """
     import camb
 
-    fname = str(
-        resources.files("healqest").joinpath(
-            'data/camb/planck2018_base_plikHM_TTTEEE_lowl_lowE_lensing_params.ini'
+    if fname is None:
+        fname = str(
+            resources.files("healqest").joinpath(
+                'data/camb/planck2018_base_plikHM_TTTEEE_lowl_lowE_lensing_params.ini'
+            )
         )
-    )
     pars = camb.read_ini(fname)
     if fast:
         pars.WantCls = False
         pars.DoLensing = False
         pars.set_matter_power(redshifts=[0.0], kmax=2.0, nonlinear=False)
         pars.Accuracy.AccuracyBoost = 2
-    results = camb.get_results(pars)
-    return results
+    cosmos = camb.get_results(pars)
+
+    cosmos.theta_MC_100 = 100 * cosmos.cosmomc_theta()
+    cosmos.logA = np.log(1e10 * cosmos.Params.InitPower.As)
+    cosmos.ns = cosmos.Params.InitPower.ns
+    cosmos.ombh2 = cosmos.Params.ombh2
+    cosmos.omch2 = cosmos.Params.omch2
+    cosmos.sigma8 = cosmos.get_sigma8_0()
+    cosmos.s8omegamp25 = cosmos.sigma8 * cosmos.Params.omegam**0.25
+    return cosmos
 
 
 def get_unlensedcls(file, lmax=2000):

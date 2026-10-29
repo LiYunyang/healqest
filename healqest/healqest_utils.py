@@ -128,6 +128,7 @@ def get_default_cosmos(fname=None, fast=True):
     cosmos.omch2 = cosmos.Params.omch2
     cosmos.sigma8 = cosmos.get_sigma8_0()
     cosmos.s8omegamp25 = cosmos.sigma8 * cosmos.Params.omegam**0.25
+    cosmos.omegamp6h = cosmos.Params.omegam**0.6 * cosmos.Params.h
     return cosmos
 
 

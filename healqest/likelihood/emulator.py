@@ -1,3 +1,4 @@
+from abc import ABC
 import numpy as np
 from healqest import spectrum, startup, analysis as ha, log
 import GPy
@@ -156,8 +157,8 @@ def RBFSmooth(var, lengthscale, variance):
 class JEmulator:
     """JAX predictive mean for an ARD-RBF emulator stored as numerical arrays."""
 
-    def __init__(self, X, lengthscale, variance, woodbury_vector):
-        # Builder starts Joblib workers while reading spectra.  Import JAX only
+    def __init__(self, X, lengthscale, variance, woodbury_vector, y_mean=0, y_std=1):
+        # BuilderSys starts Joblib workers while reading spectra. Import JAX only
         # for an evaluator, after that work has completed, so Joblib never
         # forks a process with JAX's multithreaded runtime initialized.
         import jax
@@ -170,15 +171,20 @@ class JEmulator:
         self.lengthscale = jnp.asarray(lengthscale)
         self.variance = jnp.asarray(variance)
         self.woodbury_vector = jnp.asarray(woodbury_vector)
+        self.y_mean = jnp.asarray(y_mean)
+        self.y_std = jnp.asarray(y_std)
 
     @classmethod
     def from_gpy(cls, emulator):
         """Extract the numerical predictive state from a fitted GPy emulator."""
+        normalizer = emulator.normalizer
         return cls(
             emulator.X,
             emulator.kern.lengthscale.values,
             emulator.kern.variance.values[0],
             emulator.posterior.woodbury_vector,
+            y_mean=0 if normalizer is None else normalizer.mean,
+            y_std=1 if normalizer is None else normalizer.std,
         )
 
     def predict(self, X):
@@ -186,7 +192,7 @@ class JEmulator:
         X = jnp.asarray(X)
         scaled_difference = (X[:, None, :] - self.X[None, :, :]) / self.lengthscale
         cross_kernel = self.variance * jnp.exp(-0.5 * jnp.sum(scaled_difference**2, axis=-1))
-        return cross_kernel @ self.woodbury_vector
+        return (cross_kernel @ self.woodbury_vector) * self.y_std + self.y_mean
 
 
 class BiasEmulator:
@@ -228,9 +234,7 @@ class BiasEmulator:
         "Bpol_220",
     ]
 
-    def __init__(
-        self, emu1, emu2, names: list, x_transform: tuple, S=None, N0=None, N1=None, bpwf=None, mvtype=None
-    ):
+    def __init__(self, emu1, emu2, names: list, x_transform: tuple, S=None, N0=None, N1=None, bpwf=None):
         self.names = names
         for name in self.names:
             if name not in self.__allowed_parameters__:
@@ -244,15 +248,14 @@ class BiasEmulator:
         self.N1 = N1
         self.x_mean, self.x_std = x_transform
         self.bpwf = bpwf
-        self.mvtype = mvtype
 
     @staticmethod
     def from_builder(builder, emu1, emu2, S=None):
-        """Construct an evaluator from a completed :class:`Builder`.
+        """Construct an evaluator from a completed :class:`BuilderSys`.
 
         Parameters
         ----------
-        builder : Builder
+        builder : BuilderSys
             Builder supplying parameter normalization, reference spectrum, and
             bias terms.
         emu1, emu2 : GPy model
@@ -318,7 +321,7 @@ class BiasEmulator:
     def dump(self, dirname):
         import os
 
-        _dirname = startup.Config.path(dirname, self.mvtype)
+        _dirname = startup.Config.path(dirname)
         os.makedirs(_dirname, exist_ok=True)
         for name, emulator in [('emu1', self.emu1), ('emu2', self.emu2)]:
             np.savez(
@@ -327,6 +330,8 @@ class BiasEmulator:
                 lengthscale=np.asarray(emulator.lengthscale),
                 variance=np.asarray(emulator.variance),
                 woodbury_vector=np.asarray(emulator.woodbury_vector),
+                y_mean=np.asarray(emulator.y_mean),
+                y_std=np.asarray(emulator.y_std),
             )
         np.savez(
             startup.Config.path(_dirname, "meta.npz"),
@@ -337,7 +342,6 @@ class BiasEmulator:
             x_mean=self.x_mean,
             x_std=self.x_std,
             names=self.names,
-            mvtype=self.mvtype,
         )
 
     def jeval(self, p):
@@ -382,7 +386,114 @@ class BiasEmulator:
         return np.asarray(self.jeval(p))
 
 
-class Builder:
+class RDN0Emulator:
+    """Predict a binned RDN0 correction from CMB PCA coefficients."""
+
+    def __init__(self, emu, x_transform):
+        self.emu = emu
+        self.x_mean, self.x_std = x_transform
+
+    def predict(self, coefficients):
+        jnp = self.emu.jnp
+        coefficients = jnp.atleast_2d(jnp.asarray(coefficients))
+        scaled = (coefficients - self.x_mean) / self.x_std
+        result = self.emu.predict(scaled)
+        return jnp.squeeze(result, axis=0) if result.shape[0] == 1 else result
+
+    def __call__(self, coefficients):
+        return np.asarray(self.predict(coefficients))
+
+    def dump(self, dirname):
+        import os
+
+        dirname = startup.Config.path(dirname)
+        os.makedirs(dirname, exist_ok=True)
+        np.savez(
+            startup.Config.path(dirname, 'emu.npz'),
+            X=np.asarray(self.emu.X),
+            lengthscale=np.asarray(self.emu.lengthscale),
+            variance=np.asarray(self.emu.variance),
+            woodbury_vector=np.asarray(self.emu.woodbury_vector),
+            y_mean=np.asarray(self.emu.y_mean),
+            y_std=np.asarray(self.emu.y_std),
+        )
+        np.savez(startup.Config.path(dirname, 'meta.npz'), x_mean=self.x_mean, x_std=self.x_std)
+
+    @classmethod
+    def load(cls, dirname):
+        dirname = startup.Config.path(dirname)
+        with np.load(startup.Config.path(dirname, 'emu.npz')) as saved:
+            emu = JEmulator(**{key: saved[key] for key in saved.files})
+        with np.load(startup.Config.path(dirname, 'meta.npz')) as meta:
+            x_transform = (meta['x_mean'], meta['x_std'])
+        return cls(emu, x_transform)
+
+
+class RBFBuilder(ABC):
+    def transform(self, X):
+        return (X - self.x_mean) / self.x_std
+
+    def train(
+        self,
+        dat,
+        Ntrain,
+        seed=None,
+        fix_var=1e-8,
+        normalize_y=False,
+        num_restarts=10,
+        max_iters=1000,
+        parallel=True,
+    ):
+        """Train a multi-output ARD-RBF Gaussian-process emulator.
+
+        Parameters
+        ----------
+        dat : np.ndarray
+            Training targets indexed first by QMC sample.
+        Ntrain : int
+            Number of QMC samples used for fitting.
+        seed : int, optional
+            Random seed for selecting the training subset. By default, uses
+            the initial samples in Sobol order.
+        fix_var : float, optional
+            Fixed Gaussian noise variance in the model's target units, standardized when normalize_y is True.
+        normalize_y : bool, optional
+            Standardize targets during training and return predictions in their original units.
+
+        Returns
+        -------
+        tuple[GPy.models.GPRegression, np.ndarray]
+            Fitted emulator and indices withheld from training.
+        """
+        Nsamp = dat.shape[0]
+        if seed is not None:
+            rng = np.random.default_rng(seed)
+            seq = rng.permutation(Nsamp)
+        else:
+            seq = np.arange(Nsamp)
+        train_idx = seq[:Ntrain]
+        withheld_idx = seq[Ntrain:]
+        X_train = self.parameters[train_idx]
+        Y_train = dat[train_idx]
+        X_train_scaled = self.transform(X_train)
+        kernel = GPy.kern.RBF(input_dim=X_train.shape[1], ARD=True)
+        emulator = GPy.models.GPRegression(
+            X_train_scaled, Y_train, kernel=kernel, noise_var=1e-10, normalizer=normalize_y
+        )
+        emulator.Gaussian_noise.variance.fix(fix_var)
+        emulator.optimize_restarts(
+            num_restarts=num_restarts, verbose=False, parallel=parallel, max_iters=max_iters
+        )
+        if len(withheld_idx):
+            prediction, _ = emulator.predict(
+                self.transform(self.parameters[withheld_idx]), include_likelihood=False
+            )
+            max_dev = np.max(np.abs(prediction - dat[withheld_idx]))
+            logger.info(f"maxdev: {max_dev:.3e} over {len(withheld_idx)} validation samples.")
+        return emulator, withheld_idx
+
+
+class BuilderSys(RBFBuilder):
     """Load simulation spectra and train the component GPy emulators.
 
     Construction loads and reference-normalizes the supplied spectra, then
@@ -562,52 +673,6 @@ class Builder:
             dat, RDN0 = zip(*p(delayed(self._load_sample)(x) for x in self.rlz_keys))
         return np.array(dat), np.array(RDN0)
 
-    def transform(self, X):
-        return (X - self.x_mean) / self.x_std
-
-    def train(self, dat, Ntrain, seed=None):
-        """Train a multi-output ARD-RBF Gaussian-process emulator.
-
-        Parameters
-        ----------
-        dat : np.ndarray
-            Training targets indexed first by QMC sample.
-        Ntrain : int
-            Number of QMC samples used for fitting.
-        seed : int, optional
-            Random seed for selecting the training subset. By default, uses
-            the initial samples in Sobol order.
-
-        Returns
-        -------
-        tuple[GPy.models.GPRegression, np.ndarray]
-            Fitted emulator and indices withheld from training.
-        """
-        Nsamp = dat.shape[0]
-        if seed is not None:
-            rng = np.random.default_rng(seed)
-            seq = rng.permutation(Nsamp)
-        else:
-            seq = np.arange(Nsamp)
-        train_idx = seq[:Ntrain]
-        withheld_idx = seq[Ntrain:]
-        X_train = self.parameters[train_idx]
-        Y_train = dat[train_idx]
-        X_train_scaled = self.transform(X_train)
-        kernel = GPy.kern.RBF(input_dim=X_train.shape[1], ARD=True)
-        emulator = GPy.models.GPRegression(
-            X_train_scaled, Y_train, kernel=kernel, noise_var=1e-10, normalizer=None
-        )
-        emulator.Gaussian_noise.variance.fix(1e-8)
-        emulator.optimize_restarts(num_restarts=10, verbose=False)
-        if len(withheld_idx):
-            prediction, _ = emulator.predict(
-                self.transform(self.parameters[withheld_idx]), include_likelihood=False
-            )
-            max_dev = np.max(np.abs(prediction - dat[withheld_idx]))
-            logger.info(f"maxdev: {max_dev:.3e} over {len(withheld_idx)} validation samples.")
-        return emulator, withheld_idx
-
     def train_emulators(self):
         """Train the standard-spectrum and RDN0 component emulators.
 
@@ -651,3 +716,112 @@ class Builder:
                 logger.info(f"Estimated RBF variance: {variance:.3e} from {len(var_sample)} samples.")
             S = RBFSmooth(self.varD, lengthscale=lengthscale, variance=variance)
         return BiasEmulator.from_builder(self, emu_D, self.emu2, S=S)
+
+
+class BuilderRDN0(RBFBuilder):
+    """Train an RDN0 correction emulator from binned spectra and PCA coefficients."""
+
+    def __init__(self, grid, dat):
+        self.parameters = np.asarray(grid)
+        self.dat = np.asarray(dat)
+        self.x_mean = 0.0
+        self.x_std = 5.0
+
+    def make(self, Ntrain=400, fix_var=1e-5, seed=None, num_restarts=10, max_iters=1000, parallel=True):
+        model, _ = self.train(
+            self.dat,
+            Ntrain=Ntrain,
+            seed=seed,
+            fix_var=fix_var,
+            normalize_y=True,
+            num_restarts=num_restarts,
+            max_iters=max_iters,
+            parallel=parallel,
+        )
+        return RDN0Emulator(JEmulator.from_gpy(model), (self.x_mean, self.x_std))
+
+
+class CMBPCA:
+    """PCA decomposition of CMB spectra for emulator training."""
+
+    def __init__(self, cls_mu, cls_scale, lmax, V=None, coeff_scale=None):
+        self.cls_mu = cls_mu
+        self.cls_scale = cls_scale
+        self.lmax = lmax
+        self.V = V
+        self.Nmode = V.shape[0] if V is not None else None
+        self.coeff_scale = coeff_scale
+
+    @classmethod
+    def from_cls(cls, cls_sample, cls_fid, Nmode):
+        N, nstokes, lmax = cls_sample.shape
+        assert nstokes == 3
+        lmax -= 1
+        cls_mu = cls_fid
+        cls_scale = np.std(cls_sample, axis=0)
+        obj = cls(cls_mu=cls_mu, cls_scale=cls_scale, V=None, lmax=lmax, coeff_scale=None)
+
+        dat = obj.transform(cls_sample)
+        u, s, v = np.linalg.svd(dat, full_matrices=False)
+        obj.Nmode = Nmode
+        obj.V = v[:Nmode]
+        # this factor approximately scales the SVD coefficent to order unity.
+        obj.coeff_scale = s[:Nmode] / np.sqrt(dat.shape[0])
+        return obj
+
+    @classmethod
+    def from_file(cls, fname):
+        with np.load(fname) as f:
+            cls_mu = f['cls_mu']
+            cls_scale = f['cls_scale']
+            lmax = f['lmax']
+            V = f['V']
+            coeff_scale = f['coeff_scale']
+        return cls(cls_mu=cls_mu, cls_scale=cls_scale, lmax=lmax, V=V, coeff_scale=coeff_scale)
+
+    def dump(self, fname):
+        np.savez(
+            fname,
+            cls_mu=self.cls_mu,
+            cls_scale=self.cls_scale,
+            lmax=self.lmax,
+            V=self.V,
+            coeff_scale=self.coeff_scale,
+        )
+
+    def transform(self, x, inv=False, is_dCl=False):
+        """
+        From (3, lmax+1) -> (3*(lmax-1), ) or reverse.
+
+        Parameters
+        ----------
+        x : np.ndarray
+            Input array of shape (..., 3, lmax+1) if inv=False, or (..., 3*(lmax-1)) if inv=True.
+        inv : bool, optional
+            If True, perform the inverse transformation from ravelled vector to orignal spectrum shape.
+            Default is False.
+        is_dCl : bool, optional
+            If True, the input/output is assumed to be fiducial subtracted (dCl). Default is False.
+
+        """
+        if not inv:
+            if is_dCl:
+                y = x[..., : self.lmax + 1]
+            else:
+                y = x[..., : self.lmax + 1] - self.cls_mu
+            return (y / self.cls_scale)[..., 2:].reshape(*x.shape[:-2], -1)
+        else:
+            y = np.pad(x.reshape(-1, 3, (self.lmax - 1)), ((0, 0), (0, 0), (2, 0)), constant_values=0)
+            y *= self.cls_scale
+            if not is_dCl:
+                y += self.cls_mu
+            return y
+
+    def get_coeff(self, x, is_dCl=False):
+        """(..., 3, lmax+1) -> (..., Nmode)."""
+        coeff = self.transform(x, is_dCl=is_dCl) @ self.V.T
+        return coeff / self.coeff_scale
+
+    def get_cls(self, x, is_dCl=False):
+        y = self.transform(np.einsum('i,ij->j', x * self.coeff_scale, self.V), inv=True, is_dCl=is_dCl)
+        return np.squeeze(y, axis=0)

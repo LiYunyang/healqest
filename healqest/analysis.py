@@ -438,8 +438,7 @@ class LensingSpectra:
                 self.Cl0 -= self.N0 + self.N1
 
         if self.do_SAN0:
-            _kw = {**kw, 'split': None}
-            SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, **_kw)
+            SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, **kw)
             self.SAN0s = SAN0s[:, : self.Lmax + 1] / self.resp2
             if self.calibrate_SAN0:
                 logger.info("calibrate SAN0 by N0")

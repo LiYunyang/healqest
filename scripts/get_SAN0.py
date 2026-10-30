@@ -10,14 +10,14 @@ from mpi4py.MPI import COMM_WORLD as comm
 logger = log.get_logger(__name__)
 
 
-def get_db(config, mvtype, seed, cmbset, curl):
-    db = config.get_sql_table(tag=mvtype, spec_type='san0', curl=curl)
+def get_db(config, mvtype, seed, cmbset, curl, split=None):
+    db = config.get_sql_table(tag=mvtype, spec_type='san0', curl=curl, split=split)
     keys = config.get_sql_keys(seed=seed, ktype1='xx', ktype2='xx', cmbset=cmbset)
     return db, keys
 
 
-def main(seed, cmbset, bundle_pair=None):  # noqa: C901
-    logger.info(f"compute SAN0: seeds {seed}; bundles {bundle_pair}")
+def main(seed, cmbset, bundle_pair=None, split=None):  # noqa: C901
+    logger.info(f"compute SAN0: seeds {seed}; bundles {bundle_pair}; split {split}")
 
     if bundle_pair is None:
         b1, b2 = None, None
@@ -28,7 +28,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         qes = list()
         mvtypes = list()
         for mvtype in config.mvtypes:
-            db, sql_key = get_db(config, mvtype, seed, cmbset, curl=args.curl)
+            db, sql_key = get_db(config, mvtype, seed, cmbset, curl=args.curl, split=split)
             if db.query(sql_key, return_data=False):
                 logger.info(f"skipping {mvtype} for seed {seed}", extra={'force': True})
                 continue
@@ -50,12 +50,14 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
     # if do_ph:
     #     assert len(config.ilcs) == 1, "Unlikely you want to do profile-hardening with multiple ilc pairs!"
 
+    split_mask = config.mask_ps(split)
+
     def func(cmbset, seed, bundle, ilc_type, as_dict=False):
         _maps, flms = hq.cinv_io(
             config.p_cinv(seed=seed, cmbset=cmbset, ilc_type=ilc_type, N1=False, bundle=bundle)
         )
-        _maps[0] *= config.mask_qe['t']
-        _maps[1:] *= config.mask_qe['p']
+        _maps[0] *= config.mask_qe['t'] * split_mask
+        _maps[1:] *= config.mask_qe['p'] * split_mask
         almbars = config.g.map2alm(_maps, lmax=config.lmax, check=False).astype(np.complex128)
 
         flms = flms[:, : config.lmax + 1]
@@ -71,7 +73,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
 
     # this matches with `mask_bias` computation in `compute_ps`
     # the absolute scaling is not very important as they will both be normalized by MCresp.
-    fsky = np.mean(config.mask_cinv['t'] * config.mask_cinv['p'])
+    fsky = np.mean(config.mask_cinv['t'] * config.mask_cinv['p'] * split_mask**2)
 
     almbars = dict()
     fls = dict()
@@ -204,7 +206,7 @@ def main(seed, cmbset, bundle_pair=None):  # noqa: C901
         w = l * (l + 1) / aresp / 2
         N0 *= w**2
 
-        db, sql_key = get_db(config, mvtype, seed, cmbset, curl=args.curl)
+        db, sql_key = get_db(config, mvtype, seed, cmbset, curl=args.curl, split=split)
         comm.send((db.path, db.table, [(sql_key, N0)]), dest=comm.size - 1)
 
 
@@ -219,7 +221,8 @@ def build_task_loop(args, config):
         # reversing so the higher rank got more data. This is more efficient for slurm
         # (because rank0 might has other jobs)
     seeds = np.arange(config.sim_range[0], config.sim_range[1] + 1)
-    return list(product(bundle_pairs, seeds))
+    splits = [None] if args.split is None else args.split
+    return list(product(bundle_pairs, seeds, splits))
 
 
 if __name__ == "__main__":
@@ -237,7 +240,7 @@ if __name__ == "__main__":
     Examples
     --------
     - SAN0 for the grad mode
-    >>> $run scripts/get_SAN0.py -c $config [-m $data] -f $field -std -skip
+    >>> $run scripts/get_SAN0.py -c $config [-m $data] -f $field -std -skip -split none highb
 
     - SAN0 for the curl mode
     >>> $run scripts/get_SAN0.py -c $config [-m $data] -f $field -std -skip -curl
@@ -245,6 +248,7 @@ if __name__ == "__main__":
     parser = startup.parser()
     parser.add_argument('-curl', action='store_true', help='compute the curl mode')
     parser.add_argument('-set', default='a', type=str, help='cmbset for std/N0-type sims')
+    parser.add_argument('-split', nargs='+', default=None, type=startup.none_str, help='Data split(s)')
     args = parser.parse_args()
 
     log.setup_logger(verbose=args.verbose)
@@ -256,7 +260,7 @@ if __name__ == "__main__":
     if comm.rank == comm.size - 1:
         ClsDB.mpi_write(comm)
     else:
-        for _bundle_pair, _seed in task_loop[comm.rank :: (comm.size - 1)]:
-            main(_seed, args.set, bundle_pair=_bundle_pair)
+        for _bundle_pair, _seed, _split in task_loop[comm.rank :: (comm.size - 1)]:
+            main(_seed, args.set, bundle_pair=_bundle_pair, split=_split)
         comm.send(None, dest=comm.size - 1)
     comm.barrier()

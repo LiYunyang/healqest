@@ -438,7 +438,13 @@ class LensingSpectra:
                 self.Cl0 -= self.N0 + self.N1
 
         if self.do_SAN0:
-            SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, **kw)
+            try:
+                SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, **kw)
+            except FileNotFoundError:
+                logger.warning(f"SAN0 not found for split {self.split}, try loading without split")
+                _kw = kw.copy()
+                _kw.update({'split': None})
+                SAN0s = load_sql(N0_loop, spec_type='san0', ops='xxxx', cmbset=self.cmbset, **_kw)
             self.SAN0s = SAN0s[:, : self.Lmax + 1] / self.resp2
             if self.calibrate_SAN0:
                 logger.info("calibrate SAN0 by N0")
@@ -447,7 +453,7 @@ class LensingSpectra:
         else:
             self.Cls = self.Cls_hat - self.N0 - self.N1
 
-    def bin_spec(self, bpwf: BPWF, norm_cl=None, resp_err=False):
+    def bin_spec(self, bpwf: BPWF, norm_cl=None, resp_err=False, ref_cl=None):
         if not isinstance(bpwf, BPWF):
             bpwf = BPWF(bpwf)
         if norm_cl is not None:
@@ -469,6 +475,14 @@ class LensingSpectra:
         self.ys = bpwf(self.Cls * fac)
         self.cov = np.cov(self.ys, rowvar=False)
         self.y = np.mean(self.ys, axis=0)
+
+        if ref_cl is not None:
+            assert norm_cl is not None, "norm_cl must be provided to remove sim-mean"
+            sim_mean = self.y - bpwf(ref_cl[: self.Lmax + 1] * fac)
+            logger.info(f"correcting sim-mean by an additive factor")
+            self.y0 -= sim_mean
+            self.ys -= sim_mean
+            self.y -= sim_mean
 
         self.cov_sys = np.zeros_like(self.cov)
         # because of SAN0 normalization, the sim-mean cov is always from Cls-N0s

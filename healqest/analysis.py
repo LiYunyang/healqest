@@ -454,31 +454,36 @@ class LensingSpectra:
             self.Cls = self.Cls_hat - self.N0 - self.N1
 
     def bin_spec(self, bpwf: BPWF, norm_cl=None, resp_err=False, ref_cl=None):
-        if not isinstance(bpwf, BPWF):
-            bpwf = BPWF(bpwf)
+        # if not isinstance(bpwf, BPWF):
+        #     bpwf = BPWF(bpwf)
         if norm_cl is not None:
             norm_cb = bpwf(norm_cl[: self.Lmax + 1])
-            fac = 1 / bpwf.unbin(norm_cb)[: self.Lmax + 1]
+            fac = 1 / norm_cb
+            # fac = 1 / bpwf.unbin(norm_cb)[: self.Lmax + 1]
         else:
+            pass
             fac = 1
 
+        def _bpwf(x):
+            return bpwf(x) * fac
+
         self.x = bpwf.x
-        N0cov = np.cov(bpwf(self.N0s * fac), rowvar=False)
+        N0cov = np.cov(_bpwf(self.N0s), rowvar=False)
         if self.N_N1 > 0:
-            N1cov = np.cov(bpwf(self.N1s * fac), rowvar=False)
+            N1cov = np.cov(_bpwf(self.N1s), rowvar=False)
         else:
             N1cov = np.diag(np.zeros(len(self.x)))
 
         if self.do_data:
-            self.y0 = bpwf(self.Cl0 * fac)
+            self.y0 = _bpwf(self.Cl0)
 
-        self.ys = bpwf(self.Cls * fac)
+        self.ys = _bpwf(self.Cls)
         self.cov = np.cov(self.ys, rowvar=False)
         self.y = np.mean(self.ys, axis=0)
 
         if ref_cl is not None:
             assert norm_cl is not None, "norm_cl must be provided to remove sim-mean"
-            sim_mean = self.y - bpwf(ref_cl[: self.Lmax + 1] * fac)
+            sim_mean = self.y - _bpwf(ref_cl[: self.Lmax + 1])
             logger.info(f"correcting sim-mean by an additive factor")
             self.y0 -= sim_mean
             self.ys -= sim_mean
@@ -487,7 +492,7 @@ class LensingSpectra:
         self.cov_sys = np.zeros_like(self.cov)
         # because of SAN0 normalization, the sim-mean cov is always from Cls-N0s
 
-        self.cov_sm = np.cov(bpwf((self.Cls_hat - self.N0s) * fac), rowvar=False) / self.N
+        self.cov_sm = np.cov(_bpwf((self.Cls_hat - self.N0s)), rowvar=False) / self.N
 
         if not self.do_SAN0:
             logger.warning("cov might be overestimated because SAN0 is not subtracted")

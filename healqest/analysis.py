@@ -482,7 +482,6 @@ class LensingSpectra:
         self.y = np.mean(self.ys, axis=0)
 
         if ref_cl is not None:
-            assert norm_cl is not None, "norm_cl must be provided to remove sim-mean"
             sim_mean = self.y - _bpwf(ref_cl[: self.Lmax + 1])
             logger.info(f"correcting sim-mean by an additive factor")
             self.y0 -= sim_mean

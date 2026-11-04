@@ -315,7 +315,6 @@ class BiasEmulator:
             bpwf=metadata['bpwf'],
             x_transform=(metadata['x_mean'], metadata['x_std']),
             names=list(metadata['names']),
-            mvtype=metadata['mvtype'],
         )
 
     def dump(self, dirname):
